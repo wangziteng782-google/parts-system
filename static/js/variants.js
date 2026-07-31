@@ -427,7 +427,7 @@
                             <div class="sp-col-item">
                                 <div class="sp-remark-label-row">
                                     <label>运费备注说明</label>
-                                    <span class="sp-tag" onclick="document.getElementById('spShipRemarkInclude').value='偏远地区不包邮'">偏远地区不包邮</span>
+                                    <span class="sp-tag" onclick="document.getElementById('spShipRemarkInclude').value='偏远地区不包邮(偏远地区包括:青海、新疆、云南、内蒙、海南、西藏)'">偏远地区不包邮</span>
                                 </div>
                                 <textarea id="spShipRemarkInclude" placeholder="可填写包邮物流公司、不包邮地区等">${escapeHtml(p.freight_remark && p.freight_remark !== '不含运费' ? p.freight_remark : '')}</textarea>
                             </div>
@@ -437,7 +437,7 @@
                             <div class="sp-col-item">
                                 <div class="sp-remark-label-row">
                                     <label>运费备注说明</label>
-                                    <span class="sp-tag" onclick="document.getElementById('spShipRemarkExclude').value='偏远地区不包邮'">偏远地区不包邮</span>
+                                    <span class="sp-tag" onclick="document.getElementById('spShipRemarkExclude').value='偏远地区不包邮(偏远地区包括:青海、新疆、云南、内蒙、海南、西藏)'">偏远地区不包邮</span>
                                 </div>
                                 <textarea id="spShipRemarkExclude" placeholder="运费相关约定备注"></textarea>
                             </div>
