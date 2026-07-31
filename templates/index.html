@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/static/css/base.css">
 <link rel="stylesheet" href="/static/css/sidebar.css">
 <link rel="stylesheet" href="/static/css/product-detail.css">
-<link rel="stylesheet" href="/static/css/dialogs.css?v=20260731-1">
+<link rel="stylesheet" href="/static/css/dialogs.css?v=20260731-2">
 </head>
 <body>
     <aside class="classification-sidebar">
@@ -125,6 +125,9 @@
     <!-- 图片放大弹窗 -->
     <div class="imglib-modal-overlay" id="imglibModalOverlay" onclick="closeImglibModal()">
         <div class="imglib-modal-content" onclick="event.stopPropagation()">
+            <button class="imglib-modal-rotate" onclick="rotateImglibModal()" title="顺时针旋转90度">
+                <span aria-hidden="true">&#8635;</span> 旋转 90°
+            </button>
             <button class="imglib-modal-close" onclick="closeImglibModal()">&#10005;</button>
             <img id="imglibModalImage" src="" alt="放大图片">
         </div>
@@ -132,9 +135,9 @@
 
 
 
-    <script src="/static/js/state.js"></script>
+<script src="/static/js/state.js"></script>
 <script src="/static/js/products.js"></script>
 <script src="/static/js/variants.js"></script>
-<script src="/static/js/images.js"></script>
+<script src="/static/js/images.js?v=20260731-1"></script>
 </body>
 </html>

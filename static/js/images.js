@@ -1,6 +1,7 @@
 // ========== 图片画廊（左缩略图+右大图） ==========
         let galleryImages = [];
         let galleryCurrentIndex = 0;
+        let imglibModalRotation = 0;
 
         function renderGallery(data) {
             galleryImages = [];
@@ -1129,15 +1130,54 @@
 
         // 显示图片放大弹窗
         function showImglibModal(url) {
-            document.getElementById('imglibModalImage').src = url;
+            const image = document.getElementById('imglibModalImage');
+            imglibModalRotation = 0;
+            image.style.transform = 'rotate(0deg)';
+            image.onload = fitImglibModalImage;
+            image.src = url;
             document.getElementById('imglibModalOverlay').classList.add('show');
+            if (image.complete && image.naturalWidth) {
+                fitImglibModalImage();
+            }
             // 添加 ESC 键监听
             document.addEventListener('keydown', handleImglibEscapeKey);
         }
 
+        // 旋转后根据图片实际宽高重新缩放，避免横图转成竖图时超出屏幕。
+        function fitImglibModalImage() {
+            const image = document.getElementById('imglibModalImage');
+            const content = document.querySelector('.imglib-modal-content');
+            if (!image || !content || !image.naturalWidth || !image.naturalHeight) return;
+
+            const quarterTurn = Math.abs(imglibModalRotation / 90) % 2 === 1;
+            const rotatedWidth = quarterTurn ? image.naturalHeight : image.naturalWidth;
+            const rotatedHeight = quarterTurn ? image.naturalWidth : image.naturalHeight;
+            const scale = Math.min(
+                content.clientWidth / rotatedWidth,
+                content.clientHeight / rotatedHeight,
+                1
+            );
+
+            image.style.width = `${Math.max(1, image.naturalWidth * scale)}px`;
+            image.style.height = `${Math.max(1, image.naturalHeight * scale)}px`;
+            image.style.maxWidth = 'none';
+            image.style.maxHeight = 'none';
+            image.style.transform = `rotate(${imglibModalRotation}deg)`;
+        }
+
+        function rotateImglibModal() {
+            imglibModalRotation = (imglibModalRotation + 90) % 360;
+            fitImglibModalImage();
+        }
+
         // 关闭图片放大弹窗
         function closeImglibModal() {
+            const image = document.getElementById('imglibModalImage');
             document.getElementById('imglibModalOverlay').classList.remove('show');
+            imglibModalRotation = 0;
+            image.onload = null;
+            image.removeAttribute('style');
+            image.src = '';
             // 移除 ESC 键监听
             document.removeEventListener('keydown', handleImglibEscapeKey);
         }
@@ -1148,5 +1188,11 @@
                 closeImglibModal();
             }
         }
+
+        window.addEventListener('resize', () => {
+            if (document.getElementById('imglibModalOverlay')?.classList.contains('show')) {
+                fitImglibModalImage();
+            }
+        });
 
         init();
