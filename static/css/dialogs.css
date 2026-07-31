@@ -228,9 +228,14 @@
         .imglib-modal-overlay {
             display: none;
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.8);
-            z-index: 4000;
+            inset: 0;
+            box-sizing: border-box;
+            padding: 64px 28px 28px;
+            background: rgba(8,15,28,0.88);
+            backdrop-filter: blur(3px);
+            -webkit-backdrop-filter: blur(3px);
+            /* 必须高于图片库弹窗（4200）及页面中的其他业务弹窗。 */
+            z-index: 6200;
             align-items: center;
             justify-content: center;
             cursor: pointer;
@@ -239,32 +244,35 @@
 
         .imglib-modal-content {
             position: relative;
-            max-width: 90vw;
-            max-height: 90vh;
+            width: 100%;
+            height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
         .imglib-modal-content img {
-            max-width: 90vw;
-            max-height: 90vh;
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
             object-fit: contain;
-            border-radius: 8px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            border-radius: 10px;
+            background: #fff;
+            box-shadow: 0 18px 55px rgba(0,0,0,0.48);
+            cursor: default;
         }
 
         .imglib-modal-close {
-            position: absolute;
-            top: -40px;
-            right: -40px;
-            width: 32px;
-            height: 32px;
-            background: rgba(0,0,0,0.6);
+            position: fixed;
+            top: 18px;
+            right: 22px;
+            width: 38px;
+            height: 38px;
+            background: rgba(255,255,255,0.16);
             color: #fff;
-            border: none;
+            border: 1px solid rgba(255,255,255,0.35);
             border-radius: 50%;
-            font-size: 16px;
+            font-size: 18px;
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -272,8 +280,18 @@
             transition: all 0.2s;
         }
         .imglib-modal-close:hover {
-            background: rgba(0,0,0,0.8);
+            background: rgba(255,255,255,0.28);
             transform: scale(1.1);
+        }
+
+        @media (max-width: 640px) {
+            .imglib-modal-overlay {
+                padding: 58px 12px 16px;
+            }
+            .imglib-modal-close {
+                top: 12px;
+                right: 12px;
+            }
         }
 
         .imglib-preview-btn {
