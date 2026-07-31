@@ -259,6 +259,14 @@ def ensure_product_spec_required_rules(conn):
     """创建产品必备规格规则，并写入已确认的接触器电压规则。"""
     cursor = conn.cursor()
     cursor.execute(
+        """SELECT 1
+           FROM information_schema.TABLES
+           WHERE TABLE_SCHEMA=DATABASE()
+             AND TABLE_NAME='product_spec_required_rules'
+           LIMIT 1"""
+    )
+    rule_table_existed = cursor.fetchone() is not None
+    cursor.execute(
         """CREATE TABLE IF NOT EXISTS product_spec_required_rules (
             id BIGINT NOT NULL AUTO_INCREMENT COMMENT '规则ID',
             product_type VARCHAR(100) NOT NULL DEFAULT ''
@@ -391,6 +399,11 @@ def ensure_product_spec_required_rules(conn):
                MODIFY COLUMN product_type VARCHAR(100) NOT NULL DEFAULT ''
                COMMENT '匹配的产品分类，空字符串表示不限制产品分类'"""
         )
+    traction_sheave_rules = [
+        ("", "曳引轮", "contains", "适用电梯品牌", 0, "产品名称包含曳引轮时默认展示适用电梯品牌规格"),
+        ("", "曳引轮", "contains", "曳引机型号", 1, "产品名称包含曳引轮时默认展示曳引机型号规格"),
+        ("", "曳引轮", "contains", "地区", 2, "产品名称包含曳引轮时默认展示地区规格"),
+    ]
     seed_rules = [
         (
             "电气开关与继电器",
@@ -408,10 +421,46 @@ def ensure_product_spec_required_rules(conn):
         ("", "显示板", "exact", "显示", 1, "显示板全部产品默认展示显示规格"),
         ("", "显示板", "exact", "协议", 2, "显示板全部产品默认展示协议规格"),
         ("", "显示板", "exact", "颜色", 3, "显示板全部产品默认展示颜色规格"),
-        ("", "曳引轮", "contains", "轮直径", 0, "产品名称包含曳引轮时默认展示轮直径规格"),
-        ("", "曳引轮", "contains", "槽数", 1, "产品名称包含曳引轮时默认展示槽数规格"),
-        ("", "曳引轮", "contains", "钢丝绳直径", 2, "产品名称包含曳引轮时默认展示钢丝绳直径规格"),
+        *traction_sheave_rules,
     ]
+
+    # 旧版本每次建立数据库连接都会补回这三条代码内置规则。
+    # 员工在规则表中改名后，旧规则因此被重新插入，页面会同时显示六项。
+    # 这里只清理程序自动生成的旧记录，避免误删员工自行配置的规则。
+    legacy_traction_rules = [
+        ("轮直径", "产品名称包含曳引轮时默认展示轮直径规格"),
+        ("槽数", "产品名称包含曳引轮时默认展示槽数规格"),
+        ("钢丝绳直径", "产品名称包含曳引轮时默认展示钢丝绳直径规格"),
+    ]
+    legacy_conditions = " OR ".join(
+        ["(spec_name=%s AND remark=%s)"] * len(legacy_traction_rules)
+    )
+    legacy_params = []
+    for legacy_spec_name, legacy_remark in legacy_traction_rules:
+        legacy_params.extend([legacy_spec_name, legacy_remark])
+    cursor.execute(
+        f"""DELETE FROM product_spec_required_rules
+            WHERE COALESCE(product_type, '')=''
+              AND product_name='曳引轮'
+              AND product_name_match_mode='contains'
+              AND ({legacy_conditions})""",
+        legacy_params,
+    )
+    legacy_traction_deleted = cursor.rowcount
+    if legacy_traction_deleted:
+        logger.info(
+            "[数据库迁移] 已清理 %s 条曳引轮旧版默认规格规则",
+            legacy_traction_deleted,
+        )
+
+    # 初始化数据只在首次建表时写入。已有规则表以后以数据库维护的数据为准，
+    # 不再因人工修改规格名称而反复补回代码中的旧配置。
+    # 若本次清理了旧版曳引轮规则，则仅补齐新的三项作为一次性兼容迁移。
+    rules_to_seed = (
+        seed_rules
+        if not rule_table_existed
+        else traction_sheave_rules if legacy_traction_deleted else []
+    )
     for (
         product_type,
         product_name,
@@ -419,7 +468,7 @@ def ensure_product_spec_required_rules(conn):
         spec_name,
         sort_order,
         remark,
-    ) in seed_rules:
+    ) in rules_to_seed:
         cursor.execute(
             """SELECT id FROM product_spec_required_rules
                WHERE product_type=%s AND product_name=%s
