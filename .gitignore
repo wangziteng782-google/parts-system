@@ -1,0 +1,10 @@
+qiniu_config.local.json
+migration_target.local.json
+.env
+.env.*
+!deploy/.env.production.example
+jobs/spu_migration_errors.jsonl
+jobs/spu_migration_state.json
+deploy/artifacts/
+__pycache__/
+*.pyc

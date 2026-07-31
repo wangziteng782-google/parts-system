@@ -1,0 +1,34 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #f5f7fa;
+            --sidebar-bg: #f8f9fa;
+            --sidebar-border: #e9ecef;
+            --sidebar-text: #333;
+            --sidebar-text-light: #888;
+            --sidebar-hover: #f0f1f3;
+            --sidebar-active: #e8f0fe;
+            --sidebar-active-border: #4285f4;
+            --card-bg: #fff;
+            --border: #e8ecf0;
+            --text: #1a202c;
+            --text-secondary: #4a5568;
+            --text-light: #718096;
+            --text-muted: #a0aec0;
+            --accent: #4285f4;
+            --accent-hover: #3367d6;
+            --success: #34a853;
+            --danger: #ea4335;
+            --price-red: #dc2626;
+            --edit-bg: #f8f9fa;
+            --shadow: 0 1px 4px rgba(0,0,0,0.05);
+        }
+
+        body {
+            font-family: 'PingFang SC', -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }

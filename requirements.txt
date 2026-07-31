@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+jinja2
+pymysql
+python-multipart
+qiniu
+openpyxl
+Pillow
+PyJWT>=2.8,<3

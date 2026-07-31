@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据操作日志</title>
+    <link rel="icon" href="/static/img/favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="/static/img/site-logo.png">
+    <link rel="stylesheet" href="/static/css/logs.css">
+</head>
+<body>
+    <main class="log-page">
+        <header class="page-header">
+            <div class="page-title-group">
+                <img class="page-brand-logo" src="/static/img/site-logo.png" alt="电梯配件管理系统">
+                <div>
+                    <div class="eyebrow">PARTS MANAGEMENT</div>
+                    <h1>数据操作日志</h1>
+                    <p>查看员工对配件数据的新增、修改和删除记录</p>
+                </div>
+            </div>
+            <a class="back-button" href="/goods">
+                <span aria-hidden="true">←</span> 返回配件管理
+            </a>
+        </header>
+
+        <section class="panel">
+            <div class="operation-tabs" id="operationTabs">
+                <button class="operation-tab active" data-operation="">
+                    全部 <span id="statAll">0</span>
+                </button>
+                <button class="operation-tab create" data-operation="CREATE">
+                    新增 <span id="statCreate">0</span>
+                </button>
+                <button class="operation-tab update" data-operation="UPDATE">
+                    修改 <span id="statUpdate">0</span>
+                </button>
+                <button class="operation-tab delete" data-operation="DELETE">
+                    删除 <span id="statDelete">0</span>
+                </button>
+            </div>
+
+            <form class="filter-form" id="filterForm">
+                <label class="field keyword-field">
+                    <span>关键词</span>
+                    <input id="keywordInput" type="search" placeholder="产品名称、型号、SKU、操作内容">
+                </label>
+                <label class="field">
+                    <span>操作人</span>
+                    <select id="userFilter">
+                        <option value="">全部操作人</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>变更模块</span>
+                    <select id="moduleFilter">
+                        <option value="">全部模块</option>
+                        <option value="PRODUCT">产品信息</option>
+                        <option value="SPEC">规格配置</option>
+                        <option value="PRICE">供应商价格</option>
+                        <option value="IMAGE">图片资料</option>
+                        <option value="CLASSIFICATION">产品分类</option>
+                    </select>
+                </label>
+                <label class="field date-field">
+                    <span>开始日期</span>
+                    <input id="startDate" type="date">
+                </label>
+                <label class="field date-field">
+                    <span>结束日期</span>
+                    <input id="endDate" type="date">
+                </label>
+                <div class="filter-actions">
+                    <button class="primary-button" type="submit">查询</button>
+                    <button class="secondary-button" id="resetButton" type="button">重置</button>
+                </div>
+            </form>
+
+            <div class="table-meta">
+                <div><span class="pulse-dot"></span>共 <strong id="totalCount">0</strong> 条记录</div>
+                <button class="refresh-button" id="refreshButton" type="button">↻ 刷新</button>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="seq-col">序号</th>
+                            <th class="image-col">产品图片</th>
+                            <th>产品信息</th>
+                            <th class="operation-col">操作</th>
+                            <th>变更模块</th>
+                            <th class="detail-col">操作内容</th>
+                            <th>操作人</th>
+                            <th>操作时间</th>
+                            <th class="view-col">详情</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logTableBody"></tbody>
+                </table>
+                <div class="table-state" id="tableState">
+                    <div class="state-icon">⌛</div>
+                    <div>正在加载操作日志...</div>
+                </div>
+            </div>
+
+            <footer class="pagination">
+                <div>
+                    每页
+                    <select id="pageSize">
+                        <option value="10">10</option>
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                    条
+                </div>
+                <div class="pager-controls">
+                    <button id="prevPage" type="button">上一页</button>
+                    <span id="pageInfo">第 1 / 1 页</span>
+                    <button id="nextPage" type="button">下一页</button>
+                </div>
+            </footer>
+        </section>
+    </main>
+
+    <div class="drawer-mask" id="drawerMask"></div>
+    <aside class="detail-drawer" id="detailDrawer" aria-hidden="true">
+        <header class="drawer-header">
+            <div>
+                <span class="drawer-kicker">操作日志详情</span>
+                <h2 id="drawerTitle">配件变更记录</h2>
+            </div>
+            <button class="drawer-close" id="drawerClose" type="button" aria-label="关闭">×</button>
+        </header>
+        <div class="drawer-content" id="drawerContent"></div>
+    </aside>
+
+    <div class="toast" id="toast"></div>
+    <script src="/static/js/logs.js"></script>
+</body>
+</html>

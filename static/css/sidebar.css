@@ -1,0 +1,350 @@
+/* ========== 产品分类树（最左侧） ========== */
+        .classification-sidebar {
+            width: 250px;
+            min-width: 250px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+            border-right: 1px solid var(--sidebar-border);
+        }
+
+        .classification-header {
+            padding: 18px 16px 14px;
+            border-bottom: 1px solid var(--sidebar-border);
+            display: flex;
+            align-items: center;
+            gap: 11px;
+        }
+
+        .site-brand-logo {
+            width: 40px;
+            height: 40px;
+            flex: 0 0 40px;
+            border-radius: 10px;
+            box-shadow: 0 5px 12px rgba(14, 132, 199, .18);
+        }
+        .classification-header h2 { font-size: 17px; font-weight: 600; margin-bottom: 3px; }
+        .classification-header p { color: var(--sidebar-text-light); font-size: 12px; }
+        .classification-tree { flex: 1; overflow-y: auto; padding: 8px; }
+        .classification-tree::-webkit-scrollbar { width: 5px; }
+        .classification-tree::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 3px; }
+
+        .tree-all,
+        .tree-unclassified,
+        .tree-leaf {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.12s;
+        }
+
+        .tree-all, .tree-unclassified { padding: 8px 10px; margin-bottom: 4px; font-size: 13px; font-weight: 500; }
+        .tree-unclassified { color: #b45309; background: #fffbeb; }
+        .tree-all:hover, .tree-unclassified:hover, .tree-leaf:hover { background: var(--sidebar-hover); }
+        .tree-all.active, .tree-unclassified.active, .tree-leaf.active {
+            color: var(--accent);
+            background: var(--sidebar-active);
+        }
+
+        .tree-first { margin-top: 4px; }
+        .tree-first > summary,
+        .tree-second > summary {
+            cursor: pointer;
+            list-style: none;
+            border-radius: 5px;
+            position: relative;
+        }
+        .tree-first > summary::-webkit-details-marker,
+        .tree-second > summary::-webkit-details-marker { display: none; }
+        .tree-first > summary { padding: 8px 8px 8px 24px; font-size: 14px; font-weight: 600; }
+        .tree-second > summary { padding: 6px 8px 6px 38px; font-size: 13px; color: #555; }
+        .tree-add-btn {
+            display: inline-block;
+            border: 0;
+            border-radius: 4px;
+            padding: 1px 5px;
+            background: #e8f0fe;
+            color: var(--accent);
+            font-size: 12px;
+            line-height: 18px;
+            cursor: pointer;
+        }
+        .tree-add-btn:hover { background: #d7e6ff; }
+        .tree-actions { float: right; white-space: nowrap; }
+        .tree-edit-btn { background: #f3f4f6; color: #6b7280; }
+        .tree-edit-btn:hover { background: #e5e7eb; }
+
+        .tree-first > summary::before,
+        .tree-second > summary::before {
+            content: '›'; position: absolute; transition: transform 0.12s; color: #999;
+        }
+        .tree-first > summary::before { left: 9px; }
+        .tree-second > summary::before { left: 24px; }
+        .tree-first[open] > summary::before,
+        .tree-second[open] > summary::before { transform: rotate(90deg); }
+        .tree-first > summary:hover, .tree-second > summary:hover { background: #f5f6f7; }
+        .tree-leaf { padding: 7px 8px 7px 54px; font-size: 13px; color: #555; }
+        .tree-count { color: #999; font-size: 12px; flex-shrink: 0; }
+        .tree-empty { padding: 5px 8px 8px 24px; color: #bbb; font-size: 11px; }
+
+        /* ========== 左侧产品列表 ========== */
+        .sidebar {
+            width: 300px;
+            min-width: 300px;
+            background: var(--sidebar-bg);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            border-right: 1px solid var(--sidebar-border);
+            z-index: 10;
+        }
+
+        .sidebar-header {
+            padding: 18px 20px 14px;
+            border-bottom: 1px solid var(--sidebar-border);
+        }
+        .sidebar-title-row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+        .sidebar-title-actions { display:flex; align-items:center; gap:6px; }
+
+        .sidebar-header h1 {
+            color: var(--sidebar-text);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+
+        .sidebar-header .subtitle {
+            color: var(--sidebar-text-light);
+            font-size: 12px;
+        }
+        .add-product-btn {
+            flex:0 0 auto; border:0; border-radius:6px; padding:7px 11px;
+            background:var(--accent); color:#fff; cursor:pointer; font-size:12px; font-weight:600;
+            box-shadow:0 2px 7px rgba(108,92,231,.18);
+        }
+        .add-product-btn:hover { filter:brightness(.96); }
+        .log-page-btn {
+            flex:0 0 auto; padding:6px 9px; color:var(--accent); border:1px solid rgba(108,92,231,.28);
+            border-radius:6px; background:#fff; text-decoration:none; font-size:12px; font-weight:600;
+        }
+        .log-page-btn:hover { background:rgba(108,92,231,.06); }
+
+        .search-box {
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--sidebar-border);
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .search-box input {
+            flex: 1;
+            min-width: 0;
+            padding: 9px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: #fff;
+            color: var(--text);
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-box input::placeholder { color: #bbb; }
+        .search-box input:focus { border-color: var(--accent); }
+
+        .duplicate-filter-button {
+            flex: 0 0 auto;
+            height: 35px;
+            padding: 0 10px;
+            border: 1px solid #fecaca;
+            border-radius: 6px;
+            background: #fff7f7;
+            color: #b91c1c;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all .15s;
+        }
+        .duplicate-filter-button:hover {
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+        .duplicate-filter-button.active {
+            color: #fff;
+            background: #ef4444;
+            border-color: #ef4444;
+            box-shadow: 0 2px 7px rgba(239, 68, 68, .2);
+        }
+
+        .product-count {
+            padding: 6px 20px;
+            color: var(--sidebar-text-light);
+            font-size: 12px;
+            border-bottom: 1px solid var(--sidebar-border);
+        }
+
+        .product-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2px 0;
+        }
+
+        .product-list::-webkit-scrollbar { width: 5px; }
+        .product-list::-webkit-scrollbar-track { background: transparent; }
+        .product-list::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 3px; }
+
+        .product-item {
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: all 0.12s;
+            border-left: 3px solid transparent;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .product-item:hover { background: var(--sidebar-hover); }
+
+        .product-item.active {
+            background: var(--sidebar-active);
+            border-left-color: var(--sidebar-active-border);
+        }
+
+        .product-item .p-seq {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent);
+            min-width: 36px;
+            text-align: center;
+            line-height: 1.2;
+            padding-top: 2px;
+            opacity: 0.7;
+        }
+
+        .product-item .p-info { flex: 1; min-width: 0; }
+
+        .product-item .p-name {
+            color: var(--sidebar-text);
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .product-item .p-model {
+            color: var(--sidebar-text-light);
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .product-item .p-brand {
+            display: inline-block;
+            background: #e8f0fe;
+            color: var(--accent);
+            font-size: 11px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            margin-top: 3px;
+        }
+
+        .product-item .p-type {
+            display: inline-block;
+            margin: 3px 4px 0 0;
+            color: #5f6368;
+            font-size: 11px;
+        }
+
+        .product-item .p-updated {
+            display: block;
+            color: #8a8f98;
+            font-size: 10px;
+            margin-top: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .duplicate-mark {
+            display: inline-block;
+            margin-left: 5px;
+            padding: 2px 6px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            background: #fee2e2;
+            color: #b91c1c;
+            font-size: 10px;
+            font-weight: 600;
+            vertical-align: 1px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .duplicate-mark:hover { background: #fecaca; border-color: #fca5a5; }
+        .duplicate-mark.marked {
+            background: #dcfce7;
+            color: #15803d;
+            border-color: #86efac;
+        }
+        .duplicate-mark.marked:hover { background: #bbf7d0; border-color: #4ade80; }
+
+        /* ========== 分页 ========== */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 10px 12px;
+            border-top: 1px solid var(--sidebar-border);
+            flex-wrap: wrap;
+            background: var(--sidebar-bg);
+        }
+
+        .pagination button {
+            min-width: 30px;
+            height: 30px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            background: #fff;
+            color: var(--text);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.12s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 6px;
+        }
+
+        .pagination button:hover:not(.active):not(:disabled) {
+            background: var(--sidebar-hover);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .pagination button.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+
+        .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .pagination .dots {
+            min-width: 24px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--sidebar-text-light);
+            font-size: 12px;
+        }

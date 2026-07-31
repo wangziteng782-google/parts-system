@@ -1,0 +1,79 @@
+:root {
+    font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #172033;
+    background: #f4f7fb;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    min-height: 100vh;
+    margin: 0;
+    background:
+        radial-gradient(circle at 18% 8%, rgba(14, 132, 199, .14), transparent 30%),
+        #f4f7fb;
+}
+
+.sales-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 32px;
+}
+
+.sales-card {
+    width: min(620px, 100%);
+    padding: 52px 56px;
+    text-align: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, .96);
+    box-shadow: 0 24px 70px rgba(30, 64, 108, .12);
+}
+
+.sales-logo {
+    width: 76px;
+    height: 76px;
+    border-radius: 18px;
+    box-shadow: 0 10px 24px rgba(14, 132, 199, .22);
+}
+
+.sales-kicker {
+    margin-top: 24px;
+    color: #0284c7;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1.8px;
+}
+
+h1 {
+    margin: 10px 0 12px;
+    font-size: 30px;
+}
+
+p {
+    margin: 0 auto;
+    color: #64748b;
+    font-size: 15px;
+    line-height: 1.8;
+}
+
+.sales-status {
+    width: fit-content;
+    margin: 28px auto 22px;
+    padding: 8px 16px;
+    color: #0369a1;
+    border-radius: 999px;
+    background: #e0f2fe;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+a {
+    color: #0284c7;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+a:hover { text-decoration: underline; }

@@ -1,0 +1,17 @@
+[Unit]
+Description=Parts System FastAPI
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=www
+Group=www
+WorkingDirectory=/www/wwwroot/parts-system-test
+EnvironmentFile=/www/wwwroot/parts-system-test/.env
+ExecStart=/www/wwwroot/parts-system-test/.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8055 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
