@@ -7,3 +7,4 @@ qiniu
 openpyxl
 Pillow
 PyJWT>=2.8,<3
+python-dotenv>=1.0,<2

@@ -18,7 +18,7 @@ JWT_QUERY_NAME = "t"
 JWT_HEADER_NAME = os.getenv("JWT_TOKEN_NAME", "Admin-Token").strip() or "Admin-Token"
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "").strip()
 JWT_ALGORITHM = "HS256"
-JWT_TOKEN_EXP_SECONDS = int(os.getenv("JWT_TOKEN_EXP_SECONDS", "120"))
+JWT_TOKEN_EXP_SECONDS = int(os.getenv("JWT_TOKEN_EXP_SECONDS", "432000"))
 AUTH_REQUIRED = os.getenv("PARTS_AUTH_REQUIRED", "false").strip().lower() in {
     "1",
     "true",
@@ -32,7 +32,10 @@ SESSION_COOKIE_NAME = os.getenv(
 SESSION_SECRET_KEY = (
     os.getenv("PARTS_SESSION_SECRET_KEY", "").strip() or JWT_SECRET_KEY
 )
-SESSION_MAX_MINUTES = int(os.getenv("PARTS_SESSION_MAX_MINUTES", "120"))
+SESSION_MAX_MINUTES = max(
+    1,
+    int(os.getenv("PARTS_SESSION_MAX_MINUTES", "7200")),
+)
 
 
 def _parse_role_ids(environment_name: str, default_value: str) -> set[int]:
@@ -194,18 +197,14 @@ def _authorize_request(user: Optional[dict], path: str) -> None:
     raise AuthenticationError("当前角色没有访问权限", status_code=403)
 
 
-def _session_expiration(claims: dict) -> int:
-    token_exp = claims.get("exp") or claims.get("_calculated_exp")
-    maximum = int(
+def _session_expiration(_external_claims: dict) -> int:
+    """外部Token只用于首次换取会话；本系统会话按独立时长过期。"""
+    return int(
         (
             datetime.now(timezone.utc)
             + timedelta(minutes=SESSION_MAX_MINUTES)
         ).timestamp()
     )
-    try:
-        return min(int(token_exp), maximum) if token_exp else maximum
-    except (TypeError, ValueError):
-        return maximum
 
 
 def _encode_session(user: dict, external_claims: dict) -> tuple[str, int]:

@@ -6,17 +6,168 @@
     <title>销售商品查询</title>
     <link rel="icon" href="/static/img/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="/static/img/site-logo.png">
-    <link rel="stylesheet" href="/static/css/sales.css">
+    <link rel="stylesheet" href="/static/css/sales.css?v=20260805-8">
 </head>
-<body>
-    <main class="sales-page">
-        <section class="sales-card">
-            <img class="sales-logo" src="/static/img/site-logo.png" alt="电梯配件管理系统">
-            <div class="sales-kicker">SALES PRODUCT SEARCH</div>
-            <h1>销售商品查询</h1>
-            <p>该页面入口已经预留，后续将在这里展示商品价格和对应的询价参考信息。</p>
-            <div class="sales-status">功能建设中</div>
+<body data-user-name="{{ sales_user_name }}">
+    <header>
+        <div class="sales-topbar">
+            <div class="sales-shell topbar-inner">
+                <span>你好，<strong id="salesUserName">{{ sales_user_name }}</strong></span>
+                <div class="topbar-status">
+                    <span class="status-dot"></span>
+                    内部销售商品与询价参考库
+                </div>
+            </div>
+        </div>
+
+        <div class="sales-head">
+            <div class="sales-shell head-inner">
+                <a class="sales-brand" href="/sales" aria-label="返回销售查询首页">
+                    <img src="/static/img/site-logo.png" alt="易梯配件库图标">
+                    <div>
+                        <div class="brand-name">易梯<span>配件库</span></div>
+                        <div class="brand-subtitle">销售价格与询价参考</div>
+                    </div>
+                </a>
+
+                <form class="sales-search" id="salesSearchForm">
+                    <input id="salesSearchInput" type="search" autocomplete="off"
+                           placeholder="请输入产品名称、品牌、型号或规格">
+                    <button type="submit" aria-label="搜索商品">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/></svg>
+                        搜索
+                    </button>
+                </form>
+
+            </div>
+        </div>
+
+    </header>
+
+    <main class="sales-shell sales-main">
+        <div class="sales-crumb">
+            <div><strong>全部商品查询结果</strong></div>
+            <div>共 <b id="salesTotalTop">0</b> 条产品</div>
+        </div>
+
+        <section class="sales-result-panel">
+            <div class="result-heading">
+                <div>
+                    <div class="section-eyebrow">PRODUCT LIBRARY</div>
+                    <h1 id="salesResultTitle">全部产品</h1>
+                    <p id="salesResultDescription">同时查询配件库和历史询价记录中的销售参考价格</p>
+                </div>
+                <div class="result-summary"><span id="salesResultRange">准备加载</span></div>
+            </div>
+
+            <div class="sales-toolbar">
+                <div class="sort-group" aria-label="排序方式">
+                    <button class="sort-button active" data-sort="default" type="button">综合</button>
+                    <button class="sort-button" data-sort="updated_desc" type="button">最近报价</button>
+                    <button class="sort-button" data-sort="price_asc" type="button">价格从低到高</button>
+                    <button class="sort-button" data-sort="price_desc" type="button">价格从高到低</button>
+                </div>
+                <div class="view-switch" aria-label="切换展示方式">
+                    <button class="active" id="salesGridButton" type="button" title="网格视图">▦ 网格</button>
+                    <button id="salesListButton" type="button" title="列表视图">▤ 列表</button>
+                </div>
+            </div>
+
+            <div class="sales-loading" id="salesLoading">
+                <span class="loading-spinner"></span><span>正在查询商品...</span>
+            </div>
+            <div class="sales-empty" id="salesEmpty" hidden>
+                <img src="/static/img/site-logo.png" alt="暂无商品">
+                <strong>没有找到匹配的商品</strong>
+                <span>请更换产品名称、品牌、型号或规格后重新搜索</span>
+            </div>
+            <div class="goods-grid" id="salesGoodsGrid"></div>
+            <div class="goods-list-wrap" id="salesGoodsListWrap">
+                <table class="goods-list">
+                    <thead><tr>
+                        <th>商品信息</th><th>品牌</th><th>型号</th><th>规格</th>
+                        <th>销售参考价</th><th>报价更新</th><th>操作</th>
+                    </tr></thead>
+                    <tbody id="salesGoodsList"></tbody>
+                </table>
+            </div>
+            <div class="sales-pagination" id="salesPagination"></div>
         </section>
     </main>
+
+    <footer class="sales-footer">
+        <div class="sales-shell footer-inner">
+            <div class="footer-brand"><img src="/static/img/favicon.ico" alt="易梯图标"><span>易梯配件库</span></div>
+            <p>商品价格与询价信息仅供内部业务参考，最终报价请结合实时采购情况确认。</p>
+            <span>© 2026 易梯科技</span>
+        </div>
+    </footer>
+
+    <div class="sales-image-overlay" id="salesImageOverlay" onclick="closeSalesImagePreview()">
+        <div class="sales-image-modal" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="商品图片大图预览">
+            <button class="image-preview-close" type="button" onclick="closeSalesImagePreview()" aria-label="关闭">×</button>
+            <img id="salesPreviewImage" src="" alt="商品图片大图">
+        </div>
+    </div>
+
+    <div class="sales-detail-overlay" id="salesDetailOverlay" aria-hidden="true">
+        <section class="sales-detail-modal" id="salesDetailModal" role="dialog" aria-modal="true" aria-labelledby="salesDetailTitle">
+            <header class="sales-detail-header">
+                <div>
+                    <h2 id="salesDetailTitle">产品详情</h2>
+                    <span class="source-badge parts" id="salesDetailSource">来自配件库</span>
+                </div>
+                <button type="button" class="sales-detail-close" onclick="closeSalesProductDetail()" aria-label="关闭详情">×</button>
+            </header>
+
+            <div class="sales-detail-scroll">
+                <div class="sales-detail-card">
+                    <div class="sales-detail-product-row">
+                        <div class="sales-detail-image"><img id="salesDetailImage" src="/static/img/site-logo.png" alt="商品图片" onerror="this.src='/static/img/site-logo.png';this.onerror=null"></div>
+                        <div class="sales-detail-summary">
+                            <div><label>商品名称：</label><strong id="salesDetailName"></strong></div>
+                            <div><label>规格型号：</label><span id="salesDetailModel"></span></div>
+                            <div><label>产品规格：</label><span id="salesDetailSpecification"></span></div>
+                            <div><label>销售参考价：</label><b class="sales-detail-price" id="salesDetailPrice"></b></div>
+                        </div>
+                    </div>
+
+                    <div class="sales-detail-quote-strip">
+                        <div><label>报价类型</label><strong id="salesDetailQuotationType"></strong></div>
+                        <div><label>采购报价</label><strong id="salesDetailPurchasePrice"></strong></div>
+                        <div><label>无税运费报价</label><strong id="salesDetailPostFeePurchase"></strong></div>
+                        <div><label>含税运费报价</label><strong id="salesDetailPostFeeHasTaxPurchase"></strong></div>
+                    </div>
+
+                    <div class="sales-detail-parts-prices" id="salesDetailPartsPrices" hidden>
+                        <div class="sales-detail-subtitle">
+                            <strong>价格信息</strong>
+                            <span id="salesDetailPriceMultiplier"></span>
+                        </div>
+                        <div id="salesDetailPartsPriceContent"></div>
+                    </div>
+
+                    <div class="sales-detail-subtitle"><strong id="salesDetailInfoTitle">商品信息</strong></div>
+                    <div class="sales-detail-info-grid" id="salesDetailInfoGrid"></div>
+                </div>
+
+                <div class="sales-detail-chat" id="salesDetailChat" hidden>
+                    <div class="sales-detail-section-title">
+                        <strong>沟通记录</strong><span id="salesDetailChatCount">0 条</span>
+                    </div>
+                    <div class="sales-detail-table-wrap">
+                        <table>
+                            <thead><tr><th>序号</th><th>沟通内容</th><th>附件</th><th>创建人</th><th>创建时间</th><th>操作</th></tr></thead>
+                            <tbody id="salesDetailChatBody"><tr><td colspan="6" class="sales-detail-empty">暂无沟通记录</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </div>
+
+    <div class="sales-toast" id="salesToast"></div>
+    <script src="/static/js/sales.js?v=20260805-9"></script>
 </body>
 </html>

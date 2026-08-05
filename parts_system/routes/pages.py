@@ -21,9 +21,12 @@ async def favicon():
 
 @app.get("/sales", response_class=HTMLResponse)
 async def sales_page(request: Request):
-    """销售查询页面预留入口。"""
+    """销售只读商品与价格查询页面。"""
+    user = getattr(request.state, "current_user", None) or {}
     return templates.TemplateResponse(
         request=request,
         name="sales.html",
-        context={},
+        context={
+            "sales_user_name": user.get("nickname") or user.get("username") or "内部同事",
+        },
     )

@@ -1,7 +1,7 @@
 # parts-system 部署与更新手册
 
-> 更新时间：2026-07-30  
-> 适用项目：电梯配件管理系统（FastAPI + MySQL + Nginx）  
+> 更新时间：2026-08-04
+> 适用项目：电梯配件管理系统（FastAPI + 双MySQL数据源 + Nginx）
 > 本手册记录当前已经成功完成的一版服务器部署，并作为后续人工发布和故障回滚的操作依据。
 
 ## 一、当前线上架构
@@ -15,7 +15,8 @@ http://127.0.0.1:8055
     ↓ systemd管理的Uvicorn/FastAPI
 /www/wwwroot/parts-system-test
     ↓ PyMySQL
-MySQL：parts_database
+    ├─ 主业务库：parts_database（产品维护、规格、报价、日志）
+    └─ OA询价库：oa_yixiuti（销售页只读查询历史询价记录）
 ```
 
 当前约定：
@@ -30,6 +31,9 @@ MySQL：parts_database
 | Python监听地址 | `127.0.0.1:8055` |
 | 数据库名 | `parts_database` |
 | 数据库用户 | `parts_database` |
+| OA询价数据库 | `oa_yixiuti` |
+| OA数据库地址 | `120.46.152.222:3306` |
+| OA连接用途 | `/sales` 页面只读查询询价任务、询价商品和厂家名称 |
 | Nginx入口 | 独立域名，反向代理至 `http://127.0.0.1:8055` |
 | 配件维护页 | `https://<独立域名>/goods` |
 | 日志页面 | `https://<独立域名>/logs` |
@@ -43,6 +47,7 @@ MySQL：parts_database
 - 员工只访问独立HTTPS域名。
 - Python项目不能通过 `templates/index.html` 当静态文件访问，页面必须经过FastAPI返回。
 - `.env` 和 `.venv` 不放入部署压缩包。
+- 主业务库连接失败时核心业务接口不可用；OA询价库连接失败时 `/sales` 会降级为只展示配件库数据并给出提示。
 
 ---
 
@@ -191,6 +196,14 @@ PARTS_DB_NAME=parts_database
 PARTS_DB_CHARSET=utf8mb4
 PARTS_DB_CONNECT_TIMEOUT=10
 
+OA_DB_HOST=120.46.152.222
+OA_DB_PORT=3306
+OA_DB_NAME=oa_yixiuti
+OA_DB_USER=oa_yixiuti
+OA_DB_PASSWORD='OA数据库真实密码'
+OA_DB_CONNECT_TIMEOUT=5
+OA_DB_READ_TIMEOUT=12
+
 PARTS_AUTH_REQUIRED=true
 JWT_TOKEN_NAME=Admin-Token
 JWT_SECRET_KEY='与PHP项目一致的HS256密钥'
@@ -200,11 +213,20 @@ PARTS_SESSION_MAX_MINUTES=120
 PARTS_ADMIN_ROLE_IDS=1
 PARTS_SALES_ROLE_IDS=3,31,32
 PARTS_PURCHASE_ROLE_IDS=4,36,37
+SALES_PRICE_MARKUP_RATE=0.20
 
 QINIU_ACCESS_KEY='七牛云AccessKey'
 QINIU_SECRET_KEY='七牛云SecretKey'
 QINIU_BUCKET=yiti-soft
 QINIU_DOMAIN=http://soft.yitikeji.cn
+```
+
+已经部署过旧版本的服务器不需要重新复制 `.env`。直接编辑现有
+`/www/wwwroot/parts-system-test/.env`，补充 `OA_DB_*` 变量后执行：
+
+```bash
+chmod 600 /www/wwwroot/parts-system-test/.env
+systemctl restart parts-system
 ```
 
 注意：
@@ -216,6 +238,11 @@ QINIU_DOMAIN=http://soft.yitikeji.cn
 - JWT用户ID读取 `data.admin_user_id`，用户必须存在于 `yh_admin_user` 且未禁用、未删除。
 - Token验证成功后会立即跳转到不含`t`的地址，并改用HttpOnly会话Cookie。
 - `JWT_SECRET_KEY` 必须与PHP签发方一致；`PARTS_SESSION_SECRET_KEY` 应使用另一串独立随机值。
+- `SALES_PRICE_MARKUP_RATE=0.20` 表示销售展示价增加20%；调整比例后需要重启后端服务。
+- OA数据库用于读取 `yh_query_goods_mission`、`yh_query_order_goods` 和 `yh_factory`；应用不会通过该连接修改OA数据。
+- 正式环境建议为本系统单独创建OA只读账号，仅授予上述三张表的 `SELECT` 权限，不使用OA数据库管理账号。
+- “来自询价记录”查询 `mission_type=1 AND delete_time IS NULL` 的全部询价任务，不限制任务状态；“来自配件库”读取 `parts_database.parts`。
+- OA询价记录直接展示历史报价；配件库价格按照 `SALES_PRICE_MARKUP_RATE` 从成本价换算，两种来源的价格口径不要混淆。
 - 本系统应用日志会隐藏`t`，Nginx也必须关闭该站点访问日志或使用不记录查询字符串的日志格式。
 - 超级管理员角色1和采购角色4、36、37可以访问三个页面及现有业务API。
 - 销售角色3、31、32只能访问 `/sales` 和专用的 `/api/sales/*`，手改为 `/goods`、`/logs` 或调用批改API会返回403。
@@ -248,6 +275,18 @@ set +a
 ```bash
 curl http://127.0.0.1:8055/api/health
 ```
+
+验证OA询价库连接和当前询价任务数量：
+
+```bash
+cd /www/wwwroot/parts-system-test
+set -a
+source .env
+set +a
+.venv/bin/python -c "from parts_system.routes.sales import _oa_connection; c=_oa_connection(); q=c.cursor(); q.execute('SELECT COUNT(*) AS total FROM yh_query_goods_mission WHERE mission_type=1 AND delete_time IS NULL'); print(q.fetchone()); c.close()"
+```
+
+命令能够返回 `total` 表示OA连接配置有效。任务数量会随着OA业务新增或删除而变化，不能长期固定为某个数字。
 
 手动启动只用于首次验证。宝塔网页终端关闭或切换页面后，前台进程可能终止，正式运行必须交给systemd。
 
@@ -580,6 +619,22 @@ curl http://127.0.0.1:8055/api/health
 curl https://<独立域名>/api/health
 ```
 
+### 检查销售页的两个数据源
+
+浏览器打开 `/sales` 后搜索一个已知型号，确认结果中能分别看到：
+
+- `来自配件库`：数据来自 `parts_database.parts`；
+- `来自询价记录`：数据来自 `oa_yixiuti` 的询价任务和询价商品表。
+
+如果页面提示“OA询价记录暂时无法读取”，先检查：
+
+```bash
+journalctl -u parts-system -n 100 --no-pager | grep OA
+```
+
+再核对 `.env` 中的 `OA_DB_HOST`、`OA_DB_PORT`、`OA_DB_NAME`、
+`OA_DB_USER`、`OA_DB_PASSWORD`，以及服务器到OA MySQL 3306端口的网络和账号权限。
+
 ### 检查8055端口
 
 ```bash
@@ -772,6 +827,8 @@ echo "$BACKUP_DIR"
 - [ ] 首页产品分类和产品列表可以加载。
 - [ ] 产品查询、编辑、图片和供应商价格按本次改动抽查。
 - [ ] `/logs` 页面正常。
+- [ ] `/sales` 能同时查询“来自配件库”和“来自询价记录”的数据。
+- [ ] OA询价库不可用时，`/sales` 能降级展示配件库数据而不是整个页面报错。
 - [ ] 浏览器强制刷新后静态资源为新版本。
 - [ ] 保留上一版代码备份，不立即删除。
 
@@ -783,6 +840,7 @@ echo "$BACKUP_DIR"
 - 只有Nginx的80/443对外提供服务。
 - `.env` 永远不进入部署压缩包和公开代码。
 - 七牛云密钥、数据库密码出现在截图或聊天中后应及时轮换。
+- OA数据库账号只授予查询所需表的只读权限；`OA_DB_PASSWORD` 只保存在服务器 `.env` 中。
 - 不将Python源码、`.env`、`jobs` 目录放进PHP项目的公开 `public` 目录供静态访问。
 - 删除产品和执行数据库迁移前必须确认备份。
 - 普通代码升级不要重新导入首次部署全量SQL。

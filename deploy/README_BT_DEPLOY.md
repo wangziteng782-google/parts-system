@@ -174,7 +174,10 @@ PARTS_SESSION_MAX_MINUTES=120
 PARTS_ADMIN_ROLE_IDS=1
 PARTS_SALES_ROLE_IDS=3,31,32
 PARTS_PURCHASE_ROLE_IDS=4,36,37
+SALES_PRICE_MARKUP_RATE=0.20
 ```
+
+`SALES_PRICE_MARKUP_RATE=0.20` 表示销售展示价按当前成本价增加20%，修改后需重启服务。
 
 首次验证成功后系统写入HttpOnly会话Cookie，并立即跳转到不含`t`的干净地址。
 Nginx站点应关闭访问日志或使用不记录查询字符串的日志格式，避免JWT进入访问日志。

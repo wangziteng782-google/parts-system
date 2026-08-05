@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Dict, Optional, List
 import pymysql
+from dotenv import load_dotenv
 import logging
 import os
 import json
@@ -18,6 +19,7 @@ from qiniu import Auth, put_data
 # ========== 日志配置 ==========
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIR = PROJECT_ROOT
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
 logger = logging.getLogger("parts_system")
 logger.setLevel(logging.DEBUG)

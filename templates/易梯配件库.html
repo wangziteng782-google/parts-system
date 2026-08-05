@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>轿厢显示板详情</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft Yahei", sans-serif;
+            font-size: 14px;
+        }
+        body {
+            background: #f5f7fa;
+            padding: 16px 24px;
+        }
+        /* 页面主容器 */
+        .page-wrap {
+            background: #fff;
+            border: 1px solid #dcdcdc;
+            border-radius: 6px;
+        }
+        .page-header {
+            height: 46px;
+            line-height: 46px;
+            padding: 0 16px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .page-header h3 {
+            font-size: 16px;
+            font-weight: 500;
+        }
+        /* 主体区域 */
+        .page-body {
+            padding: 20px;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 120px 1fr 120px 1fr 120px 1fr;
+            gap: 14px 10px;
+            padding: 12px 0;
+            border-bottom: 1px solid #eeeeee;
+            align-items: center;
+        }
+        .form-row-full {
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            gap: 14px 10px;
+            padding: 12px 0;
+            border-bottom: 1px solid #eeeeee;
+            align-items: center;
+        }
+        label {
+            color: #333;
+            white-space: nowrap;
+        }
+        .form-value {
+            color: #444;
+        }
+        /* 商品图片行 */
+        .row-img-item {
+            display: flex;
+            gap:16px;
+            align-items: flex-start;
+            padding-bottom:12px;
+            border-bottom: 1px solid #eee;
+            margin-bottom:0;
+        }
+        .img-box {
+            width:80px;
+            height:80px;
+            border:1px solid #ddd;
+            overflow:hidden;
+            flex-shrink: 0;
+        }
+        .img-box img {
+            width:100%;
+            height:100%;
+            object-fit:cover;
+        }
+        .img-right-wrap {
+            flex:1;
+            display: grid;
+            grid-template-columns: 120px 1fr 120px 160px 1fr;
+            gap: 14px 10px;
+            align-items: center;
+            padding-top:8px;
+        }
+        /* 沟通记录区域 */
+        .chat-section {
+            margin: 20px;
+        }
+        .btn-blue {
+            background: #1677ff;
+            color: white;
+            border: none;
+            height:36px;
+            padding:0 16px;
+            border-radius:4px;
+            cursor:pointer;
+            margin-bottom:12px;
+        }
+        .btn-blue:hover {
+            background: #4096ff;
+        }
+        table {
+            width:100%;
+            border-collapse: collapse;
+            border:1px solid #ddd;
+        }
+        table th, table td {
+            border:1px solid #ddd;
+            padding:10px 12px;
+            text-align:center;
+        }
+        table th {
+            background:#f7f8fa;
+            font-weight: 500;
+        }
+        table td:first-child {
+            width: 70px;
+        }
+        table td:nth-child(2) {
+            text-align:left;
+        }
+        .reply-btn {
+            color:#52c41a;
+            cursor:pointer;
+        }
+        /* 底部区域 */
+        .page-footer {
+            text-align:center;
+            padding:14px;
+            border-top:1px solid #eee;
+        }
+        .footer-close {
+            padding:6px 20px;
+            border:1px solid #ccc;
+            background:#fff;
+            cursor:pointer;
+            border-radius:3px;
+        }
+        .footer-close:hover {
+            background: #f5f7fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-wrap">
+        <!-- 头部标题 -->
+        <div class="page-header">
+            <h3>产品名称：轿厢显示板</h3>
+            <div></div>
+        </div>
+
+        <!-- 主体表单区域（严格按照截图顺序排版，纯文本只读） -->
+        <div class="page-body">
+            <div class="row-img-item">
+                <div class="img-box">
+                    <img alt="轿厢显示板" src="https://oa.yixiuti.com/uploads/file/20260804/77074486dcc9706545480d539fea2832.jpg">
+                </div>
+                <div class="img-right-wrap">
+                    <label>商品名称：</label>
+                    <span class="form-value">新时达显示板</span>
+                    <label>规格型号：</label>
+                    <span class="form-value">SM-04-UL B04UN01</span>
+                    <span></span>
+                    <label>无税报价：</label>
+                    <span class="form-value">900</span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label>售价：</label>
+                <span class="form-value">900.00</span>
+                <label>商品税率：</label>
+                <span class="form-value"></span>
+                <label>商品税费：</label>
+                <span class="form-value">0.00</span>
+                <label>含税售价：</label>
+                <span class="form-value">0.00</span>
+            </div>
+
+            <div class="form-row">
+                <label>运费：</label>
+                <span class="form-value">0.00</span>
+                <label>运费税率：</label>
+                <span class="form-value"></span>
+                <label>运费税费：</label>
+                <span class="form-value">0.00</span>
+                <label>含税运费：</label>
+                <span class="form-value">0.00</span>
+            </div>
+
+            <div class="form-row">
+                <label>数量：</label>
+                <span class="form-value">1.00</span>
+                <label>类型：</label>
+                <span class="form-value">全品</span>
+                <label>单位：</label>
+                <span class="form-value"></span>
+                <label>应收总额：</label>
+                <span class="form-value">900.00</span>
+            </div>
+
+            <div class="form-row">
+                <label>商品备注：</label>
+                <span class="form-value"></span>
+                <label>电梯场景：</label>
+                <span class="form-value"></span>
+                <label>记录业绩：</label>
+                <span class="form-value">900.00</span>
+                <span></span>
+                <span></span>
+            </div>
+
+            <div class="form-row">
+                <label>询价描述：</label>
+                <span class="form-value">1</span>
+                <label>询运描述：</label>
+                <span class="form-value"></span>
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+
+            <div class="form-row-full">
+                <label>收货地址：</label>
+                <span class="form-value"></span>
+            </div>
+
+            <div class="form-row">
+                <label>创建时间：</label>
+                <span class="form-value">2026-08-04 10:57:46</span>
+                <label>创建人：</label>
+                <span class="form-value">贾伟苗</span>
+                <label>询价日期：</label>
+                <span class="form-value">2026-08-04</span>
+            </div>
+
+            <div class="form-row-full">
+                <label>客户标签：</label>
+                <span class="form-value"></span>
+            </div>
+        </div>
+
+        <!-- 沟通记录区域 -->
+        <div class="chat-section">
+            <button class="btn-blue">新增沟通记录</button>
+            <table>
+                <thead>
+                    <tr>
+                        <th>序号</th>
+                        <th>沟通内容</th>
+                        <th>附件</th>
+                        <th>创建人</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td>这是一套还是一块屏，它这个是拼接的，系统板跟屏</td>
+                        <td></td>
+                        <td>贾伟苗</td>
+                        <td>2026-08-04 11:54:55</td>
+                        <td><span class="reply-btn">回复</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 底部 -->
+        <div class="page-footer">
+            <button class="footer-close">关闭</button>
+        </div>
+    </div>
+</body>
+</html>
