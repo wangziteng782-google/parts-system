@@ -76,10 +76,20 @@ def deployment_files() -> list[Path]:
             continue
         files.update(path for path in directory.rglob("*") if should_include(path))
 
+    missing_deploy_files = []
     for relative_name in DEPLOY_FILES:
         path = PROJECT_ROOT / relative_name
         if path.is_file():
             files.add(path)
+        else:
+            missing_deploy_files.append(relative_name)
+
+    if missing_deploy_files:
+        missing_text = "\n".join(f"- {name}" for name in missing_deploy_files)
+        raise SystemExit(
+            "部署包关键文件缺失，已停止打包：\n"
+            f"{missing_text}"
+        )
 
     return sorted(files, key=lambda path: path.as_posix().lower())
 
