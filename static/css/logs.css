@@ -249,6 +249,8 @@ tbody tr:hover { background: #fafcff; }
 .operation-badge.update { color: var(--orange); background: var(--orange-soft); }
 .operation-badge.delete { color: var(--red); background: var(--red-soft); }
 .module-badge { color: #557096; background: #f0f4f9; font-weight: 500; }
+.badge-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.change-summary-count { margin-bottom: 5px; color: #334763; font-size: 12px; font-weight: 700; }
 .detail-text { display: -webkit-box; overflow: hidden; color: #536076; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .operator { display: flex; align-items: center; gap: 8px; }
 .avatar {
@@ -349,6 +351,13 @@ tbody tr:hover { background: #fafcff; }
 .summary-name { margin-bottom: 8px; font-size: 16px; font-weight: 700; }
 .summary-meta { color: var(--muted); line-height: 1.8; font-size: 13px; }
 .change-content { padding: 14px 16px; color: #46546a; border-left: 3px solid var(--blue); background: #f7faff; line-height: 1.8; white-space: pre-wrap; }
+.change-history { display: grid; gap: 12px; }
+.change-history-item { padding: 14px; border: 1px solid #e5eaf1; border-radius: 9px; background: #fbfcfe; }
+.change-history-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.change-history-head time { flex: 0 0 auto; color: #8793a5; font-size: 12px; line-height: 1.5; text-align: right; }
+.change-history-item .change-content { padding: 11px 13px; background: #fff; }
+.change-history-operator { margin-top: 9px; color: #7c899d; font-size: 12px; text-align: right; }
+.change-history-empty { padding: 24px; color: #919caf; text-align: center; }
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .detail-item span { display: block; margin-bottom: 5px; color: #929daf; font-size: 12px; }
 .detail-item strong { font-size: 13px; }

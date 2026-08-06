@@ -16,20 +16,37 @@ def write_operation_log(
     module_code: str,
     detail: str,
     user_id: Optional[int] = None,
+    product_name: Optional[str] = None,
+    model: Optional[str] = None,
 ):
     normalized_operation = (operation_type or "").strip().upper()
     if normalized_operation not in {"CREATE", "UPDATE", "DELETE"}:
         raise ValueError(f"不支持的日志操作类型：{operation_type}")
 
+    if part_id is not None and (product_name is None or model is None):
+        cursor.execute(
+            "SELECT product_name, model FROM parts WHERE id=%s",
+            (part_id,),
+        )
+        product = cursor.fetchone()
+        if product:
+            if product_name is None:
+                product_name = product.get("product_name")
+            if model is None:
+                model = product.get("model")
+
     cursor.execute(
         """
         INSERT INTO employee_operation_logs
-            (user_id, part_id, operation_type, module_code, detail)
-        VALUES (%s, %s, %s, %s, %s)
+            (user_id, part_id, product_name_snapshot, model_snapshot,
+             operation_type, module_code, detail)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
         (
             user_id or get_current_user_id() or LOCAL_FALLBACK_USER_ID,
             part_id,
+            (str(product_name).strip() if product_name is not None else None),
+            (str(model).strip() if model is not None else None),
             normalized_operation,
             (module_code or "PRODUCT").strip().upper(),
             (detail or "").strip() or "未填写操作摘要",

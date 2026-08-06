@@ -215,6 +215,8 @@ def ensure_employee_operation_logs_table(conn):
             id BIGINT NOT NULL AUTO_INCREMENT COMMENT '日志ID',
             user_id INT UNSIGNED NOT NULL COMMENT '操作人ID，对应yh_admin_user.id',
             part_id INT DEFAULT NULL COMMENT '配件ID；删除后仍保留原ID',
+            product_name_snapshot VARCHAR(255) DEFAULT NULL COMMENT '操作时的产品名称快照',
+            model_snapshot VARCHAR(255) DEFAULT NULL COMMENT '操作时的产品型号快照',
             operation_type VARCHAR(20) NOT NULL COMMENT '操作类型：CREATE新增、UPDATE修改、DELETE删除',
             module_code VARCHAR(30) NOT NULL DEFAULT 'PRODUCT' COMMENT '变更模块',
             detail TEXT NOT NULL COMMENT '操作内容或变更摘要',
@@ -227,6 +229,97 @@ def ensure_employee_operation_logs_table(conn):
           COMMENT='员工新增、修改、删除配件的操作日志'
         """
     )
+
+    # 兼容已经存在的日志表：产品被修改或删除后，仍可按名称和型号聚合历史。
+    cursor.execute("SHOW COLUMNS FROM employee_operation_logs")
+    existing_columns = {row["Field"] for row in cursor.fetchall()}
+    if "product_name_snapshot" not in existing_columns:
+        cursor.execute(
+            """ALTER TABLE employee_operation_logs
+               ADD COLUMN product_name_snapshot VARCHAR(255) DEFAULT NULL
+               COMMENT '操作时的产品名称快照' AFTER part_id"""
+        )
+    if "model_snapshot" not in existing_columns:
+        cursor.execute(
+            """ALTER TABLE employee_operation_logs
+               ADD COLUMN model_snapshot VARCHAR(255) DEFAULT NULL
+               COMMENT '操作时的产品型号快照' AFTER product_name_snapshot"""
+        )
+
+    # 为升级前的现有日志补齐当前产品快照；已被删除且无法还原的记录保留原part_id。
+    cursor.execute(
+        """UPDATE employee_operation_logs l
+           JOIN parts p ON p.id=l.part_id
+           SET l.product_name_snapshot=COALESCE(l.product_name_snapshot,p.product_name),
+               l.model_snapshot=COALESCE(l.model_snapshot,p.model)
+           WHERE l.product_name_snapshot IS NULL OR l.model_snapshot IS NULL"""
+    )
+
+    # 旧删除日志无法再关联 parts，从既有摘要“产品名称：…；型号：…”中恢复快照。
+    cursor.execute(
+        """SELECT id, part_id, detail
+           FROM employee_operation_logs
+           WHERE operation_type='DELETE'
+             AND (product_name_snapshot IS NULL OR model_snapshot IS NULL)"""
+    )
+    recovered_snapshots = []
+    for row in cursor.fetchall():
+        detail = str(row.get("detail") or "")
+        name_marker = "产品名称："
+        model_marker = "；型号："
+        if name_marker not in detail or model_marker not in detail:
+            continue
+        snapshot_text = detail.split(name_marker, 1)[1]
+        product_name, model = snapshot_text.split(model_marker, 1)
+        recovered_snapshots.append(
+            (product_name.strip() or None, model.strip() or None, row["id"])
+        )
+    if recovered_snapshots:
+        cursor.executemany(
+            """UPDATE employee_operation_logs
+               SET product_name_snapshot=COALESCE(product_name_snapshot,%s),
+                   model_snapshot=COALESCE(model_snapshot,%s)
+               WHERE id=%s""",
+            recovered_snapshots,
+        )
+
+    # 将同一part_id已经恢复出的名称、型号传播给该产品的其他旧日志。
+    cursor.execute(
+        """SELECT DISTINCT part_id
+           FROM employee_operation_logs
+           WHERE part_id IS NOT NULL
+             AND (product_name_snapshot IS NULL OR model_snapshot IS NULL)"""
+    )
+    missing_part_ids = [row["part_id"] for row in cursor.fetchall()]
+    if missing_part_ids:
+        placeholders = ",".join(["%s"] * len(missing_part_ids))
+        cursor.execute(
+            f"""SELECT part_id, product_name_snapshot, model_snapshot
+                FROM employee_operation_logs
+                WHERE part_id IN ({placeholders})
+                  AND product_name_snapshot IS NOT NULL
+                  AND model_snapshot IS NOT NULL
+                ORDER BY id DESC""",
+            missing_part_ids,
+        )
+        part_snapshots = {}
+        for row in cursor.fetchall():
+            part_snapshots.setdefault(
+                row["part_id"],
+                (row["product_name_snapshot"], row["model_snapshot"]),
+            )
+        if part_snapshots:
+            cursor.executemany(
+                """UPDATE employee_operation_logs
+                   SET product_name_snapshot=COALESCE(product_name_snapshot,%s),
+                       model_snapshot=COALESCE(model_snapshot,%s)
+                   WHERE part_id=%s
+                     AND (product_name_snapshot IS NULL OR model_snapshot IS NULL)""",
+                [
+                    (product_name, model, part_id)
+                    for part_id, (product_name, model) in part_snapshots.items()
+                ],
+            )
     conn.commit()
 
 

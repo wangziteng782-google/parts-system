@@ -63,6 +63,21 @@
         return ({CREATE: "create", UPDATE: "update", DELETE: "delete"})[type] || "update";
     }
 
+    function operationBadges(item) {
+        const types = item.operation_types?.length ? item.operation_types : [item.operation_type];
+        const labels = item.operation_labels?.length ? item.operation_labels : [item.operation_label];
+        return types.map((type, index) => `
+            <span class="operation-badge ${operationClass(type)}">${escapeHtml(labels[index] || type)}</span>
+        `).join("");
+    }
+
+    function moduleBadges(item) {
+        const labels = item.module_labels?.length ? item.module_labels : [item.module_label];
+        return labels.filter(Boolean).map(label => `
+            <span class="module-badge">${escapeHtml(label)}</span>
+        `).join("");
+    }
+
     function setTableState(message, icon = "⌛") {
         el.tableState.innerHTML = `<div class="state-icon">${icon}</div><div>${escapeHtml(message)}</div>`;
         el.tableState.classList.remove("hidden");
@@ -109,9 +124,12 @@
                         <span>型号：${escapeHtml(item.model || "-")}</span>
                     </div>
                 </td>
-                <td><span class="operation-badge ${operationClass(item.operation_type)}">${escapeHtml(item.operation_label)}</span></td>
-                <td><span class="module-badge">${escapeHtml(item.module_label)}</span></td>
-                <td><div class="detail-text" title="${escapeHtml(item.detail)}">${escapeHtml(item.detail)}</div></td>
+                <td><div class="badge-list">${operationBadges(item)}</div></td>
+                <td><div class="badge-list">${moduleBadges(item)}</div></td>
+                <td>
+                    <div class="change-summary-count">共 ${Number(item.log_count) || 1} 条变更</div>
+                    <div class="detail-text" title="${escapeHtml(item.detail)}">最近：${escapeHtml(item.detail)}</div>
+                </td>
                 <td>
                     <div class="operator">${avatarHtml(item)}<span>${escapeHtml(item.operator_name)}</span></div>
                 </td>
@@ -175,6 +193,7 @@
             const response = await fetch(`/api/logs/${logId}`);
             if (!response.ok) throw new Error((await response.json()).detail || "详情加载失败");
             const item = await response.json();
+            const entries = item.entries || [];
             el.drawerTitle.textContent = item.product_name || `配件 #${item.part_id || "-"}`;
             el.drawerContent.innerHTML = `
                 <section class="detail-card">
@@ -186,22 +205,27 @@
                             <div class="summary-meta">
                                 型号：${escapeHtml(item.model || "-")}<br>
                                 品牌：${escapeHtml(item.product_brand || "-")}　分类：${escapeHtml(item.product_type || "-")}<br>
-                                SKU：${escapeHtml(item.sku_code || "-")}
+                                共 ${entries.length} 条操作记录
                             </div>
                         </div>
                     </div>
                 </section>
                 <section class="detail-card">
-                    <h3>变更内容</h3>
-                    <div class="change-content">${escapeHtml(item.detail)}</div>
-                </section>
-                <section class="detail-card">
-                    <h3>操作信息</h3>
-                    <div class="detail-grid">
-                        <div class="detail-item"><span>操作</span><strong><span class="operation-badge ${operationClass(item.operation_type)}">${escapeHtml(item.operation_label)}</span></strong></div>
-                        <div class="detail-item"><span>变更模块</span><strong>${escapeHtml(item.module_label)}</strong></div>
-                        <div class="detail-item"><span>操作人</span><strong>${escapeHtml(item.operator_name)}</strong></div>
-                        <div class="detail-item"><span>操作时间</span><strong>${formatTime(item.created_at)}</strong></div>
+                    <h3>全部变更内容</h3>
+                    <div class="change-history">
+                        ${entries.map(entry => `
+                            <article class="change-history-item">
+                                <div class="change-history-head">
+                                    <div class="badge-list">
+                                        <span class="operation-badge ${operationClass(entry.operation_type)}">${escapeHtml(entry.operation_label)}</span>
+                                        <span class="module-badge">${escapeHtml(entry.module_label)}</span>
+                                    </div>
+                                    <time>${formatTime(entry.created_at)}</time>
+                                </div>
+                                <div class="change-content">${escapeHtml(entry.detail)}</div>
+                                <div class="change-history-operator">操作人：${escapeHtml(entry.operator_name)}</div>
+                            </article>
+                        `).join("") || '<div class="change-history-empty">暂无变更明细</div>'}
                     </div>
                 </section>
             `;

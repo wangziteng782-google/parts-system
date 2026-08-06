@@ -161,6 +161,8 @@ async def delete_product(product_id: int):
         write_operation_log(
             cursor,
             part_id=product_id,
+            product_name=product.get("product_name"),
+            model=product.get("model"),
             operation_type="DELETE",
             module_code="PRODUCT",
             detail=(

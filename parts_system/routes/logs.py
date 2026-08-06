@@ -5,7 +5,6 @@ from fastapi import HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from ..bootstrap import app, templates
-from ..audit import write_operation_log
 from ..shared import (
     IMAGE_FIELDS,
     ensure_employee_operation_logs_table,
@@ -27,6 +26,16 @@ MODULE_LABELS = {
     "IMAGE": "图片资料",
     "CLASSIFICATION": "产品分类",
 }
+
+PRODUCT_NAME_SQL = (
+    "COALESCE(NULLIF(TRIM(l.product_name_snapshot), ''), "
+    "NULLIF(TRIM(p.product_name), ''), "
+    "CONCAT('配件 #', COALESCE(l.part_id, '-')))"
+)
+MODEL_SQL = (
+    "COALESCE(NULLIF(TRIM(l.model_snapshot), ''), "
+    "NULLIF(TRIM(p.model), ''), '')"
+)
 
 
 def _normalize_operation(value: Optional[str]) -> Optional[str]:
@@ -54,13 +63,14 @@ def _build_where(
         clauses.append(
             """
             (
-                p.product_name LIKE %s OR p.model LIKE %s OR p.sku_code LIKE %s
+                l.product_name_snapshot LIKE %s OR l.model_snapshot LIKE %s
+                OR p.product_name LIKE %s OR p.model LIKE %s OR p.sku_code LIKE %s
                 OR p.product_brand LIKE %s OR l.detail LIKE %s
                 OR u.nickname LIKE %s OR u.username LIKE %s
             )
             """
         )
-        params.extend([value] * 7)
+        params.extend([value] * 9)
     if user_id is not None:
         clauses.append("l.user_id = %s")
         params.append(user_id)
@@ -102,6 +112,24 @@ def _serialize_log(row):
         or row.get("username")
         or f"用户#{row.get('user_id')}"
     )
+    return row
+
+
+def _split_codes(value):
+    return [item.strip().upper() for item in str(value or "").split(",") if item.strip()]
+
+
+def _serialize_log_group(row):
+    row = _serialize_log(row)
+    operation_types = _split_codes(row.pop("operation_types", ""))
+    module_codes = _split_codes(row.pop("module_codes", ""))
+    row["operation_types"] = operation_types
+    row["operation_labels"] = [
+        OPERATION_LABELS.get(code, code) for code in operation_types
+    ]
+    row["module_codes"] = module_codes
+    row["module_labels"] = [MODULE_LABELS.get(code, code) for code in module_codes]
+    row["log_count"] = int(row.get("log_count") or 0)
     return row
 
 
@@ -179,11 +207,32 @@ async def list_logs(
         """
 
         cursor = conn.cursor()
+        grouped_select = f"""
+            SELECT
+                {PRODUCT_NAME_SQL} AS grouped_product_name,
+                {MODEL_SQL} AS grouped_model,
+                MAX(l.id) AS latest_log_id,
+                COUNT(*) AS log_count,
+                GROUP_CONCAT(
+                    DISTINCT UPPER(l.operation_type)
+                    ORDER BY FIELD(UPPER(l.operation_type),'CREATE','UPDATE','DELETE')
+                    SEPARATOR ','
+                ) AS operation_types,
+                GROUP_CONCAT(
+                    DISTINCT UPPER(l.module_code)
+                    ORDER BY FIELD(UPPER(l.module_code),'PRODUCT','IMAGE','SPEC','PRICE','CLASSIFICATION')
+                    SEPARATOR ','
+                ) AS module_codes
+            {joins}
+            WHERE {list_where}
+            GROUP BY {PRODUCT_NAME_SQL}, {MODEL_SQL}
+        """
+
         cursor.execute(
-            f"SELECT COUNT(*) AS total {joins} WHERE {list_where}",
+            f"SELECT COUNT(*) AS total FROM ({grouped_select}) grouped_logs",
             list_params,
         )
-        total = cursor.fetchone()["total"]
+        total = int(cursor.fetchone()["total"])
 
         image_columns = ", ".join(f"p.{field}" for field in IMAGE_FIELDS)
         cursor.execute(
@@ -192,10 +241,14 @@ async def list_logs(
                 l.id, l.user_id, l.part_id, l.operation_type, l.module_code,
                 l.detail, l.created_at,
                 u.username, u.nickname, u.avatar,
-                p.product_name, p.model, p.sku_code, p.product_brand,
-                p.product_type, {image_columns}
-            {joins}
-            WHERE {list_where}
+                grouped.grouped_product_name AS product_name,
+                grouped.grouped_model AS model,
+                p.sku_code, p.product_brand, p.product_type, {image_columns},
+                grouped.log_count, grouped.operation_types, grouped.module_codes
+            FROM ({grouped_select}) grouped
+            JOIN employee_operation_logs l ON l.id=grouped.latest_log_id
+            LEFT JOIN parts p ON p.id=l.part_id
+            LEFT JOIN yh_admin_user u ON u.id=l.user_id
             ORDER BY l.created_at DESC, l.id DESC
             LIMIT %s OFFSET %s
             """,
@@ -205,10 +258,28 @@ async def list_logs(
 
         cursor.execute(
             f"""
-            SELECT l.operation_type, COUNT(*) AS count
-            {joins}
-            WHERE {base_where}
-            GROUP BY l.operation_type
+            SELECT COUNT(*) AS total
+            FROM (
+                SELECT 1
+                {joins}
+                WHERE {base_where}
+                GROUP BY {PRODUCT_NAME_SQL}, {MODEL_SQL}
+            ) grouped_logs
+            """,
+            base_params,
+        )
+        base_group_total = int(cursor.fetchone()["total"])
+
+        cursor.execute(
+            f"""
+            SELECT operation_type, COUNT(*) AS count
+            FROM (
+                SELECT UPPER(l.operation_type) AS operation_type
+                {joins}
+                WHERE {base_where}
+                GROUP BY UPPER(l.operation_type), {PRODUCT_NAME_SQL}, {MODEL_SQL}
+            ) operation_products
+            GROUP BY operation_type
             """,
             base_params,
         )
@@ -218,13 +289,13 @@ async def list_logs(
         }
 
         return {
-            "items": [_serialize_log(row) for row in rows],
+            "items": [_serialize_log_group(row) for row in rows],
             "total": total,
             "page": page,
             "page_size": page_size,
             "pages": max(1, (total + page_size - 1) // page_size),
             "stats": {
-                "all": sum(grouped.values()),
+                "all": base_group_total,
                 "create": grouped.get("CREATE", 0),
                 "update": grouped.get("UPDATE", 0),
                 "delete": grouped.get("DELETE", 0),
@@ -247,7 +318,9 @@ async def get_log(log_id: int):
                 l.id, l.user_id, l.part_id, l.operation_type, l.module_code,
                 l.detail, l.created_at,
                 u.username, u.nickname, u.avatar,
-                p.product_name, p.model, p.sku_code, p.product_brand,
+                {PRODUCT_NAME_SQL} AS product_name,
+                {MODEL_SQL} AS model,
+                p.sku_code, p.product_brand,
                 p.product_type, {image_columns}
             FROM employee_operation_logs l
             LEFT JOIN parts p ON p.id = l.part_id
@@ -259,7 +332,41 @@ async def get_log(log_id: int):
         row = cursor.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="日志不存在")
-        return _serialize_log(row)
+
+        product_name = row.get("product_name") or ""
+        model = row.get("model") or ""
+        cursor.execute(
+            f"""
+            SELECT
+                l.id, l.user_id, l.part_id, l.operation_type, l.module_code,
+                l.detail, l.created_at,
+                u.username, u.nickname, u.avatar,
+                {PRODUCT_NAME_SQL} AS product_name,
+                {MODEL_SQL} AS model,
+                p.sku_code, p.product_brand, p.product_type, {image_columns}
+            FROM employee_operation_logs l
+            LEFT JOIN parts p ON p.id=l.part_id
+            LEFT JOIN yh_admin_user u ON u.id=l.user_id
+            WHERE {PRODUCT_NAME_SQL}=%s AND {MODEL_SQL}=%s
+            ORDER BY l.created_at DESC, l.id DESC
+            """,
+            (product_name, model),
+        )
+        entries = [_serialize_log(item) for item in cursor.fetchall()]
+        group = _serialize_log(row)
+        # 最新一条若是删除日志，尝试从同组仍可关联主表的历史记录补充图片和品牌。
+        for entry in entries:
+            for field in ("image_url", "product_brand", "product_type", "sku_code"):
+                if not group.get(field) and entry.get(field):
+                    group[field] = entry[field]
+        group["entries"] = entries
+        group["log_count"] = len(entries)
+        group["operation_types"] = list(dict.fromkeys(
+            item["operation_type"] for item in entries
+        ))
+        group["module_codes"] = list(dict.fromkeys(
+            item["module_code"] for item in entries
+        ))
+        return group
     finally:
         conn.close()
-
