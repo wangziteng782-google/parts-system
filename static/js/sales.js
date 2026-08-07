@@ -238,7 +238,6 @@ function renderSalesDetailInfo(item, source, sourceLabel) {
             ['商品品牌：', item.product_brand],
             ['产品分类：', item.product_type],
             ['产品性质：', item.nature],
-            ['供应商：', item.supplier],
             ['质保期限：', item.warranty],
             ['适用电梯品牌：', item.applicable_elevator_brand],
             ['替代型号：', item.substitute_model],
@@ -351,13 +350,12 @@ function invoicePriceText(price, available, availableText) {
 function renderSalesVariantPrices(items) {
     const rows = items.map(item => `<tr>
         <td>${escapeSalesHtml(detailValue(item.specification))}</td>
-        <td>${escapeSalesHtml(detailValue(item.supplier))}</td>
         <td class="sales-detail-variant-price">${escapeSalesHtml(detailAmountText(item.no_tax_price))}</td>
         <td class="sales-detail-variant-price">${escapeSalesHtml(invoicePriceText(item.special_invoice_price, item.special_invoice_available, '可开专票'))}</td>
         <td class="sales-detail-variant-price">${escapeSalesHtml(invoicePriceText(item.general_invoice_price, item.general_invoice_available, '可开普票'))}</td>
     </tr>`).join('');
     return `<div class="sales-detail-variant-table-wrap"><table>
-        <thead><tr><th>规格组合</th><th>供应商</th><th>不含票单价</th><th>含专票</th><th>含普票</th></tr></thead>
+        <thead><tr><th>规格组合</th><th>不含票单价</th><th>含专票</th><th>含普票</th></tr></thead>
         <tbody>${rows}</tbody>
     </table></div>`;
 }

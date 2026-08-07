@@ -57,7 +57,7 @@ SALES_ROLE_IDS = _parse_role_ids("PARTS_SALES_ROLE_IDS", "3,31,32")
 PURCHASE_ROLE_IDS = _parse_role_ids(
     "PARTS_PURCHASE_ROLE_IDS",
     "4,36,37",
-)
+) | {4,36, 37}
 INTERNAL_ROLE_IDS = ADMIN_ROLE_IDS | SALES_ROLE_IDS | PURCHASE_ROLE_IDS
 
 PUBLIC_PATHS = {"/favicon.ico", "/api/health"}
@@ -99,19 +99,29 @@ def _is_protected_path(path: str) -> bool:
 def _decode_external_token(token: str) -> dict:
     if not JWT_SECRET_KEY:
         raise AuthenticationError("JWT认证密钥尚未配置", status_code=503)
+    normalized_token = str(token or "").strip().strip('"').strip("'")
+    if normalized_token.lower().startswith("bearer "):
+        normalized_token = normalized_token[7:].strip()
     try:
         claims = jwt.decode(
-            token,
+            normalized_token,
             JWT_SECRET_KEY,
             algorithms=[JWT_ALGORITHM],
             options={"require": ["iat"]},
             leeway=10,
         )
     except jwt.ExpiredSignatureError as exc:
+        logger.warning("[JWT解析失败] error=ExpiredSignatureError")
         raise AuthenticationError("登录凭证已过期，请从正式系统重新进入") from exc
     except jwt.ImmatureSignatureError as exc:
+        logger.warning("[JWT解析失败] error=ImmatureSignatureError")
         raise AuthenticationError("登录凭证尚未生效，请检查服务器时间") from exc
     except jwt.InvalidTokenError as exc:
+        logger.warning(
+            f"[JWT解析失败] error={type(exc).__name__} | "
+            f"detail={exc} | token_length={len(normalized_token)} | "
+            f"token_segments={len(normalized_token.split('.'))}"
+        )
         raise AuthenticationError("登录凭证无效，请从正式系统重新进入") from exc
 
     # 兼容签发方暂未写入标准exp的现状；有exp时PyJWT已自动验证。
@@ -306,6 +316,11 @@ async def authentication_middleware(request: Request, call_next):
         if external_token:
             external_claims = _decode_external_token(external_token)
             user = _load_internal_user(external_claims)
+            logger.info(
+                f"[认证通过] user_id={user.get('id')} | "
+                f"role_id={user.get('role_id')} | role_group={_role_group(user)} | "
+                f"path={path} | source=external_token"
+            )
             session_to_set, session_expires_at = _encode_session(
                 user,
                 external_claims,
