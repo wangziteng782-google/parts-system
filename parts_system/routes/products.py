@@ -97,6 +97,9 @@ async def list_products(
             "AND p2.model = parts.model AND p2.id <> parts.id) THEN 1 ELSE 0 END"
         sql = "SELECT parts.id, parts.sku_code, parts.product_name, parts.model, parts.product_brand, parts.category, parts.product_type, parts.update_time_2, " \
               "(SELECT COUNT(*) FROM sales_product_feedback feedback WHERE feedback.parts_id=parts.id AND feedback.status='pending') AS pending_feedback_count, " \
+              "CASE WHEN COALESCE((SELECT MAX(done_log.id) FROM employee_operation_logs done_log WHERE done_log.part_id=parts.id AND done_log.operation_type='COMPLETE'),0) " \
+              "> COALESCE((SELECT MAX(change_log.id) FROM employee_operation_logs change_log WHERE change_log.part_id=parts.id AND change_log.operation_type IN ('CREATE','UPDATE')),0) " \
+              "THEN 1 ELSE 0 END AS modification_completed, " \
               + duplicate_flag_sql + " AS is_duplicate, " \
               "CASE WHEN dpm.id IS NULL THEN 0 ELSE 1 END AS duplicate_marked " \
               "FROM parts" + duplicate_group_join + \

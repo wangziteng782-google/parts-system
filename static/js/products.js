@@ -512,7 +512,7 @@ async function init() {
                 const duplicateMark = p.is_duplicate
                     ? `<button class="duplicate-mark ${p.duplicate_marked ? 'marked' : ''}" onclick="event.stopPropagation();toggleDuplicateMark(${p.id}, this)" title="${p.duplicate_marked ? '点击取消待删除标记' : '点击标记为待删除'}">${p.duplicate_marked ? '已标记删除' : '待删除'}</button>`
                     : '';
-                return `<div class="product-item ${p.id === currentProductId ? 'active' : ''}" onclick="selectProduct(${p.id}, this)">
+                return `<div class="product-item ${p.id === currentProductId ? 'active' : ''}" data-product-id="${p.id}" onclick="selectProduct(${p.id}, this)">
                     <div class="p-seq">${seq}</div>
                     <div class="p-info">
                         <div class="p-name">${escapeHtml(p.product_name || '未命名产品')}${duplicateMark}</div>
@@ -520,7 +520,7 @@ async function init() {
                         <div class="p-model">${escapeHtml(p.model || '无型号')}</div>
                         <span class="p-type">${escapeHtml(p.product_type || '待重新分类')}</span>
                         ${p.product_brand ? `<span class="p-brand">${escapeHtml(p.product_brand)}</span>` : ''}
-                        <div class="p-updated">最后修改：${escapeHtml(formatUpdateTime(p.update_time_2))}</div>
+                        <div class="p-updated">最后修改：${escapeHtml(formatUpdateTime(p.update_time_2))}${Number(p.modification_completed) === 1 ? '<span class="p-completed-tag">已完成</span>' : ''}</div>
                     </div>
                 </div>`;
             }).join('');
@@ -758,6 +758,14 @@ async function init() {
                 if (button) {
                     button.classList.toggle('completed', completed);
                     button.textContent = completed ? '✓ 已标记修改完成' : '标记修改完成';
+                }
+                const listItem = document.querySelector(`.product-item[data-product-id="${currentProductId}"]`);
+                const updated = listItem?.querySelector('.p-updated');
+                const existingTag = updated?.querySelector('.p-completed-tag');
+                if (completed && updated && !existingTag) {
+                    updated.insertAdjacentHTML('beforeend', '<span class="p-completed-tag">已完成</span>');
+                } else if (!completed) {
+                    existingTag?.remove();
                 }
                 showToast(result.message || (completed ? '已标记修改完成' : '已撤销修改完成标记'), 'success');
             } catch (error) {

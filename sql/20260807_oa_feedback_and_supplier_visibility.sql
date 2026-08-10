@@ -39,3 +39,53 @@ CREATE TABLE `sales_product_feedback` (
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci
   COMMENT='销售商品问题反馈记录表';
+
+
+-- 三、修改默认要展示的供应商价格信息
+-----------所有供应商数量>1的产品和对应的供应商价价格将对外展示------------
+UPDATE product_variant_prices AS price
+JOIN (
+    SELECT
+        part_id,
+        variant_group_id,
+        MIN(id) AS first_price_id
+    FROM product_variant_prices
+    WHERE supplier IS NOT NULL
+      AND TRIM(supplier) <> ''
+    GROUP BY
+        part_id,
+        variant_group_id
+    HAVING COUNT(DISTINCT supplier) > 1
+) AS multiple_supplier
+    ON multiple_supplier.part_id = price.part_id
+   AND multiple_supplier.variant_group_id = price.variant_group_id
+SET price.is_external_visible =
+    CASE
+        WHEN price.id = multiple_supplier.first_price_id THEN 1
+        ELSE 0
+    END;
+
+-----------查询出供应商数量>1的产品和对应的供应商价价格将对外展示------------
+SELECT
+    part_id,
+    variant_group_id,
+    supplier,
+    is_external_visible,
+    id
+FROM product_variant_prices
+WHERE (part_id, variant_group_id) IN (
+    SELECT part_id, variant_group_id
+    FROM (
+        SELECT part_id, variant_group_id
+        FROM product_variant_prices
+        WHERE supplier IS NOT NULL
+          AND TRIM(supplier) <> ''
+        GROUP BY part_id, variant_group_id
+        HAVING COUNT(DISTINCT supplier) > 1
+    ) AS multiple_supplier_groups
+)
+ORDER BY
+    part_id,
+    variant_group_id,
+    is_external_visible DESC,
+    id;

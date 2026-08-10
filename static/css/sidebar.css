@@ -277,6 +277,17 @@
             text-overflow: ellipsis;
         }
 
+        .product-item .p-completed-tag {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 5px;
+            color: #047857;
+            border-radius: 999px;
+            background: #d1fae5;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
         .duplicate-mark {
             display: inline-block;
             margin-left: 5px;
