@@ -20,8 +20,17 @@ def write_operation_log(
     model: Optional[str] = None,
 ):
     normalized_operation = (operation_type or "").strip().upper()
-    if normalized_operation not in {"CREATE", "UPDATE", "DELETE"}:
+    if normalized_operation not in {
+        "CREATE", "UPDATE", "DELETE", "COMPLETE", "CORRECTED"
+    }:
         raise ValueError(f"不支持的日志操作类型：{operation_type}")
+
+    # “已修改”是当前完成状态；产品再次发生修改后，上一轮完成标记自动失效。
+    if normalized_operation == "UPDATE" and part_id is not None:
+        cursor.execute(
+            "DELETE FROM employee_operation_logs WHERE part_id=%s AND operation_type='COMPLETE'",
+            (part_id,),
+        )
 
     if part_id is not None and (product_name is None or model is None):
         cursor.execute(

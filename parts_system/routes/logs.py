@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
+from ..auth import get_current_user_id
 from ..bootstrap import app, templates
 from ..shared import (
     IMAGE_FIELDS,
@@ -17,6 +18,8 @@ OPERATION_LABELS = {
     "CREATE": "新增",
     "UPDATE": "修改",
     "DELETE": "删除",
+    "COMPLETE": "已修改",
+    "CORRECTED": "已改正",
 }
 
 MODULE_LABELS = {
@@ -25,6 +28,7 @@ MODULE_LABELS = {
     "PRICE": "供应商价格",
     "IMAGE": "图片资料",
     "CLASSIFICATION": "产品分类",
+    "WORKFLOW": "完成标记",
 }
 
 PRODUCT_NAME_SQL = (
@@ -36,7 +40,6 @@ MODEL_SQL = (
     "COALESCE(NULLIF(TRIM(l.model_snapshot), ''), "
     "NULLIF(TRIM(p.model), ''), '')"
 )
-
 
 def _normalize_operation(value: Optional[str]) -> Optional[str]:
     if not value:
@@ -158,6 +161,7 @@ async def list_log_users():
         )
         rows = cursor.fetchall()
         return {
+            "current_user_id": get_current_user_id(),
             "items": [
                 {
                     "id": row["id"],
@@ -215,7 +219,7 @@ async def list_logs(
                 COUNT(*) AS log_count,
                 GROUP_CONCAT(
                     DISTINCT UPPER(l.operation_type)
-                    ORDER BY FIELD(UPPER(l.operation_type),'CREATE','UPDATE','DELETE')
+                    ORDER BY FIELD(UPPER(l.operation_type),'CREATE','UPDATE','DELETE','COMPLETE','CORRECTED')
                     SEPARATOR ','
                 ) AS operation_types,
                 GROUP_CONCAT(
@@ -299,6 +303,8 @@ async def list_logs(
                 "create": grouped.get("CREATE", 0),
                 "update": grouped.get("UPDATE", 0),
                 "delete": grouped.get("DELETE", 0),
+                "complete": grouped.get("COMPLETE", 0),
+                "corrected": grouped.get("CORRECTED", 0),
             },
         }
     finally:

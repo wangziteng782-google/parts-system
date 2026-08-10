@@ -32,6 +32,7 @@
 
         .tree-all,
         .tree-unclassified,
+        .tree-correction,
         .tree-leaf {
             display: flex;
             align-items: center;
@@ -42,13 +43,15 @@
             transition: background 0.12s;
         }
 
-        .tree-all, .tree-unclassified { padding: 8px 10px; margin-bottom: 4px; font-size: 13px; font-weight: 500; }
+        .tree-all, .tree-unclassified, .tree-correction { padding: 8px 10px; margin-bottom: 4px; font-size: 13px; font-weight: 500; }
         .tree-unclassified { color: #b45309; background: #fffbeb; }
-        .tree-all:hover, .tree-unclassified:hover, .tree-leaf:hover { background: var(--sidebar-hover); }
-        .tree-all.active, .tree-unclassified.active, .tree-leaf.active {
+        .tree-correction { color:#b91c1c; background:#fff1f2; }
+        .tree-all:hover, .tree-unclassified:hover, .tree-correction:hover, .tree-leaf:hover { background: var(--sidebar-hover); }
+        .tree-all.active, .tree-unclassified.active, .tree-correction.active, .tree-leaf.active {
             color: var(--accent);
             background: var(--sidebar-active);
         }
+        .p-feedback-count { display:inline-block; margin:3px 0; padding:2px 7px; border-radius:999px; color:#b91c1c; background:#fee2e2; font-size:11px; font-weight:600; }
 
         .tree-first { margin-top: 4px; }
         .tree-first > summary,

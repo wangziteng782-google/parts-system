@@ -548,6 +548,7 @@ def ensure_product_variant_tables(conn):
             quote_time VARCHAR(100) NULL COMMENT '报价时间',
             expire_date VARCHAR(100) NULL COMMENT '报价有效期',
             is_default TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否默认规格组合',
+            is_external_visible TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否对外展示：0否，1是',
             remark VARCHAR(500) NULL COMMENT '备注',
             update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '价格最后修改时间',
             PRIMARY KEY (id),
@@ -564,6 +565,7 @@ def ensure_product_variant_tables(conn):
         ("daily_order_time", "VARCHAR(100) NULL COMMENT '每日结单时间'"),
         ("quote_time", "VARCHAR(100) NULL COMMENT '报价时间'"),
         ("expire_date", "VARCHAR(100) NULL COMMENT '报价有效期'"),
+        ("is_external_visible", "TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否对外展示：0否，1是'"),
     ]
     for col_name, col_def in new_columns:
         try:

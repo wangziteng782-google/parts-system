@@ -19,6 +19,7 @@ async def list_products(
     category: Optional[str] = None,
     product_type: Optional[str] = None,
     classification_status: Optional[str] = None,
+    feedback_status: Optional[str] = None,
     duplicates_only: bool = False,
     page: int = 1,
     page_size: int = 30,
@@ -27,6 +28,7 @@ async def list_products(
     logger.info(
         f"[查询] 产品列表 | page={page}, page_size={page_size}, keyword={keyword}, "
         f"category={category}, product_type={product_type}, classification_status={classification_status}, "
+        f"feedback_status={feedback_status}, "
         f"duplicates_only={duplicates_only}"
     )
     conn = get_db()
@@ -72,6 +74,15 @@ async def list_products(
             where += f" AND (parts.product_type IS NULL OR TRIM(parts.product_type) = '' OR parts.product_type NOT IN ({placeholders}))"
             params.extend(PRODUCT_TYPE_VALUES)
 
+        if feedback_status:
+            normalized_feedback_status = feedback_status.strip().lower()
+            if normalized_feedback_status != "pending":
+                raise HTTPException(status_code=400, detail="目前只支持查询待处理反馈")
+            where += (
+                " AND EXISTS (SELECT 1 FROM sales_product_feedback feedback"
+                " WHERE feedback.parts_id=parts.id AND feedback.status='pending')"
+            )
+
         # 查总数
         count_sql = "SELECT COUNT(*) AS total FROM parts" + duplicate_group_join + where
         logger.debug(f"[SQL] {count_sql} | params={params}")
@@ -85,6 +96,7 @@ async def list_products(
             "AND EXISTS (SELECT 1 FROM parts p2 WHERE p2.product_name = parts.product_name " \
             "AND p2.model = parts.model AND p2.id <> parts.id) THEN 1 ELSE 0 END"
         sql = "SELECT parts.id, parts.sku_code, parts.product_name, parts.model, parts.product_brand, parts.category, parts.product_type, parts.update_time_2, " \
+              "(SELECT COUNT(*) FROM sales_product_feedback feedback WHERE feedback.parts_id=parts.id AND feedback.status='pending') AS pending_feedback_count, " \
               + duplicate_flag_sql + " AS is_duplicate, " \
               "CASE WHEN dpm.id IS NULL THEN 0 ELSE 1 END AS duplicate_marked " \
               "FROM parts" + duplicate_group_join + \
@@ -122,12 +134,93 @@ async def get_product(product_id: int):
         if not row:
             logger.warning(f"[查询] 产品不存在 | product_id={product_id}")
             raise HTTPException(status_code=404, detail="产品不存在")
+        cursor.execute(
+            """SELECT
+                   MAX(CASE WHEN operation_type='COMPLETE' THEN id END) AS complete_id,
+                   MAX(CASE WHEN operation_type IN ('CREATE','UPDATE') THEN id END) AS change_id
+               FROM employee_operation_logs
+               WHERE part_id=%s""",
+            (product_id,),
+        )
+        completion = cursor.fetchone() or {}
+        complete_id = int(completion.get("complete_id") or 0)
+        change_id = int(completion.get("change_id") or 0)
+        row["modification_completed"] = complete_id > change_id
+        row["modification_completed_at"] = None
+        row["modification_completed_by"] = ""
+        if row["modification_completed"]:
+            cursor.execute(
+                """SELECT log.created_at,
+                          COALESCE(NULLIF(user.nickname,''), user.username,
+                                   CONCAT('用户', log.user_id)) AS operator_name
+                   FROM employee_operation_logs log
+                   LEFT JOIN yh_admin_user user ON user.id=log.user_id
+                   WHERE log.id=%s""",
+                (complete_id,),
+            )
+            completed_log = cursor.fetchone() or {}
+            row["modification_completed_at"] = completed_log.get("created_at")
+            row["modification_completed_by"] = completed_log.get("operator_name") or ""
         logger.info(f"[查询] 产品详情完成 | product_id={product_id}, name={row.get('product_name', 'N/A')}")
         return row
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"[查询] 产品详情失败 | product_id={product_id}, error={e}")
+        raise
+    finally:
+        conn.close()
+
+
+@app.post("/api/products/{product_id}/complete-modification")
+async def complete_product_modification(product_id: int):
+    """切换当前产品本轮修改是否完成。"""
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, product_name, model FROM parts WHERE id=%s FOR UPDATE",
+            (product_id,),
+        )
+        product = cursor.fetchone()
+        if not product:
+            raise HTTPException(status_code=404, detail="产品不存在")
+        cursor.execute(
+            """SELECT
+                   MAX(CASE WHEN operation_type='COMPLETE' THEN id END) AS complete_id,
+                   MAX(CASE WHEN operation_type IN ('CREATE','UPDATE') THEN id END) AS change_id
+               FROM employee_operation_logs
+               WHERE part_id=%s""",
+            (product_id,),
+        )
+        state = cursor.fetchone() or {}
+        complete_id = int(state.get("complete_id") or 0)
+        change_id = int(state.get("change_id") or 0)
+        if complete_id > change_id:
+            cursor.execute(
+                "DELETE FROM employee_operation_logs WHERE part_id=%s AND operation_type='COMPLETE'",
+                (product_id,),
+            )
+            conn.commit()
+            logger.info("[撤销修改完成] product_id=%s", product_id)
+            return {"message": "已撤销修改完成标记", "completed": False}
+        write_operation_log(
+            cursor,
+            part_id=product_id,
+            operation_type="COMPLETE",
+            module_code="WORKFLOW",
+            detail="标记产品修改完成",
+            product_name=product.get("product_name"),
+            model=product.get("model"),
+        )
+        conn.commit()
+        logger.info("[修改完成] product_id=%s", product_id)
+        return {"message": "已标记修改完成", "completed": True}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
         raise
     finally:
         conn.close()

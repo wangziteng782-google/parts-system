@@ -205,6 +205,7 @@
                         return `<div class="sp-supplier-card ${isActive ? 'active' : ''}" onclick="selectPanelSupplier(${p.id})">
                             <div class="sp-card-header">
                                 <span class="sp-card-name">${escapeHtml(p.supplier || '未命名')}</span>
+                                <span class="sp-external-badge ${Number(p.is_external_visible) === 1 ? 'visible' : ''}">${Number(p.is_external_visible) === 1 ? '对外展示' : '内部使用'}</span>
                                 <button class="sp-card-del" onclick="event.stopPropagation();deletePanelSupplier(${p.id})" title="删除">×</button>
                             </div>
                             <div class="sp-card-info">
@@ -347,6 +348,11 @@
                             <input id="spSupplierName" class="sp-input-text" list="spSupplierNameList" autocomplete="off" placeholder="输入名称搜索，或直接填写新供应商" value="${escapeHtml(p.supplier || '')}">
                             <datalist id="spSupplierNameList"></datalist>
                         </div>
+                        <label class="sp-external-switch">
+                            <input id="spExternalVisible" type="checkbox" ${Number(p.is_external_visible) === 1 ? 'checked' : ''}>
+                            <span class="sp-external-switch-control"></span>
+                            <span><strong>是否对外展示</strong><small>开启后销售页面使用该供应商报价</small></span>
+                        </label>
                     </div>
                 </div>
 
@@ -580,6 +586,7 @@
                 shipping_origin: document.getElementById('spDeliveryPlace')?.value.trim() || null,
                 remark: document.getElementById('spRemark')?.value.trim() || null,
                 expire_date: document.getElementById('spValidTime')?.value || null,
+                is_external_visible: document.getElementById('spExternalVisible')?.checked || false,
             };
 
             if (supplierSaveInProgress) return;

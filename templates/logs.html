@@ -6,7 +6,7 @@
     <title>数据操作日志</title>
     <link rel="icon" href="/static/img/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="/static/img/site-logo.png">
-    <link rel="stylesheet" href="/static/css/logs.css?v=20260806-1">
+    <link rel="stylesheet" href="/static/css/logs.css?v=20260810-2">
 </head>
 <body>
     <main class="log-page">
@@ -16,7 +16,7 @@
                 <div>
                     <div class="eyebrow">PARTS MANAGEMENT</div>
                     <h1>数据操作日志</h1>
-                    <p>查看员工对配件数据的新增、修改和删除记录</p>
+                    <p>查看员工操作记录以及已修改、已改正产品数量</p>
                 </div>
             </div>
             <a class="back-button" href="/goods">
@@ -38,6 +38,12 @@
                 <button class="operation-tab delete" data-operation="DELETE">
                     删除 <span id="statDelete">0</span>
                 </button>
+                <button class="operation-tab complete" data-operation="COMPLETE">
+                    已完成修改 <span id="statComplete">0</span>
+                </button>
+                <button class="operation-tab corrected" data-operation="CORRECTED">
+                    已改正 <span id="statCorrected">0</span>
+                </button>
             </div>
 
             <form class="filter-form" id="filterForm">
@@ -48,7 +54,7 @@
                 <label class="field">
                     <span>操作人</span>
                     <select id="userFilter">
-                        <option value="">全部操作人</option>
+                        <option value="">全部操作人（团队）</option>
                     </select>
                 </label>
                 <label class="field">
@@ -60,6 +66,7 @@
                         <option value="PRICE">供应商价格</option>
                         <option value="IMAGE">图片资料</option>
                         <option value="CLASSIFICATION">产品分类</option>
+                        <option value="WORKFLOW">完成标记</option>
                     </select>
                 </label>
                 <label class="field date-field">
@@ -137,6 +144,6 @@
     </aside>
 
     <div class="toast" id="toast"></div>
-    <script src="/static/js/logs.js?v=20260806-1"></script>
+    <script src="/static/js/logs.js?v=20260810-2"></script>
 </body>
 </html>

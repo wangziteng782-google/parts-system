@@ -32,6 +32,7 @@ class VariantPriceRequest(BaseModel):
     daily_order_time: Optional[str] = None
     quote_time: Optional[str] = None
     expire_date: Optional[str] = None
+    is_external_visible: bool = False
     remark: Optional[str] = None
 
 
@@ -754,7 +755,7 @@ async def delete_variant_group(product_id: int, group_id: str):
 async def save_variant_price(product_id: int, req: VariantPriceRequest):
     if not req.supplier.strip() or not req.variant_group_id.strip():
         raise HTTPException(status_code=400, detail="供应商和规格组合不能为空")
-    fields = ['supplier','purchase_cost','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','remark']
+    fields = ['supplier','purchase_cost','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','remark']
     values = [getattr(req, f) for f in fields]
     conn = get_db()
     try:
@@ -784,6 +785,14 @@ async def save_variant_price(product_id: int, req: VariantPriceRequest):
                 (product_id, req.variant_group_id, req.supplier)
             )
             price_id = cur.fetchone()['id']
+        if req.is_external_visible:
+            cur.execute(
+                """UPDATE product_variant_prices
+                   SET is_external_visible=0
+                   WHERE part_id=%s AND variant_group_id=%s
+                     AND id<>%s AND is_external_visible<>0""",
+                (product_id, req.variant_group_id, price_id),
+            )
         write_operation_log(
             cur,
             part_id=product_id,
@@ -791,7 +800,8 @@ async def save_variant_price(product_id: int, req: VariantPriceRequest):
             module_code='PRICE',
             detail=(
                 f"{'修改' if existed else '新增'}供应商价格；规格组合：{req.variant_group_id}；"
-                f"供应商：{req.supplier}；采购成本价：{req.purchase_cost if req.purchase_cost is not None else '未填写'}"
+                f"供应商：{req.supplier}；采购成本价：{req.purchase_cost if req.purchase_cost is not None else '未填写'}；"
+                f"对外展示：{'是' if req.is_external_visible else '否'}"
             ),
         )
         cur.execute("UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s", (product_id,))
@@ -915,6 +925,7 @@ class VariantPriceUpdateRequest(BaseModel):
     daily_order_time: Optional[str] = None
     quote_time: Optional[str] = None
     expire_date: Optional[str] = None
+    is_external_visible: bool = False
     remark: Optional[str] = None
 
 
@@ -922,7 +933,7 @@ class VariantPriceUpdateRequest(BaseModel):
 async def update_variant_price(product_id: int, price_id: int, req: VariantPriceUpdateRequest):
     if not req.supplier.strip():
         raise HTTPException(status_code=400, detail="供应商名称不能为空")
-    fields = ['supplier','purchase_cost','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','remark']
+    fields = ['supplier','purchase_cost','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','remark']
     values = [getattr(req, f) for f in fields]
     conn = get_db()
     try:
@@ -934,6 +945,14 @@ async def update_variant_price(product_id: int, price_id: int, req: VariantPrice
             raise HTTPException(status_code=404, detail="价格记录不存在")
         set_clause = ','.join(f"{f}=%s" for f in fields)
         cur.execute(f"UPDATE product_variant_prices SET {set_clause} WHERE id=%s AND part_id=%s", [*values, price_id, product_id])
+        if req.is_external_visible:
+            cur.execute(
+                """UPDATE product_variant_prices
+                   SET is_external_visible=0
+                   WHERE part_id=%s AND variant_group_id=%s
+                     AND id<>%s AND is_external_visible<>0""",
+                (product_id, existing['variant_group_id'], price_id),
+            )
         write_operation_log(
             cur,
             part_id=product_id,
@@ -942,7 +961,8 @@ async def update_variant_price(product_id: int, price_id: int, req: VariantPrice
             detail=(
                 f"修改供应商价格；规格组合：{existing['variant_group_id']}；"
                 f"供应商：{existing['old_supplier']} → {req.supplier}；"
-                f"采购成本价：{req.purchase_cost if req.purchase_cost is not None else '未填写'}"
+                f"采购成本价：{req.purchase_cost if req.purchase_cost is not None else '未填写'}；"
+                f"对外展示：{'是' if req.is_external_visible else '否'}"
             ),
         )
         cur.execute("UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s", (product_id,))

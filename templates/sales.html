@@ -6,7 +6,7 @@
     <title>销售商品查询</title>
     <link rel="icon" href="/static/img/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="/static/img/site-logo.png">
-    <link rel="stylesheet" href="/static/css/sales.css?v=20260805-8">
+    <link rel="stylesheet" href="/static/css/sales.css?v=20260810-2">
 </head>
 <body data-user-name="{{ sales_user_name }}">
     <header>
@@ -164,10 +164,72 @@
                 </div>
             </div>
 
+            <footer class="sales-detail-footer sales-feedback-entry">
+                <div>
+                    <strong>发现商品信息有误？</strong>
+                    <span>欢迎提交问题，帮助我们持续完善配件资料</span>
+                </div>
+                <button type="button" class="sales-feedback-open" id="salesFeedbackOpenButton">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 4h16v12H8l-4 4V4Zm4 5h8M8 12h5"/>
+                    </svg>
+                    我要反馈
+                </button>
+            </footer>
+
         </section>
     </div>
 
+    <div class="sales-feedback-overlay" id="salesFeedbackOverlay" aria-hidden="true">
+        <form class="sales-feedback-modal" id="salesFeedbackForm" role="dialog" aria-modal="true" aria-labelledby="salesFeedbackTitle">
+            <header class="sales-feedback-header">
+                <div class="sales-feedback-heading-icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H8l-4 4V4Zm4 5h8M8 12h5"/></svg>
+                </div>
+                <div>
+                    <h2 id="salesFeedbackTitle">产品问题反馈</h2>
+                    <p>你的反馈会被记录并交由相关人员核实</p>
+                </div>
+                <button type="button" class="sales-feedback-close" id="salesFeedbackCloseButton" aria-label="关闭反馈弹窗">×</button>
+            </header>
+
+            <div class="sales-feedback-product">
+                <div>
+                    <strong id="salesFeedbackProductName"></strong>
+                    <span id="salesFeedbackSource" class="source-badge parts">来自配件库</span>
+                </div>
+                <p id="salesFeedbackProductModel"></p>
+            </div>
+
+            <div class="sales-feedback-body">
+                <fieldset class="sales-feedback-fieldset">
+                    <legend>选择问题类型 <em>可多选</em></legend>
+                    <div class="sales-feedback-types">
+                        <label><input type="checkbox" name="salesFeedbackProblem" value="price"><span>价格问题</span></label>
+                        <label><input type="checkbox" name="salesFeedbackProblem" value="spec"><span>规格问题</span></label>
+                        <label><input type="checkbox" name="salesFeedbackProblem" value="image"><span>图片问题</span></label>
+                        <label><input type="checkbox" name="salesFeedbackProblem" value="other"><span>其他问题</span></label>
+                    </div>
+                    <div class="sales-feedback-error" id="salesFeedbackTypeError"></div>
+                </fieldset>
+
+                <label class="sales-feedback-description">
+                    <span>具体错误描述 <em>必填</em></span>
+                    <textarea id="salesFeedbackDescription" maxlength="2000" placeholder="请详细描述发现的问题，例如正确的价格、规格或图片信息……"></textarea>
+                    <small><b id="salesFeedbackDescriptionCount">0</b>/2000</small>
+                    <i class="sales-feedback-error" id="salesFeedbackDescriptionError"></i>
+                </label>
+            </div>
+
+            <footer class="sales-feedback-actions">
+                <button type="submit" class="sales-feedback-submit" id="salesFeedbackSubmitButton">
+                    <span>提交反馈</span>
+                </button>
+            </footer>
+        </form>
+    </div>
+
     <div class="sales-toast" id="salesToast"></div>
-    <script src="/static/js/sales.js?v=20260807-1"></script>
+    <script src="/static/js/sales.js?v=20260810-3"></script>
 </body>
 </html>

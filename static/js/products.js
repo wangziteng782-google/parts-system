@@ -316,6 +316,7 @@ async function init() {
             productTypeValues = data.values || [];
             productTypeCounts = data.counts || {};
             unclassifiedProductCount = data.unclassified_count || 0;
+            correctionProductCount = data.correction_count || 0;
             renderClassificationTree();
         }
 
@@ -327,11 +328,14 @@ async function init() {
 
         function renderClassificationTree() {
             const treeEl = document.getElementById('classificationTree');
-            let html = `<div class="tree-all ${!selectedProductType && !showUnclassified ? 'active' : ''}" onclick="clearProductTypeFilter()">
+            let html = `<div class="tree-all ${!selectedProductType && !showUnclassified && !showCorrection ? 'active' : ''}" onclick="clearProductTypeFilter()">
                 <span>全部产品</span>
             </div>`;
             html += `<div class="tree-unclassified ${showUnclassified ? 'active' : ''}" onclick="selectUnclassified()">
                 <span>待重新分类</span><span class="tree-count">${unclassifiedProductCount}</span>
+            </div>`;
+            html += `<div class="tree-correction ${showCorrection ? 'active' : ''}" onclick="selectCorrection()">
+                <span>待改正</span><span class="tree-count">${correctionProductCount}</span>
             </div>`;
             classificationTree.forEach(first => {
                 const firstEncoded = encodeURIComponent(first.name);
@@ -440,6 +444,7 @@ async function init() {
         function selectProductType(encodedValue) {
             selectedProductType = decodeURIComponent(encodedValue);
             showUnclassified = false;
+            showCorrection = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
             renderClassificationTree();
@@ -449,19 +454,32 @@ async function init() {
         function selectUnclassified() {
             selectedProductType = '';
             showUnclassified = true;
+            showCorrection = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-leaf').forEach(el => el.classList.remove('active'));
             document.querySelector('.tree-unclassified')?.classList.add('active');
+            loadProducts();
+        }
+
+        function selectCorrection() {
+            selectedProductType = '';
+            showUnclassified = false;
+            showCorrection = true;
+            updateDuplicateFilterState(false);
+            currentPage = 1;
+            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelector('.tree-correction')?.classList.add('active');
             loadProducts();
         }
 
         function clearProductTypeFilter() {
             selectedProductType = '';
             showUnclassified = false;
+            showCorrection = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-leaf').forEach(el => el.classList.remove('active'));
             document.querySelector('.tree-all')?.classList.add('active');
             loadProducts();
         }
@@ -474,6 +492,7 @@ async function init() {
             if (showDuplicatesOnly) url += '&duplicates_only=true';
             if (selectedProductType) url += `&product_type=${encodeURIComponent(selectedProductType)}`;
             if (showUnclassified) url += `&classification_status=unclassified`;
+            if (showCorrection) url += `&feedback_status=pending`;
             const res = await fetch(url);
             const data = await res.json();
             totalRecords = data.total;
@@ -485,7 +504,7 @@ async function init() {
             countEl.textContent = `显示 ${start}-${end} / 共 ${totalRecords} 条`;
             const classificationLabel = showDuplicatesOnly
                 ? '全部重复产品'
-                : (showUnclassified ? '待重新分类' : (selectedProductType || '全部产品'));
+                : (showCorrection ? '待改正' : (showUnclassified ? '待重新分类' : (selectedProductType || '全部产品')));
             document.getElementById('headerSubtitle').textContent = `${classificationLabel} · 共 ${totalRecords} 条 / 每页 ${PAGE_SIZE} 条`;
             const listEl = document.getElementById('productList');
             listEl.innerHTML = products.map((p, idx) => {
@@ -497,6 +516,7 @@ async function init() {
                     <div class="p-seq">${seq}</div>
                     <div class="p-info">
                         <div class="p-name">${escapeHtml(p.product_name || '未命名产品')}${duplicateMark}</div>
+                        ${showCorrection ? `<span class="p-feedback-count">${Number(p.pending_feedback_count) || 0} 条待处理反馈</span>` : ''}
                         <div class="p-model">${escapeHtml(p.model || '无型号')}</div>
                         <span class="p-type">${escapeHtml(p.product_type || '待重新分类')}</span>
                         ${p.product_brand ? `<span class="p-brand">${escapeHtml(p.product_brand)}</span>` : ''}
@@ -589,11 +609,12 @@ async function init() {
             currentPage = 1;
             selectedProductType = '';
             showUnclassified = false;
+            showCorrection = false;
             const searchInput = document.getElementById('searchInput');
             if (enableDuplicates && searchInput) {
                 searchInput.value = '';
             }
-            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-leaf')
+            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-leaf')
                 .forEach(el => el.classList.remove('active'));
             if (!enableDuplicates) document.querySelector('.tree-all')?.classList.add('active');
             loadProducts();
@@ -607,17 +628,21 @@ async function init() {
             main.innerHTML = '<div class="loading"><div class="spinner"></div>加载中...</div>';
             main.scrollTop = 0;
             try {
-                const [prodRes, specsRes, pricesRes, combinationsRes] = await Promise.all([
+                const [prodRes, specsRes, pricesRes, combinationsRes, feedbackRes, feedbackHistoryRes] = await Promise.all([
                     fetch(`/api/products/${id}`),
                     fetch(`/api/products/${id}/variant-specs`),
                     fetch(`/api/products/${id}/variant-prices`),
-                    fetch(`/api/products/${id}/variant-combinations`)
+                    fetch(`/api/products/${id}/variant-combinations`),
+                    fetch(`/api/products/${id}/feedback?status=pending`),
+                    fetch(`/api/products/${id}/feedback`)
                 ]);
                 if (!prodRes.ok) throw new Error('加载失败');
                 currentData = await prodRes.json();
                 currentVariantSpecs = specsRes.ok ? await specsRes.json() : [];
                 currentVariantPrices = pricesRes.ok ? await pricesRes.json() : [];
                 currentVariantCombinations = combinationsRes.ok ? await combinationsRes.json() : [];
+                currentProductFeedback = feedbackRes.ok ? await feedbackRes.json() : [];
+                currentProductFeedbackHistory = feedbackHistoryRes.ok ? await feedbackHistoryRes.json() : [];
                 selectedVariantValues = [];
                 currentSelectedVariantPrice = null;
                 renderDetail(currentData);
@@ -630,6 +655,121 @@ async function init() {
             if (!value) return '暂无记录';
             const text = String(value).replace('T', ' ');
             return text.length > 16 ? text.slice(0, 16) : text;
+        }
+
+        function feedbackStatusMeta(status) {
+            const normalized = String(status || '').toLowerCase();
+            if (normalized === 'completed') return {label: '已完成', className: 'completed'};
+            if (normalized === 'ignored') return {label: '已忽略', className: 'ignored'};
+            return {label: '待处理', className: 'pending'};
+        }
+
+        function renderProductCorrectionLogs() {
+            if (!currentProductFeedbackHistory.length) {
+                return `<div class="correction-log-empty">
+                    <span class="correction-log-empty-icon">&#128221;</span>
+                    <strong>暂无改正记录</strong>
+                    <p>销售提交的产品问题会记录在这里。</p>
+                </div>`;
+            }
+            return `<div class="correction-log-list">${currentProductFeedbackHistory.map(feedback => {
+                const status = feedbackStatusMeta(feedback.status);
+                const typeText = (feedback.issue_type_labels || []).map(label => `【${escapeHtml(label)}】`).join('');
+                const handler = `<span><b>处理人：</b>${escapeHtml(feedback.handled_by_name || '暂未处理')}</span>`;
+                const handledAt = `<span><b>处理时间：</b>${feedback.handled_at
+                    ? escapeHtml(formatUpdateTime(feedback.handled_at))
+                    : '暂未处理'}</span>`;
+                const handleRemark = feedback.handle_remark
+                    ? `<div class="correction-log-remark"><span>处理说明</span>${escapeHtml(feedback.handle_remark)}</div>`
+                    : '';
+                return `<article class="correction-log-card">
+                    <div class="correction-log-head">
+                        <div>
+                            <span class="correction-log-reporter"><b>反馈人：</b>${escapeHtml(feedback.feedback_user_name || '未知用户')}</span>
+                            <time><b>反馈时间：</b>${escapeHtml(formatUpdateTime(feedback.created_at))}</time>
+                        </div>
+                        <span class="correction-log-status ${status.className}">${status.label}</span>
+                    </div>
+                    <div class="correction-log-body">
+                        <div class="correction-log-types">${typeText || '【其他问题】'}</div>
+                        <div class="correction-log-description">${escapeHtml(feedback.description || '')}</div>
+                        <div class="correction-log-handler">${handler}${handledAt}</div>
+                        ${handleRemark}
+                    </div>
+                </article>`;
+            }).join('')}</div>`;
+        }
+
+        async function updateProductFeedbackStatus(feedbackId, status) {
+            const actionText = status === 'completed' ? '完成' : '忽略';
+            try {
+                const res = await fetch(`/api/feedback/${feedbackId}/status`, {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({status}),
+                });
+                const result = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(result.detail || `标记${actionText}失败`);
+                const [feedbackRes, feedbackHistoryRes] = await Promise.all([
+                    fetch(`/api/products/${currentProductId}/feedback?status=pending`),
+                    fetch(`/api/products/${currentProductId}/feedback`),
+                ]);
+                currentProductFeedback = feedbackRes.ok ? await feedbackRes.json() : [];
+                currentProductFeedbackHistory = feedbackHistoryRes.ok ? await feedbackHistoryRes.json() : [];
+                await refreshProductClassifications();
+                await loadProducts();
+                if (showCorrection && currentProductFeedback.length === 0) {
+                    currentProductId = null;
+                    currentData = null;
+                    document.getElementById('mainContent').innerHTML = `<div class="empty-state"><div class="icon">&#128214;</div><p>该产品反馈已处理完成，请继续选择其他待改正产品</p></div>`;
+                } else if (currentData) {
+                    renderDetail(currentData);
+                }
+                showToast(`已标记${actionText}`, 'success');
+            } catch (error) {
+                showToast(error.message || `标记${actionText}失败`, 'error');
+            }
+        }
+
+        async function markProductModificationComplete() {
+            if (!currentProductId) {
+                showToast('请先选择产品', 'error');
+                return;
+            }
+            const button = document.getElementById('productCompletionButton');
+            if (button?.disabled) return;
+            const wasCompleted = Boolean(currentData?.modification_completed);
+            if (button) {
+                button.disabled = true;
+                button.textContent = wasCompleted ? '正在撤销...' : '正在标记...';
+            }
+            try {
+                const res = await fetch(`/api/products/${currentProductId}/complete-modification`, {
+                    method: 'POST',
+                });
+                const result = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(result.detail || '标记修改完成失败');
+                const completed = Boolean(result.completed);
+                if (currentData) {
+                    currentData.modification_completed = completed;
+                    currentData.modification_completed_by = '';
+                    currentData.modification_completed_at = completed ? new Date().toISOString() : null;
+                }
+                if (button) {
+                    button.classList.toggle('completed', completed);
+                    button.textContent = completed ? '✓ 已标记修改完成' : '标记修改完成';
+                }
+                showToast(result.message || (completed ? '已标记修改完成' : '已撤销修改完成标记'), 'success');
+            } catch (error) {
+                if (button) {
+                    button.textContent = currentData?.modification_completed
+                        ? '✓ 已标记修改完成'
+                        : '标记修改完成';
+                }
+                showToast(error.message || '标记修改完成失败', 'error');
+            } finally {
+                if (button) button.disabled = false;
+            }
         }
 
         // ========== 渲染详情 ==========
@@ -647,6 +787,25 @@ async function init() {
                     <button class="product-delete-btn" onclick="openProductDelete()">删除产品</button>
                 </div>
             </div>`;
+
+            if (showCorrection && currentProductFeedback.length) {
+                html += `<section class="product-feedback-list">
+                    ${currentProductFeedback.map(feedback => {
+                        const typeText = (feedback.issue_type_labels || []).map(label => `【${escapeHtml(label)}】`).join('');
+                        return `<article class="product-feedback-card" data-feedback-id="${feedback.id}">
+                            <div class="product-feedback-content">
+                                <strong>${escapeHtml(formatUpdateTime(feedback.created_at))} ${escapeHtml(feedback.feedback_user_name || '未知用户')}：</strong>
+                                <span class="product-feedback-types">${typeText}</span>
+                                <span>${escapeHtml(feedback.description || '')}</span>
+                            </div>
+                            <div class="product-feedback-actions">
+                                <button type="button" class="complete" onclick="updateProductFeedbackStatus(${feedback.id}, 'completed')">标记完成</button>
+                                <button type="button" class="ignore" onclick="updateProductFeedbackStatus(${feedback.id}, 'ignored')">标记忽略</button>
+                            </div>
+                        </article>`;
+                    }).join('')}
+                </section>`;
+            }
 
             // 注意事项（已移到产品头部，此处隐藏）
 
@@ -696,6 +855,11 @@ async function init() {
                         <span style="color:#92400e;font-weight:500;margin-right:4px;font-size:12px">注意事项：</span>
                         <span class="field-value" id="fv-precautions" onclick="editField('precautions')" style="font-size:12px;color:#92400e">${escapeHtml(data.precautions || '暂无，点击添加')}</span>
                     </span>
+                    <button type="button" id="productCompletionButton"
+                        class="product-completion-button ${data.modification_completed ? 'completed' : ''}"
+                        onclick="markProductModificationComplete()">
+                        ${data.modification_completed ? '✓ 已标记修改完成' : '标记修改完成'}
+                    </button>
                 </div>
                 <div style="margin-bottom:10px">
                     <span style="color:var(--text-light);font-size:13px;margin-right:4px">产品名称：</span>
@@ -791,6 +955,7 @@ async function init() {
                 <div class="tabs">
                     <div class="tab active" onclick="switchTab(this, 'tab-images')">图片资料</div>
                     <div class="tab" onclick="switchTab(this, 'tab-records')">操作记录</div>
+                    <div class="tab" onclick="switchTab(this, 'tab-corrections')">改正日志</div>
                     <div class="tab" onclick="switchTab(this, 'tab-all')">全部字段</div>
                 </div>
                 <div class="tab-content">
@@ -810,6 +975,9 @@ async function init() {
                             <div class="record-item"><span class="r-label">${fieldLabels['filler_ip'] || '填报IP'}</span><span class="r-value field-value" id="fv-filler_ip" onclick="editField('filler_ip')">${renderVal(data.filler_ip)}</span></div>
                             <div class="record-item"><span class="r-label">${fieldLabels['quote_validity'] || '报价有效期'}</span><span class="r-value field-value" id="fv-quote_validity" onclick="editField('quote_validity')">${renderVal(data.quote_validity)}</span></div>
                         </div>
+                    </div>
+                    <div class="tab-pane" id="tab-corrections">
+                        ${renderProductCorrectionLogs()}
                     </div>
                     <div class="tab-pane" id="tab-all">
                         <table class="spec-table" id="allFieldsTable"></table>

@@ -65,11 +65,18 @@ async def list_product_classifications():
             count for value, count in raw_counts.items()
             if not value or value not in PRODUCT_TYPE_VALUES
         )
+        cursor.execute(
+            """SELECT COUNT(DISTINCT parts_id) AS count
+               FROM sales_product_feedback
+               WHERE status='pending' AND parts_id IS NOT NULL"""
+        )
+        correction_count = cursor.fetchone()["count"]
         return {
             "tree": PRODUCT_CLASSIFICATION_TREE,
             "values": PRODUCT_TYPE_VALUES,
             "counts": counts,
             "unclassified_count": unclassified_count,
+            "correction_count": correction_count,
         }
     except Exception as e:
         logger.error(f"[查询] 产品分类树失败 | error={e}")
@@ -315,4 +322,3 @@ async def get_field_labels():
     """获取字段名中文映射"""
     logger.debug("[查询] 字段标签映射")
     return FIELD_LABELS
-

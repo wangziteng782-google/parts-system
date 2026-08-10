@@ -33,11 +33,23 @@ const salesEls = {
     detailPartsPrices: document.getElementById('salesDetailPartsPrices'),
     detailPriceMultiplier: document.getElementById('salesDetailPriceMultiplier'),
     detailPartsPriceContent: document.getElementById('salesDetailPartsPriceContent'),
+    feedbackOverlay: document.getElementById('salesFeedbackOverlay'),
+    feedbackForm: document.getElementById('salesFeedbackForm'),
+    feedbackProductName: document.getElementById('salesFeedbackProductName'),
+    feedbackProductModel: document.getElementById('salesFeedbackProductModel'),
+    feedbackSource: document.getElementById('salesFeedbackSource'),
+    feedbackDescription: document.getElementById('salesFeedbackDescription'),
+    feedbackDescriptionCount: document.getElementById('salesFeedbackDescriptionCount'),
+    feedbackTypeError: document.getElementById('salesFeedbackTypeError'),
+    feedbackDescriptionError: document.getElementById('salesFeedbackDescriptionError'),
+    feedbackSubmit: document.getElementById('salesFeedbackSubmitButton'),
     toast: document.getElementById('salesToast'),
 };
 
 let activeSalesDetailOrderGoodsId = null;
 let activeSalesDetailPartId = null;
+let activeSalesDetailItem = null;
+let activeSalesVariantQuotes = [];
 
 function escapeSalesHtml(value) {
     return String(value ?? '')
@@ -85,8 +97,14 @@ function formatSalesDate(value) {
     return String(value).replace('T', ' ').slice(0, 16);
 }
 
-async function salesRequest(url) {
-    const response = await fetch(url, { credentials: 'same-origin' });
+async function salesRequest(url, options = {}) {
+    const response = await fetch(url, {
+        credentials: 'same-origin',
+        ...options,
+        headers: {
+            ...(options.headers || {}),
+        },
+    });
     if (!response.ok) {
         let message = '请求失败，请稍后重试';
         try {
@@ -232,21 +250,29 @@ function quotationTypeText(value) {
     return type;
 }
 
-function renderSalesDetailInfo(item, source, sourceLabel) {
+function variantDetailValue(quote, field, fallback) {
+    return quote && detailValue(quote[field]) ? quote[field] : fallback;
+}
+
+function renderSalesDetailInfo(item, source, sourceLabel, quote = null) {
     const fields = source === 'parts'
         ? [
             ['商品品牌：', item.product_brand],
             ['产品分类：', item.product_type],
             ['产品性质：', item.nature],
-            ['质保期限：', item.warranty],
+            ['质保期限：', variantDetailValue(quote, 'warranty_time', item.warranty)],
             ['适用电梯品牌：', item.applicable_elevator_brand],
             ['替代型号：', item.substitute_model],
-            ['发货地：', item.shipping_origin],
-            ['发货时间：', item.shipping_time],
-            ['报价有效期：', item.quote_validity],
-            ['每日截单时间：', item.daily_cutoff_time],
+            ['发货地：', variantDetailValue(quote, 'shipping_origin', item.shipping_origin)],
+            ['发货时间：', variantDetailValue(quote, 'shipping_time', item.shipping_time)],
+            ['报价有效期：', variantDetailValue(quote, 'expire_date', item.quote_validity)],
+            ['每日截单时间：', variantDetailValue(quote, 'daily_order_time', item.daily_cutoff_time)],
+            ['报价时间：', quote?.quote_time],
+            ['采购运费：', quote ? detailAmountText(quote.purchase_shipping) : ''],
             ['更新人：', item.updater || item.filler],
-            ['更新时间：', item.quote_updated_at ? formatSalesDate(item.quote_updated_at) : ''],
+            ['更新时间：', quote?.update_time ? formatSalesDate(quote.update_time) : (item.quote_updated_at ? formatSalesDate(item.quote_updated_at) : '')],
+            ['运费备注：', quote?.freight_remark, 'wide'],
+            ['规格报价备注：', quote?.quote_remark, 'wide'],
             ['注意事项：', item.precautions, 'full'],
             ['技术参数：', item.technical_params, 'full'],
             ['商品备注：', item.remark, 'wide'],
@@ -348,16 +374,32 @@ function invoicePriceText(price, available, availableText) {
 }
 
 function renderSalesVariantPrices(items) {
-    const rows = items.map(item => `<tr>
+    const showActions = items.length > 1;
+    const rows = items.map((item, index) => `<tr data-variant-index="${index}">
         <td>${escapeSalesHtml(detailValue(item.specification))}</td>
         <td class="sales-detail-variant-price">${escapeSalesHtml(detailAmountText(item.no_tax_price))}</td>
         <td class="sales-detail-variant-price">${escapeSalesHtml(invoicePriceText(item.special_invoice_price, item.special_invoice_available, '可开专票'))}</td>
         <td class="sales-detail-variant-price">${escapeSalesHtml(invoicePriceText(item.general_invoice_price, item.general_invoice_available, '可开普票'))}</td>
+        ${showActions ? `<td><button type="button" class="sales-variant-select" onclick="selectSalesVariantQuote(${index})">查看</button></td>` : ''}
     </tr>`).join('');
     return `<div class="sales-detail-variant-table-wrap"><table>
-        <thead><tr><th>规格组合</th><th>不含票单价</th><th>含专票</th><th>含普票</th></tr></thead>
+        <thead><tr><th>规格组合</th><th>不含票单价</th><th>含专票</th><th>含普票</th>${showActions ? '<th>操作</th>' : ''}</tr></thead>
         <tbody>${rows}</tbody>
     </table></div>`;
+}
+
+function selectSalesVariantQuote(index) {
+    const quote = activeSalesVariantQuotes[index];
+    if (!quote || !activeSalesDetailItem) return;
+    document.querySelectorAll('.sales-detail-variant-table-wrap tbody tr').forEach((row, rowIndex) => {
+        row.classList.toggle('selected', rowIndex === index);
+        const button = row.querySelector('.sales-variant-select');
+        if (button) button.textContent = rowIndex === index ? '已选择' : '查看';
+    });
+    const price = quote.no_tax_price || quote.special_invoice_price || quote.general_invoice_price;
+    setSalesDetailText('salesDetailSpecification', detailValue(quote.specification));
+    setSalesDetailText('salesDetailPrice', detailPriceText(price) || '价格待定');
+    renderSalesDetailInfo(activeSalesDetailItem, 'parts', '来自配件库', quote);
 }
 
 function renderSalesPartsMainPrices(summary = {}) {
@@ -385,12 +427,12 @@ async function loadSalesPartVariantQuotes(partId, item) {
         const data = await salesRequest(`/api/sales/parts/${encodeURIComponent(partId)}/variant-quotes`);
         if (activeSalesDetailPartId !== partId) return;
         const items = data.items || [];
+        activeSalesVariantQuotes = items;
         if (items.length) {
             salesEls.detailPartsPriceContent.innerHTML = renderSalesVariantPrices(items);
-            const first = items[0];
-            const firstPrice = first.no_tax_price || first.special_invoice_price || first.general_invoice_price;
-            setSalesDetailText('salesDetailPrice', detailPriceText(firstPrice) || '价格待定');
+            selectSalesVariantQuote(0);
         } else {
+            activeSalesVariantQuotes = [];
             salesEls.detailPartsPriceContent.innerHTML = renderSalesPartsMainPrices(item.part_price_summary);
         }
     } catch (error) {
@@ -404,6 +446,7 @@ function openSalesProductDetail(index) {
     const item = salesState.items[index];
     if (!item) return;
     const source = item.record_source === 'inquiry' ? 'inquiry' : 'parts';
+    activeSalesDetailItem = item;
     const sourceLabel = source === 'inquiry' ? '来自询价记录' : '来自配件库';
     const detailModal = document.getElementById('salesDetailModal');
     detailModal.classList.toggle('inquiry-detail', source === 'inquiry');
@@ -450,11 +493,94 @@ function openSalesProductDetail(index) {
 }
 
 function closeSalesProductDetail() {
+    closeSalesFeedback();
     activeSalesDetailOrderGoodsId = null;
     activeSalesDetailPartId = null;
+    activeSalesDetailItem = null;
+    activeSalesVariantQuotes = [];
     salesEls.detailOverlay.classList.remove('show');
     salesEls.detailOverlay.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
+}
+
+function clearSalesFeedbackErrors() {
+    salesEls.feedbackTypeError.textContent = '';
+    salesEls.feedbackDescriptionError.textContent = '';
+    salesEls.feedbackDescription.classList.remove('invalid');
+}
+
+function openSalesFeedback() {
+    const item = activeSalesDetailItem;
+    if (!item) {
+        showSalesToast('请先选择需要反馈的商品', 'error');
+        return;
+    }
+    const source = item.record_source === 'inquiry' ? 'inquiry' : 'parts';
+    salesEls.feedbackForm.reset();
+    clearSalesFeedbackErrors();
+    salesEls.feedbackDescriptionCount.textContent = '0';
+    salesEls.feedbackProductName.textContent = salesText(item.product_name, '未命名商品');
+    salesEls.feedbackProductModel.textContent = `型号：${salesText(item.model, '暂无型号')}`;
+    salesEls.feedbackSource.textContent = source === 'inquiry' ? '来自询价记录' : '来自配件库';
+    salesEls.feedbackSource.className = `source-badge ${source}`;
+    salesEls.feedbackOverlay.classList.add('show');
+    salesEls.feedbackOverlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeSalesFeedback() {
+    if (!salesEls.feedbackOverlay.classList.contains('show')) return;
+    salesEls.feedbackOverlay.classList.remove('show');
+    salesEls.feedbackOverlay.setAttribute('aria-hidden', 'true');
+    salesEls.feedbackSubmit.disabled = false;
+    salesEls.feedbackSubmit.querySelector('span').textContent = '提交反馈';
+    if (!salesEls.detailOverlay.classList.contains('show')) {
+        document.body.style.overflow = '';
+    }
+}
+
+async function submitSalesFeedback(event) {
+    event.preventDefault();
+    const item = activeSalesDetailItem;
+    if (!item) return;
+    clearSalesFeedbackErrors();
+    const problemTypes = [...salesEls.feedbackForm.querySelectorAll('input[name="salesFeedbackProblem"]:checked')]
+        .map(input => input.value);
+    const description = salesEls.feedbackDescription.value.trim();
+    let valid = true;
+    if (!problemTypes.length) {
+        salesEls.feedbackTypeError.textContent = '请至少选择一项问题类型';
+        valid = false;
+    }
+    if (!description) {
+        salesEls.feedbackDescriptionError.textContent = '请输入具体错误描述';
+        salesEls.feedbackDescription.classList.add('invalid');
+        valid = false;
+    }
+    if (!valid) return;
+
+    const source = item.record_source === 'inquiry' ? 'inquiry' : 'parts';
+    salesEls.feedbackSubmit.disabled = true;
+    salesEls.feedbackSubmit.querySelector('span').textContent = '正在提交…';
+    try {
+        await salesRequest('/api/sales/feedback', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                record_source: source,
+                parts_id: source === 'parts' ? (Number(item.id) || null) : null,
+                inquiry_goods_id: source === 'inquiry' ? (Number(item.order_goods_id) || null) : null,
+                problem_types: problemTypes,
+                description,
+            }),
+        });
+        showSalesToast('反馈提交成功，感谢你的帮助');
+        closeSalesFeedback();
+    } catch (error) {
+        showSalesToast(error.message || '反馈提交失败，请稍后重试', 'error');
+        salesEls.feedbackSubmit.disabled = false;
+        salesEls.feedbackSubmit.querySelector('span').textContent = '提交反馈';
+    }
 }
 
 function renderSalesPagination() {
@@ -520,8 +646,28 @@ function bindSalesEvents() {
     });
     salesEls.gridButton.addEventListener('click', () => setSalesView('grid'));
     salesEls.listButton.addEventListener('click', () => setSalesView('list'));
+    document.getElementById('salesFeedbackOpenButton').addEventListener('click', openSalesFeedback);
+    document.getElementById('salesFeedbackCloseButton').addEventListener('click', closeSalesFeedback);
+    salesEls.feedbackDescription.addEventListener('input', () => {
+        salesEls.feedbackDescriptionCount.textContent = String(salesEls.feedbackDescription.value.length);
+        if (salesEls.feedbackDescription.value.trim()) {
+            salesEls.feedbackDescriptionError.textContent = '';
+            salesEls.feedbackDescription.classList.remove('invalid');
+        }
+    });
+    salesEls.feedbackForm.querySelectorAll('input[name="salesFeedbackProblem"]').forEach(input => {
+        input.addEventListener('change', () => {
+            if (salesEls.feedbackForm.querySelector('input[name="salesFeedbackProblem"]:checked')) {
+                salesEls.feedbackTypeError.textContent = '';
+            }
+        });
+    });
+    salesEls.feedbackForm.addEventListener('submit', submitSalesFeedback);
     document.addEventListener('keydown', event => {
-        if (event.key === 'Escape' && salesEls.imageOverlay.classList.contains('show')) closeSalesImagePreview();
+        if (event.key !== 'Escape') return;
+        if (salesEls.feedbackOverlay.classList.contains('show')) return;
+        if (salesEls.imageOverlay.classList.contains('show')) closeSalesImagePreview();
+        else if (salesEls.detailOverlay.classList.contains('show')) closeSalesProductDetail();
     });
 }
 

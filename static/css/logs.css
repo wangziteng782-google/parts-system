@@ -137,6 +137,10 @@ button { cursor: pointer; }
 .operation-tab.update.active::after { background: var(--orange); }
 .operation-tab.delete.active { color: var(--red); }
 .operation-tab.delete.active::after { background: var(--red); }
+.operation-tab.complete.active { color: #2563eb; }
+.operation-tab.complete.active::after { background: #2563eb; }
+.operation-tab.corrected.active { color: #059669; }
+.operation-tab.corrected.active::after { background: #059669; }
 
 .filter-form {
     display: grid;
@@ -248,6 +252,8 @@ tbody tr:hover { background: #fafcff; }
 .operation-badge.create { color: var(--green); background: var(--green-soft); }
 .operation-badge.update { color: var(--orange); background: var(--orange-soft); }
 .operation-badge.delete { color: var(--red); background: var(--red-soft); }
+.operation-badge.complete { color: #2563eb; background: #eaf2ff; }
+.operation-badge.corrected { color: #047857; background: #dcfce7; }
 .module-badge { color: #557096; background: #f0f4f9; font-weight: 500; }
 .badge-list { display: flex; flex-wrap: wrap; gap: 5px; }
 .change-summary-count { margin-bottom: 5px; color: #334763; font-size: 12px; font-weight: 700; }

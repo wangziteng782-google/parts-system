@@ -60,7 +60,13 @@
     }
 
     function operationClass(type) {
-        return ({CREATE: "create", UPDATE: "update", DELETE: "delete"})[type] || "update";
+        return ({
+            CREATE: "create",
+            UPDATE: "update",
+            DELETE: "delete",
+            COMPLETE: "complete",
+            CORRECTED: "corrected",
+        })[type] || "update";
     }
 
     function operationBadges(item) {
@@ -144,6 +150,8 @@
         document.getElementById("statCreate").textContent = stats.create || 0;
         document.getElementById("statUpdate").textContent = stats.update || 0;
         document.getElementById("statDelete").textContent = stats.delete || 0;
+        document.getElementById("statComplete").textContent = stats.complete || 0;
+        document.getElementById("statCorrected").textContent = stats.corrected || 0;
     }
 
     async function loadLogs() {
@@ -179,6 +187,9 @@
                 "beforeend",
                 data.items.map(user => `<option value="${user.id}">${escapeHtml(user.display_name)}${user.username && user.username !== user.display_name ? `（${escapeHtml(user.username)}）` : ""}</option>`).join("")
             );
+            if (data.current_user_id && el.user.querySelector(`option[value="${data.current_user_id}"]`)) {
+                el.user.value = String(data.current_user_id);
+            }
         } catch (error) {
             showToast(error.message);
         }
@@ -287,5 +298,10 @@
         if (event.key === "Escape") closeDetail();
     });
 
-    Promise.all([loadUsers(), loadLogs()]);
+    async function initializeLogsPage() {
+        await loadUsers();
+        await loadLogs();
+    }
+
+    initializeLogsPage();
 })();

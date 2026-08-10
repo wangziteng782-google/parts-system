@@ -6,9 +6,12 @@ import os
 from typing import Optional
 
 from fastapi import HTTPException
+from pydantic import BaseModel
 import pymysql
 
 from ..bootstrap import app
+from ..auth import get_current_user_id
+from ..feedback import FEEDBACK_TYPE_LABELS
 from ..shared import IMAGE_FIELDS, get_db, logger, parse_image_urls
 
 
@@ -34,6 +37,14 @@ OA_DB_CONFIG = {
     "connect_timeout": int(os.getenv("OA_DB_CONNECT_TIMEOUT", "5")),
     "read_timeout": int(os.getenv("OA_DB_READ_TIMEOUT", "12")),
 }
+
+
+class SalesFeedbackRequest(BaseModel):
+    record_source: str
+    parts_id: Optional[int] = None
+    inquiry_goods_id: Optional[int] = None
+    problem_types: list[str]
+    description: str
 
 
 def _sales_price_multiplier(product_name, product_type) -> Decimal:
@@ -167,7 +178,8 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         params.extend([like_keyword] * 6)
     where_sql = " WHERE " + " AND ".join(where)
     # 列表销售参考价与详情价格表保持同一口径：
-    # 有有效规格组合时，取第一个组合中最早保存的供应商，并按
+    # 有有效规格组合时，取第一个组合中标记为对外展示的供应商；
+    # 未标记时回退到该组合最早保存的供应商，并按
     # 不含票价 -> 含专票价 -> 含普票价选择第一个正数价格；
     # 没有有效规格组合时，才使用 parts.purchase_cost。
     valid_variant_filter = (
@@ -200,7 +212,7 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         "SELECT MIN(order_link.id) FROM product_variant_group_specs order_link "
         "WHERE order_link.part_id=candidate.part_id "
         "AND order_link.variant_group_id=candidate.variant_group_id"
-        "), candidate.id LIMIT 1)"
+        "), COALESCE(candidate.is_external_visible,0) DESC, candidate.id LIMIT 1)"
     )
     parts_purchase_cost_sql = (
         "CASE WHEN TRIM(p.purchase_cost) REGEXP '^[0-9]+([.][0-9]+)?' "
@@ -458,7 +470,7 @@ def _fetch_inquiry_communications(order_goods_id: int) -> list:
 
 
 def _fetch_parts_variant_quotes(part_id: int) -> dict:
-    """按有效规格组合返回最早保存的供应商及乘系数后的销售参考价。"""
+    """每个有效规格组合优先返回对外供应商，否则返回最早保存的供应商。"""
     conn = get_db()
     try:
         cursor = conn.cursor()
@@ -472,19 +484,40 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
 
         cursor.execute(
             """SELECT price.id, price.variant_group_id, price.supplier,
+                      price.is_external_visible,
                       price.purchase_cost, price.no_tax_price,
-                      price.purchase_special_invoice,
-                      price.purchase_general_invoice,
-                      GROUP_CONCAT(
+                       price.purchase_special_invoice,
+                       price.purchase_general_invoice,
+                       price.purchase_shipping, price.freight_remark,
+                       price.shipping_origin, price.shipping_time,
+                       price.warranty_time, price.daily_order_time,
+                       price.quote_time, price.expire_date,
+                       price.remark, price.update_time,
+                       GROUP_CONCAT(
                           CONCAT(spec.spec_name, '：', spec.spec_value)
                           ORDER BY link.sort_order, link.id SEPARATOR '；'
                       ) AS specification,
                       MIN(link.id) AS first_link_id
                  FROM (
-                      SELECT variant_group_id, MIN(id) AS first_price_id
-                        FROM product_variant_prices
-                       WHERE part_id=%s
-                       GROUP BY variant_group_id
+                      SELECT candidate.variant_group_id,
+                             candidate.id AS first_price_id
+                        FROM product_variant_prices candidate
+                       WHERE candidate.part_id=%s
+                         AND NOT EXISTS (
+                             SELECT 1
+                               FROM product_variant_prices preferred
+                              WHERE preferred.part_id=candidate.part_id
+                                AND preferred.variant_group_id=candidate.variant_group_id
+                                AND (
+                                    COALESCE(preferred.is_external_visible,0)
+                                        > COALESCE(candidate.is_external_visible,0)
+                                    OR (
+                                        COALESCE(preferred.is_external_visible,0)
+                                            = COALESCE(candidate.is_external_visible,0)
+                                        AND preferred.id < candidate.id
+                                    )
+                                )
+                         )
                  ) first_price
                  JOIN product_variant_prices price
                    ON price.id=first_price.first_price_id
@@ -495,9 +528,15 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
                  JOIN product_variant_specs spec
                    ON spec.id=link.spec_id
                 GROUP BY price.id, price.variant_group_id, price.supplier,
-                         price.purchase_cost, price.no_tax_price,
-                         price.purchase_special_invoice,
-                         price.purchase_general_invoice
+                         price.is_external_visible,
+                          price.purchase_cost, price.no_tax_price,
+                          price.purchase_special_invoice,
+                          price.purchase_general_invoice,
+                          price.purchase_shipping, price.freight_remark,
+                          price.shipping_origin, price.shipping_time,
+                          price.warranty_time, price.daily_order_time,
+                          price.quote_time, price.expire_date,
+                          price.remark, price.update_time
                HAVING MIN(spec.is_active)=1
                 ORDER BY first_link_id, price.id""",
             [part_id, part_id],
@@ -512,6 +551,7 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
                 "variant_group_id": row.get("variant_group_id"),
                 "specification": row.get("specification"),
                 "supplier": row.get("supplier"),
+                "is_external_visible": bool(row.get("is_external_visible")),
                 "no_tax_price": _scaled_positive_price(
                     row.get("no_tax_price"),
                     part.get("product_name"),
@@ -530,10 +570,22 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
                     part.get("product_name"),
                     part.get("product_type"),
                 ),
-                "general_invoice_available": _is_explicit_zero(
-                    row.get("purchase_general_invoice")
-                ),
-            })
+                 "general_invoice_available": _is_explicit_zero(
+                     row.get("purchase_general_invoice")
+                 ),
+                 "purchase_shipping": _plain_business_value(
+                     row.get("purchase_shipping")
+                 ),
+                 "freight_remark": row.get("freight_remark"),
+                 "shipping_origin": row.get("shipping_origin"),
+                 "shipping_time": row.get("shipping_time"),
+                 "warranty_time": row.get("warranty_time"),
+                 "daily_order_time": row.get("daily_order_time"),
+                 "quote_time": row.get("quote_time"),
+                 "expire_date": row.get("expire_date"),
+                 "quote_remark": row.get("remark"),
+                 "update_time": row.get("update_time"),
+             })
         return {"multiplier": str(multiplier), "items": items}
     finally:
         conn.close()
@@ -601,7 +653,83 @@ async def sales_inquiry_communications(order_goods_id: int):
 
 @app.get("/api/sales/parts/{part_id}/variant-quotes")
 async def sales_parts_variant_quotes(part_id: int):
-    """返回每个有效规格组合的首个供应商及销售参考价。"""
+    """每个有效规格组合优先返回对外供应商及其销售参考价。"""
     if part_id <= 0:
         raise HTTPException(status_code=400, detail="无效的配件 ID")
     return _fetch_parts_variant_quotes(part_id)
+
+
+@app.post("/api/sales/feedback")
+async def create_sales_feedback(req: SalesFeedbackRequest):
+    """保存销售在商品详情中提交的问题反馈。"""
+    source = str(req.record_source or "").strip().lower()
+    if source not in {"parts", "inquiry"}:
+        raise HTTPException(status_code=400, detail="商品来源无效")
+
+    description = str(req.description or "").strip()
+    if not description:
+        raise HTTPException(status_code=400, detail="请输入具体错误描述")
+    if len(description) > 2000:
+        raise HTTPException(status_code=400, detail="错误描述不能超过2000字")
+
+    normalized_types = []
+    for problem_type in req.problem_types or []:
+        code = str(problem_type or "").strip().lower()
+        if code not in FEEDBACK_TYPE_LABELS:
+            raise HTTPException(status_code=400, detail="包含不支持的问题类型")
+        if code not in normalized_types:
+            normalized_types.append(code)
+    if not normalized_types:
+        raise HTTPException(status_code=400, detail="请至少选择一项问题类型")
+
+    parts_id = req.parts_id if req.parts_id and req.parts_id > 0 else None
+    inquiry_goods_id = (
+        req.inquiry_goods_id
+        if req.inquiry_goods_id and req.inquiry_goods_id > 0
+        else None
+    )
+    if source == "parts" and parts_id is None:
+        raise HTTPException(status_code=400, detail="配件库反馈缺少parts_id")
+    if source == "inquiry" and inquiry_goods_id is None:
+        raise HTTPException(status_code=400, detail="询价反馈缺少询价商品ID")
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        if parts_id is not None:
+            cursor.execute("SELECT id FROM parts WHERE id=%s", (parts_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="关联配件不存在")
+        cursor.execute(
+            """INSERT INTO sales_product_feedback
+                   (parts_id, inquiry_goods_id, feedback_user_id, source_type,
+                    issue_types, description, status)
+               VALUES (%s,%s,%s,%s,%s,%s,'pending')""",
+            (
+                parts_id,
+                inquiry_goods_id,
+                get_current_user_id(),
+                source,
+                ",".join(normalized_types),
+                description,
+            ),
+        )
+        feedback_id = int(cursor.lastrowid)
+        conn.commit()
+        logger.info(
+            "[销售反馈] 提交成功 | feedback_id=%s | user_id=%s | source=%s | parts_id=%s | inquiry_goods_id=%s",
+            feedback_id,
+            get_current_user_id(),
+            source,
+            parts_id,
+            inquiry_goods_id,
+        )
+        return {"message": "反馈提交成功", "feedback_id": feedback_id}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as exc:
+        conn.rollback()
+        logger.exception("[销售反馈] 提交失败 | error=%s", exc)
+        raise HTTPException(status_code=500, detail="反馈提交失败，请稍后重试") from exc
+    finally:
+        conn.close()
