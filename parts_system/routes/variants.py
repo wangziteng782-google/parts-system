@@ -929,6 +929,72 @@ class VariantPriceUpdateRequest(BaseModel):
     remark: Optional[str] = None
 
 
+class VariantExternalVisibilityRequest(BaseModel):
+    is_external_visible: bool
+
+
+@app.patch("/api/products/{product_id}/variant-prices/{price_id}/external-visible")
+async def update_variant_external_visibility(
+    product_id: int,
+    price_id: int,
+    req: VariantExternalVisibilityRequest,
+):
+    """单独切换供应商报价是否用于销售端展示。"""
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        ensure_employee_operation_logs_table(conn)
+        cur.execute(
+            """SELECT id, variant_group_id, supplier
+               FROM product_variant_prices
+               WHERE id=%s AND part_id=%s FOR UPDATE""",
+            (price_id, product_id),
+        )
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="供应商报价不存在")
+        cur.execute(
+            "UPDATE product_variant_prices SET is_external_visible=%s WHERE id=%s AND part_id=%s",
+            (1 if req.is_external_visible else 0, price_id, product_id),
+        )
+        if req.is_external_visible:
+            cur.execute(
+                """UPDATE product_variant_prices
+                   SET is_external_visible=0
+                   WHERE part_id=%s AND variant_group_id=%s
+                     AND id<>%s AND is_external_visible<>0""",
+                (product_id, existing["variant_group_id"], price_id),
+            )
+        write_operation_log(
+            cur,
+            part_id=product_id,
+            operation_type="UPDATE",
+            module_code="PRICE",
+            detail=(
+                f"修改供应商报价对外展示；规格组合：{existing['variant_group_id']}；"
+                f"供应商：{existing['supplier']}；"
+                f"对外展示：{'是' if req.is_external_visible else '否'}"
+            ),
+        )
+        cur.execute(
+            "UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s",
+            (product_id,),
+        )
+        conn.commit()
+        return {
+            "message": "已设为对外展示" if req.is_external_visible else "已取消对外展示",
+            "is_external_visible": req.is_external_visible,
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 @app.put("/api/products/{product_id}/variant-prices/{price_id}")
 async def update_variant_price(product_id: int, price_id: int, req: VariantPriceUpdateRequest):
     if not req.supplier.strip():

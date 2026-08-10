@@ -202,7 +202,7 @@
                         const noTax = hasConfiguredSupplierPrice(p.no_tax_price) ? `¥${escapeHtml(String(p.no_tax_price))}` : '-';
                         const specialTax = supplierInvoicePriceText(p.purchase_special_invoice, '专票');
                         const normalTax = supplierInvoicePriceText(p.purchase_general_invoice, '普票');
-                        return `<div class="sp-supplier-card ${isActive ? 'active' : ''}" onclick="selectPanelSupplier(${p.id})">
+                        return `<div class="sp-supplier-card ${isActive ? 'active' : ''}" data-price-id="${p.id}" onclick="selectPanelSupplier(${p.id})">
                             <div class="sp-card-header">
                                 <span class="sp-card-name">${escapeHtml(p.supplier || '未命名')}</span>
                                 <span class="sp-external-badge ${Number(p.is_external_visible) === 1 ? 'visible' : ''}">${Number(p.is_external_visible) === 1 ? '对外展示' : '内部使用'}</span>
@@ -349,7 +349,8 @@
                             <datalist id="spSupplierNameList"></datalist>
                         </div>
                         <label class="sp-external-switch">
-                            <input id="spExternalVisible" type="checkbox" ${Number(p.is_external_visible) === 1 ? 'checked' : ''}>
+                            <input id="spExternalVisible" type="checkbox" ${Number(p.is_external_visible) === 1 ? 'checked' : ''}
+                                   onchange="toggleSupplierExternalVisible(this, ${isNew ? 'null' : p.id})">
                             <span class="sp-external-switch-control"></span>
                             <span><strong>是否对外展示</strong><small>开启后销售页面使用该供应商报价</small></span>
                         </label>
@@ -498,6 +499,43 @@
                     <button class="sp-save-btn" onclick="savePanelSupplier(${p.id || 'null'})">${isNew ? '保存新增' : '保存修改'}</button>
                 </div>
             </div>`;
+        }
+
+        async function toggleSupplierExternalVisible(input, priceId) {
+            const visible = input.checked;
+            if (!priceId) {
+                showToast('对外展示设置将在保存新增后生效');
+                return;
+            }
+            input.disabled = true;
+            try {
+                const res = await fetch(`/api/products/${currentProductId}/variant-prices/${priceId}/external-visible`, {
+                    method: 'PATCH',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({is_external_visible: visible}),
+                });
+                const result = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(result.detail || '对外展示设置保存失败');
+
+                currentVariantPrices.forEach(price => {
+                    if (price.id === priceId) price.is_external_visible = visible ? 1 : 0;
+                    else if (visible && matchSpecs(price.specs, currentPanelSpecs)) price.is_external_visible = 0;
+                });
+                document.querySelectorAll('#spSupplierList .sp-supplier-card').forEach(card => {
+                    const price = currentVariantPrices.find(item => item.id === Number(card.dataset.priceId));
+                    const badge = card.querySelector('.sp-external-badge');
+                    if (!price || !badge) return;
+                    const isVisible = Number(price.is_external_visible) === 1;
+                    badge.classList.toggle('visible', isVisible);
+                    badge.textContent = isVisible ? '对外展示' : '内部使用';
+                });
+                showToast(result.message || (visible ? '已设为对外展示' : '已取消对外展示'), 'success');
+            } catch (error) {
+                input.checked = !visible;
+                showToast(error.message || '对外展示设置保存失败', 'error');
+            } finally {
+                input.disabled = false;
+            }
         }
 
         function selectPanelSupplier(priceId) {
