@@ -128,11 +128,11 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .goods-list td { padding: 12px; color: #5e6b80; border-bottom: 1px solid #edf1f6; vertical-align: middle; }
 .goods-list tbody tr:last-child td { border-bottom: 0; }
 .goods-list tbody tr:hover td { background: #fbfdff; }
-.list-product { display: flex; width: 300px; align-items: center; gap: 11px; }
+.list-product { display: flex; width: 240px; align-items: center; gap: 11px; }
 .list-image-button { width: 64px; height: 64px; flex: 0 0 64px; overflow: hidden; padding: 0; border: 1px solid #edf1f6; border-radius: 7px; background: #fafcff; cursor: zoom-in; }
 .list-image-button:hover { border-color: var(--sales-blue); box-shadow: 0 0 0 3px rgba(57,120,246,.1); }
 .list-image-button img { width: 62px; height: 62px; display: block; object-fit: contain; }
-.list-product strong { display: block; max-width: 220px; margin-bottom: 5px; overflow: hidden; color: #273248; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.list-product strong { display: block; max-width: 150px; margin-bottom: 5px; overflow: hidden; color: #273248; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .list-product span { color: #9aa5b5; }
 .list-product .source-badge { display: inline-flex; margin: 0 7px 0 0; }
 .list-product .source-badge.parts { color: #167b5b; }
@@ -140,6 +140,13 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .list-specification { min-width: 150px; max-width: 260px; line-height: 1.6; }
 .list-price { color: var(--sales-price); font-size: 16px; font-weight: 800; white-space: nowrap; }
 .list-price.pending { color: #7d8aa0; font-size: 13px; }
+.sales-list-extra { min-width: 118px; display: grid; gap: 4px; }
+.sales-list-extra div { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.sales-list-extra label { color: #8290a5; font-size: 11px; }
+.sales-list-extra span { color: #34445e; font-weight: 650; }
+.sales-completed-badge { display: inline-flex; align-items: center; margin-left: 6px; padding: 2px 7px; border-radius: 999px; background: #e8f8f1; color: #13865e; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.goods-list th:nth-last-child(2), .goods-list td:nth-last-child(2) { padding-right: 30px; }
+.goods-list th:last-child, .goods-list td:last-child { padding-left: 24px; }
 .sales-detail-button { min-width: 58px; height: 32px; color: var(--sales-blue); border: 1px solid #cfe0ff; border-radius: 6px; background: var(--sales-blue-soft); font-weight: 700; }
 .sales-detail-button:hover { color: #fff; border-color: var(--sales-blue); background: var(--sales-blue); }
 

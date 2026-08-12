@@ -10,7 +10,7 @@ from pydantic import BaseModel
 import pymysql
 
 from ..bootstrap import app
-from ..auth import get_current_user_id
+from ..auth import get_current_user, get_current_user_id
 from ..feedback import FEEDBACK_TYPE_LABELS
 from ..shared import IMAGE_FIELDS, get_db, logger, parse_image_urls
 
@@ -42,6 +42,7 @@ OA_DB_CONFIG = {
 class SalesFeedbackRequest(BaseModel):
     record_source: str
     parts_id: Optional[int] = None
+    inquiry_mission_id: Optional[int] = None
     inquiry_goods_id: Optional[int] = None
     problem_types: list[str]
     description: str
@@ -120,13 +121,71 @@ def _oa_connection():
     return pymysql.connect(**OA_DB_CONFIG)
 
 
+def _record_sales_query(
+    keyword: str,
+) -> None:
+    user = get_current_user() or {}
+    user_name = user.get("nickname") or user.get("username")
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO sales_query_logs
+                   (user_id, user_name, query_keyword)
+               VALUES (%s,%s,%s)""",
+            (
+                get_current_user_id(),
+                user_name,
+                keyword,
+            ),
+        )
+        conn.commit()
+    except pymysql.err.ProgrammingError as exc:
+        conn.rollback()
+        if exc.args and exc.args[0] in {1054, 1146}:
+            logger.warning("[销售查询日志] 表结构未初始化，跳过记录")
+            return
+        raise
+    except Exception as exc:
+        conn.rollback()
+        logger.warning("[销售查询日志] 写入失败 | error=%s", exc)
+    finally:
+        conn.close()
+
+
+def _hidden_inquiry_mission_ids() -> list[int]:
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT inquiry_mission_id
+               FROM sales_inquiry_listing_status
+               WHERE listing_status=0"""
+        )
+        return [
+            int(row["inquiry_mission_id"])
+            for row in cursor.fetchall()
+            if row.get("inquiry_mission_id") is not None
+        ]
+    except pymysql.err.ProgrammingError as exc:
+        if exc.args and exc.args[0] == 1146:
+            logger.warning("[销售查询] 询价上下架状态表不存在，暂按全部上架处理")
+            return []
+        raise
+    finally:
+        conn.close()
+
+
 def _sort_value(item: dict, sort: str):
     if sort in {"default", "updated_desc"}:
         value = item.get("quote_updated_at")
         if isinstance(value, (datetime, date)):
             return value.isoformat(sep=" ")
         return str(value or "")
-    price = item.get("display_price")
+    price = item.get(
+        "display_price_max" if sort == "price_desc" else "display_price_min",
+        item.get("display_price"),
+    )
     if price is None:
         return None
     try:
@@ -178,10 +237,12 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         params.extend([like_keyword] * 6)
     where_sql = " WHERE " + " AND ".join(where)
     # 列表销售参考价与详情价格表保持同一口径：
-    # 有有效规格组合时，取第一个组合中标记为对外展示的供应商；
-    # 未标记时回退到该组合最早保存的供应商，并按
+    # 有效规格组合时，每个组合取标记为对外展示的供应商；
+    # 未标记时回退到该组合最早保存的供应商，并汇总价格区间；
     # 不含票价 -> 含专票价 -> 含普票价选择第一个正数价格；
     # 没有有效规格组合时，才使用 parts.purchase_cost。
+
+    # where条件 用来筛选是否有规格报价
     valid_variant_filter = (
         "candidate.part_id=p.id "
         "AND EXISTS ("
@@ -198,35 +259,89 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         "AND COALESCE(inactive_spec.is_active,0)<>1"
         ")"
     )
+    # 当前商品p 有没有至少一个有效规格价格 返回结果是否存在 true 和 false
     has_valid_variant_sql = (
         f"EXISTS (SELECT 1 FROM product_variant_prices candidate "
         f"WHERE {valid_variant_filter})"
     )
-    first_variant_quote_sql = (
-        "(SELECT COALESCE(NULLIF(candidate.no_tax_price,0), "
-        "NULLIF(candidate.purchase_special_invoice,0), "
-        "NULLIF(candidate.purchase_general_invoice,0)) "
-        "FROM product_variant_prices candidate "
-        f"WHERE {valid_variant_filter} "
-        "ORDER BY ("
-        "SELECT MIN(order_link.id) FROM product_variant_group_specs order_link "
-        "WHERE order_link.part_id=candidate.part_id "
-        "AND order_link.variant_group_id=candidate.variant_group_id"
-        "), COALESCE(candidate.is_external_visible,0) DESC, candidate.id LIMIT 1)"
+    # 在valid_variant_filter的基础上，筛选出最佳的价格记录
+    preferred_variant_filter = (
+        f"{valid_variant_filter} AND NOT EXISTS ("
+        "SELECT 1 FROM product_variant_prices preferred "
+        "WHERE preferred.part_id=candidate.part_id "
+        "AND preferred.variant_group_id=candidate.variant_group_id "
+        "AND (COALESCE(preferred.is_external_visible,0) "
+        "> COALESCE(candidate.is_external_visible,0) "
+        "OR (COALESCE(preferred.is_external_visible,0) "
+        "= COALESCE(candidate.is_external_visible,0) "
+        "AND preferred.id<candidate.id)))"
     )
+    # 规格报价优先使用不含税价，没有不含税价就使用专票价，再没有就使用普票价。
+    variant_price_sql = (
+        "COALESCE(NULLIF(candidate.no_tax_price,0), "
+        "NULLIF(candidate.purchase_special_invoice,0), "
+        "NULLIF(candidate.purchase_general_invoice,0))"
+    )
+    # 找最低报价
+    min_variant_quote_sql = (
+        f"(SELECT MIN({variant_price_sql}) FROM product_variant_prices candidate "
+        f"WHERE {preferred_variant_filter})"
+    )
+    # 找最低报价
+    max_variant_quote_sql = (
+        f"(SELECT MAX({variant_price_sql}) FROM product_variant_prices candidate "
+        f"WHERE {preferred_variant_filter})"
+    )
+    def variant_invoice_bound(field: str, aggregate: str) -> str:
+        return (
+            f"(SELECT {aggregate}(NULLIF(candidate.{field},0)) "
+            "FROM product_variant_prices candidate "
+            f"WHERE {preferred_variant_filter})"
+        )
+
+    def parts_invoice_value(field: str) -> str:
+        return (
+            f"CASE WHEN TRIM(p.{field}) REGEXP '^[0-9]+([.][0-9]+)?$' "
+            f"THEN CAST(TRIM(p.{field}) AS DECIMAL(14,2)) ELSE NULL END"
+        )
+
+    invoice_bounds = {}
+    for field in ("purchase_special_invoice", "purchase_general_invoice"):
+        parts_value = parts_invoice_value(field)
+        invoice_bounds[field] = {
+            "min": (
+                f"CASE WHEN {has_valid_variant_sql} "
+                f"THEN {variant_invoice_bound(field, 'MIN')} ELSE NULLIF({parts_value},0) END"
+            ),
+            "max": (
+                f"CASE WHEN {has_valid_variant_sql} "
+                f"THEN {variant_invoice_bound(field, 'MAX')} ELSE NULLIF({parts_value},0) END"
+            ),
+            "available": (
+                f"CASE WHEN {has_valid_variant_sql} THEN EXISTS ("
+                "SELECT 1 FROM product_variant_prices candidate "
+                f"WHERE {preferred_variant_filter} AND candidate.{field}=0) "
+                f"ELSE COALESCE({parts_value}=0,0) END"
+            ),
+        }
     parts_purchase_cost_sql = (
         "CASE WHEN TRIM(p.purchase_cost) REGEXP '^[0-9]+([.][0-9]+)?' "
         "THEN CAST(TRIM(p.purchase_cost) AS DECIMAL(14,2)) ELSE NULL END"
     )
-    base_cost_sql = (
-        f"(CASE WHEN {has_valid_variant_sql} THEN {first_variant_quote_sql} "
+    # 有规格报价时使用规格报价 否则就用 parts.purchase_cost
+    base_cost_min_sql = (
+        f"(CASE WHEN {has_valid_variant_sql} THEN {min_variant_quote_sql} "
+        f"ELSE {parts_purchase_cost_sql} END)"
+    )
+    base_cost_max_sql = (
+        f"(CASE WHEN {has_valid_variant_sql} THEN {max_variant_quote_sql} "
         f"ELSE {parts_purchase_cost_sql} END)"
     )
     order_sql = {
         "default": "COALESCE(MAX(v.update_time), p.update_time_2, p.update_time) DESC, p.id DESC",
         "updated_desc": "COALESCE(MAX(v.update_time), p.update_time_2, p.update_time) DESC, p.id DESC",
-        "price_asc": f"({base_cost_sql} IS NULL), {base_cost_sql} ASC, p.id DESC",
-        "price_desc": f"({base_cost_sql} IS NULL), {base_cost_sql} DESC, p.id DESC",
+        "price_asc": f"({base_cost_min_sql} IS NULL), {base_cost_min_sql} ASC, p.id DESC",
+        "price_desc": f"({base_cost_max_sql} IS NULL), {base_cost_max_sql} DESC, p.id DESC",
     }[sort]
     image_columns = ", ".join(f"p.{field}" for field in IMAGE_FIELDS)
     detail_columns = [
@@ -246,6 +361,7 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
             *[f"p.{field}" for field in detail_columns],
             *[f"p.{field}" for field in part_price_columns],
             *[f"p.{field}" for field in IMAGE_FIELDS],
+            "completion.complete_id", "completion.change_id",
         ]
     )
     conn = get_db()
@@ -257,7 +373,18 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
             f"""SELECT p.id, p.product_name, p.model, p.product_brand, p.product_type,
                        p.nature, {", ".join(f"p.{field}" for field in detail_columns)},
                        {", ".join(f"p.{field}" for field in part_price_columns)},
-                       {image_columns}, {base_cost_sql} AS base_cost,
+                       {image_columns}, {base_cost_min_sql} AS base_cost_min,
+                       {base_cost_max_sql} AS base_cost_max,
+                       {invoice_bounds['purchase_special_invoice']['min']} AS special_invoice_min,
+                       {invoice_bounds['purchase_special_invoice']['max']} AS special_invoice_max,
+                       {invoice_bounds['purchase_special_invoice']['available']} AS special_invoice_available,
+                       {invoice_bounds['purchase_general_invoice']['min']} AS general_invoice_min,
+                       {invoice_bounds['purchase_general_invoice']['max']} AS general_invoice_max,
+                       {invoice_bounds['purchase_general_invoice']['available']} AS general_invoice_available,
+                       {has_valid_variant_sql} AS has_variant_quotes,
+                       CASE WHEN COALESCE(completion.complete_id,0)
+                                      > COALESCE(completion.change_id,0)
+                            THEN 1 ELSE 0 END AS modification_completed,
                        COALESCE(
                            NULLIF(
                                (SELECT GROUP_CONCAT(
@@ -283,6 +410,13 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
                            AS quote_updated_at
                 FROM parts p
                 LEFT JOIN product_variant_prices v ON v.part_id=p.id
+                LEFT JOIN (
+                    SELECT part_id,
+                           MAX(CASE WHEN operation_type='COMPLETE' THEN id END) AS complete_id,
+                           MAX(CASE WHEN operation_type IN ('CREATE','UPDATE') THEN id END) AS change_id
+                    FROM employee_operation_logs
+                    GROUP BY part_id
+                ) completion ON completion.part_id=p.id
                 {where_sql}
                 GROUP BY {group_columns}
                 ORDER BY {order_sql}
@@ -324,10 +458,46 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
                 },
                 "image": _first_product_image(row),
                 "display_price": _display_price(
-                    row.get("base_cost"),
+                    row.get("base_cost_min"),
                     row.get("product_name"),
                     row.get("product_type"),
                 ),
+                "display_price_min": _display_price(
+                    row.get("base_cost_min"),
+                    row.get("product_name"),
+                    row.get("product_type"),
+                ),
+                "display_price_max": _display_price(
+                    row.get("base_cost_max"),
+                    row.get("product_name"),
+                    row.get("product_type"),
+                ),
+                "invoice_quote_summary": {
+                    "has_variant_quotes": bool(row.get("has_variant_quotes")),
+                    "special_min": _scaled_positive_price(
+                        row.get("special_invoice_min"),
+                        row.get("product_name"),
+                        row.get("product_type"),
+                    ),
+                    "special_max": _scaled_positive_price(
+                        row.get("special_invoice_max"),
+                        row.get("product_name"),
+                        row.get("product_type"),
+                    ),
+                    "special_available": bool(row.get("special_invoice_available")),
+                    "general_min": _scaled_positive_price(
+                        row.get("general_invoice_min"),
+                        row.get("product_name"),
+                        row.get("product_type"),
+                    ),
+                    "general_max": _scaled_positive_price(
+                        row.get("general_invoice_max"),
+                        row.get("product_name"),
+                        row.get("product_type"),
+                    ),
+                    "general_available": bool(row.get("general_invoice_available")),
+                },
+                "modification_completed": bool(row.get("modification_completed")),
                 "quote_updated_at": row.get("quote_updated_at"),
                 "record_source": "parts",
                 "record_source_label": "来自配件库",
@@ -344,6 +514,11 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
         "m.delete_time IS NULL",
     ]
     params = []
+    hidden_ids = _hidden_inquiry_mission_ids()
+    if hidden_ids:
+        placeholders = ",".join(["%s"] * len(hidden_ids))
+        where.append(f"m.id NOT IN ({placeholders})")
+        params.extend(hidden_ids)
     if keyword:
         like_keyword = f"%{keyword}%"
         where.append(
@@ -402,6 +577,7 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
             price = row.get("display_price")
             items.append({
                 "id": row["id"],
+                "inquiry_mission_id": row["id"],
                 "order_goods_id": row.get("order_goods_id"),
                 "quotation_type": row.get("quotation_type"),
                 "purchase_price": row.get("purchase_price"),
@@ -432,6 +608,7 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
                 "create_time": row.get("create_time"),
                 "image": _oa_image(row.get("images")),
                 "display_price": None if price is None else str(price),
+                "modification_completed": False,
                 "quote_updated_at": row.get("quote_updated_at"),
                 "record_source": "inquiry",
                 "record_source_label": "来自询价记录",
@@ -623,7 +800,7 @@ async def sales_products(
 
     merged = _merge_sales_items(parts_items, inquiry_items, sort)
     offset = (page - 1) * page_size
-    return {
+    response_data = {
         "items": merged[offset:offset + page_size],
         "total": parts_total + inquiry_total,
         "parts_total": parts_total,
@@ -632,6 +809,9 @@ async def sales_products(
         "page": page,
         "page_size": page_size,
     }
+    if keyword:
+        _record_sales_query(keyword)
+    return response_data
 
 
 @app.get("/api/sales/inquiry-communications")
@@ -688,10 +868,15 @@ async def create_sales_feedback(req: SalesFeedbackRequest):
         if req.inquiry_goods_id and req.inquiry_goods_id > 0
         else None
     )
+    inquiry_mission_id = (
+        req.inquiry_mission_id
+        if req.inquiry_mission_id and req.inquiry_mission_id > 0
+        else None
+    )
     if source == "parts" and parts_id is None:
         raise HTTPException(status_code=400, detail="配件库反馈缺少parts_id")
-    if source == "inquiry" and inquiry_goods_id is None:
-        raise HTTPException(status_code=400, detail="询价反馈缺少询价商品ID")
+    if source == "inquiry" and (inquiry_goods_id is None or inquiry_mission_id is None):
+        raise HTTPException(status_code=400, detail="询价反馈缺少询价任务ID")
     conn = get_db()
     try:
         cursor = conn.cursor()
@@ -701,11 +886,13 @@ async def create_sales_feedback(req: SalesFeedbackRequest):
                 raise HTTPException(status_code=404, detail="关联配件不存在")
         cursor.execute(
             """INSERT INTO sales_product_feedback
-                   (parts_id, inquiry_goods_id, feedback_user_id, source_type,
+                   (parts_id, inquiry_mission_id, inquiry_goods_id,
+                    feedback_user_id, source_type,
                     issue_types, description, status)
-               VALUES (%s,%s,%s,%s,%s,%s,'pending')""",
+               VALUES (%s,%s,%s,%s,%s,%s,%s,'pending')""",
             (
                 parts_id,
+                inquiry_mission_id,
                 inquiry_goods_id,
                 get_current_user_id(),
                 source,
@@ -716,11 +903,12 @@ async def create_sales_feedback(req: SalesFeedbackRequest):
         feedback_id = int(cursor.lastrowid)
         conn.commit()
         logger.info(
-            "[销售反馈] 提交成功 | feedback_id=%s | user_id=%s | source=%s | parts_id=%s | inquiry_goods_id=%s",
+            "[销售反馈] 提交成功 | feedback_id=%s | user_id=%s | source=%s | parts_id=%s | inquiry_mission_id=%s | inquiry_goods_id=%s",
             feedback_id,
             get_current_user_id(),
             source,
             parts_id,
+            inquiry_mission_id,
             inquiry_goods_id,
         )
         return {"message": "反馈提交成功", "feedback_id": feedback_id}

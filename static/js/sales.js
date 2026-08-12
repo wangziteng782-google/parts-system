@@ -77,19 +77,25 @@ function safeSalesImage(url) {
     }
 }
 
-function formatSalesPrice(value, compact = false) {
+function formatSalesPrice(value, compact = false, maxValue = null) {
     if (value === null || value === undefined || value === '') {
         return compact
             ? '<span class="list-price pending">价格待完善</span>'
             : '<div class="goods-price pending">价格待完善</div>';
     }
-    const amount = Number(value);
-    const formatted = Number.isFinite(amount)
-        ? amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        : escapeSalesHtml(value);
+    const formatAmount = amount => {
+        const numeric = Number(amount);
+        return Number.isFinite(numeric)
+            ? numeric.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : escapeSalesHtml(amount);
+    };
+    const formatted = formatAmount(value);
+    const hasRange = maxValue !== null && maxValue !== undefined && maxValue !== ''
+        && Number(maxValue) !== Number(value);
+    const priceText = hasRange ? `¥${formatted}～¥${formatAmount(maxValue)}` : `¥${formatted}`;
     return compact
-        ? `<span class="list-price">¥${formatted}</span>`
-        : `<div class="goods-price">¥${formatted}<small>销售参考价</small></div>`;
+        ? `<span class="list-price">${priceText}</span>`
+        : `<div class="goods-price">${priceText}<small>${hasRange ? '销售参考价区间' : '销售参考价'}</small></div>`;
 }
 
 function formatSalesDate(value) {
@@ -200,7 +206,8 @@ function renderSalesCard(item, index) {
             </div>
             <div class="goods-body">
                 <span class="source-badge ${source}">${sourceLabel}</span>
-                ${formatSalesPrice(item.display_price)}
+                ${item.modification_completed ? '<span class="sales-completed-badge">已完成</span>' : ''}
+                ${formatSalesPrice(item.display_price_min ?? item.display_price, false, item.display_price_max)}
                 <div class="goods-name" title="${escapeSalesHtml(item.product_name)}">${escapeSalesHtml(salesText(item.product_name))}</div>
                 <div class="goods-meta">
                     <div><label>品牌</label><span>${escapeSalesHtml(salesText(item.product_brand))}</span></div>
@@ -212,6 +219,45 @@ function renderSalesCard(item, index) {
         </article>`;
 }
 
+function salesPriceRangeText(minValue, maxValue) {
+    if (!detailValue(minValue)) return '';
+    const minText = detailAmountText(minValue);
+    return detailValue(maxValue) && Number(maxValue) !== Number(minValue)
+        ? `${minText}～${detailAmountText(maxValue)}`
+        : minText;
+}
+
+function renderPartsInvoiceInfo(item) {
+    if (item.record_source !== 'parts') return '';
+    const summary = item.invoice_quote_summary || {};
+    const main = item.part_price_summary || {};
+    const special = summary.has_variant_quotes
+        ? salesPriceRangeText(summary.special_min, summary.special_max)
+            || (summary.special_available ? '可开专票' : '')
+        : (main.purchase_special_invoice_available
+            ? '可开专票' : detailAmountText(main.purchase_special_invoice));
+    const general = summary.has_variant_quotes
+        ? salesPriceRangeText(summary.general_min, summary.general_max)
+            || (summary.general_available ? '可开普票' : '')
+        : (main.purchase_general_invoice_available
+            ? '可开普票' : detailAmountText(main.purchase_general_invoice));
+    return [['含专票', special], ['含普票', general]]
+        .filter(([, value]) => detailValue(value))
+        .map(([label, value]) => `<div><label>${label}</label><span>${escapeSalesHtml(value)}</span></div>`)
+        .join('');
+}
+
+function renderInquiryQuoteInfo(item) {
+    if (item.record_source !== 'inquiry') return '';
+    return [
+        ['报价类型', quotationTypeText(item.quotation_type)],
+        ['无税运费报价', detailAmountText(item.post_fee_purchase)],
+        ['含税运费报价', detailAmountText(item.post_fee_has_tax_purchase)],
+    ].filter(([, value]) => detailValue(value))
+        .map(([label, value]) => `<div><label>${label}</label><span>${escapeSalesHtml(value)}</span></div>`)
+        .join('');
+}
+
 function renderSalesListRow(item, index) {
     const image = escapeSalesHtml(safeSalesImage(item.image));
     const source = item.record_source === 'inquiry' ? 'inquiry' : 'parts';
@@ -221,8 +267,11 @@ function renderSalesListRow(item, index) {
         <td>${escapeSalesHtml(salesText(item.product_brand))}</td>
         <td>${escapeSalesHtml(salesText(item.model))}</td>
         <td class="list-specification" title="${escapeSalesHtml(salesText(item.specification))}">${escapeSalesHtml(salesText(item.specification))}</td>
-        <td>${formatSalesPrice(item.display_price, true)}</td>
+        <td>${formatSalesPrice(item.display_price_min ?? item.display_price, true, item.display_price_max)}</td>
+        <td><div class="sales-list-extra">${renderPartsInvoiceInfo(item)}</div></td>
+        <td><div class="sales-list-extra">${renderInquiryQuoteInfo(item)}</div></td>
         <td>${escapeSalesHtml(formatSalesDate(item.quote_updated_at))}</td>
+        <td>${item.modification_completed ? '<span class="sales-completed-badge">已完成</span>' : ''}</td>
         <td><button class="sales-detail-button" type="button" data-sales-detail-index="${index}">详情</button></td>
     </tr>`;
 }
@@ -569,6 +618,7 @@ async function submitSalesFeedback(event) {
             body: JSON.stringify({
                 record_source: source,
                 parts_id: source === 'parts' ? (Number(item.id) || null) : null,
+                inquiry_mission_id: source === 'inquiry' ? (Number(item.inquiry_mission_id || item.id) || null) : null,
                 inquiry_goods_id: source === 'inquiry' ? (Number(item.order_goods_id) || null) : null,
                 problem_types: problemTypes,
                 description,

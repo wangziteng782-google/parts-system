@@ -60,18 +60,6 @@
         .product-feedback-actions .complete { color:#0284c7; }
         .product-feedback-actions .ignore { color:#64748b; }
         .product-feedback-actions button:hover { background:rgba(255,255,255,.72); }
-        .product-delete-btn {
-            border: 1px solid #fecaca;
-            border-radius: 5px;
-            padding: 5px 10px;
-            background: #fff;
-            color: #dc2626;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        .product-delete-btn:hover { border-color:#ef4444; background:#fef2f2; }
-
         /* ========== 详情两列布局 ========== */
         .detail-container {
             display: grid;

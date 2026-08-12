@@ -31,6 +31,7 @@
                 <h1>配件管理</h1>
                 <div class="sidebar-title-actions">
                     <a class="log-page-btn" href="/logs">操作日志</a>
+                    <a class="log-page-btn" href="/inquiries">询价记录</a>
                     <button class="add-product-btn" onclick="openProductCreate()">＋ 新增产品</button>
                 </div>
             </div>
@@ -72,27 +73,6 @@
             <div class="product-create-footer">
                 <button class="product-create-cancel" onclick="closeProductCreate()">取消</button>
                 <button class="product-create-save" id="productCreateSave" onclick="submitProductCreate()">保存新增</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="product-delete-overlay" id="productDeleteOverlay" onclick="closeProductDelete(event)">
-        <div class="product-delete-dialog" onclick="event.stopPropagation()">
-            <div class="product-delete-title">删除产品</div>
-            <div class="product-delete-message">
-                删除后，当前产品主数据以及关联的规格、规格组合和供应商价格将一并删除，无法恢复。
-            </div>
-            <div class="product-delete-target" id="productDeleteTarget"></div>
-            <label class="product-delete-confirm-label" for="productDeleteIdInput">
-                请输入产品 ID <strong id="productDeleteExpectedId"></strong> 以确认删除
-            </label>
-            <input class="product-delete-id-input" id="productDeleteIdInput" type="text"
-                   inputmode="numeric" autocomplete="off" placeholder="输入产品ID"
-                   oninput="validateProductDeleteId()" onkeydown="handleProductDeleteKeydown(event)">
-            <div class="product-delete-actions">
-                <button class="product-delete-cancel" onclick="closeProductDelete()">取消</button>
-                <button class="product-delete-confirm" id="productDeleteConfirmBtn"
-                        onclick="submitProductDelete()" disabled>确认删除</button>
             </div>
         </div>
     </div>

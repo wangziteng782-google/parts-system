@@ -517,35 +517,6 @@
         .product-create-cancel { border:1px solid #cbd5e1; background:#fff; color:#475569; }
         .product-create-save { border:1px solid var(--accent); background:var(--accent); color:#fff; font-weight:600; }
         .product-create-save:disabled { opacity:.55; cursor:not-allowed; }
-        .product-delete-overlay {
-            position:fixed; inset:0; z-index:3900; display:flex; align-items:center; justify-content:center;
-            padding:24px; background:rgba(15,23,42,.46); opacity:0; visibility:hidden;
-            transition:opacity .18s, visibility .18s;
-        }
-        .product-delete-overlay.open { opacity:1; visibility:visible; }
-        .product-delete-dialog {
-            width:min(470px,94vw); padding:22px; border-radius:11px; background:#fff;
-            box-shadow:0 24px 70px rgba(15,23,42,.28); transform:scale(.97); transition:transform .18s;
-        }
-        .product-delete-overlay.open .product-delete-dialog { transform:scale(1); }
-        .product-delete-title { color:#991b1b; font-size:18px; font-weight:700; }
-        .product-delete-message { margin-top:10px; color:#475569; font-size:13px; line-height:1.65; }
-        .product-delete-target {
-            margin-top:12px; padding:10px 12px; border:1px solid #fecaca; border-radius:7px;
-            background:#fff7f7; color:#7f1d1d; font-size:13px; line-height:1.6;
-        }
-        .product-delete-confirm-label { display:block; margin-top:15px; color:#475569; font-size:12px; }
-        .product-delete-confirm-label strong { color:#dc2626; }
-        .product-delete-id-input {
-            box-sizing:border-box; width:100%; margin-top:6px; padding:9px 10px; border:1px solid #cbd5e1;
-            border-radius:6px; outline:none; color:#1e293b; font-size:14px;
-        }
-        .product-delete-id-input:focus { border-color:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,.1); }
-        .product-delete-actions { display:flex; justify-content:flex-end; gap:9px; margin-top:18px; }
-        .product-delete-actions button { padding:8px 17px; border-radius:6px; cursor:pointer; font-size:13px; }
-        .product-delete-cancel { border:1px solid #cbd5e1; background:#fff; color:#475569; }
-        .product-delete-confirm { border:1px solid #dc2626; background:#dc2626; color:#fff; font-weight:600; }
-        .product-delete-confirm:disabled { opacity:.42; cursor:not-allowed; }
         .create-product-type-combobox { position:relative; }
         .create-product-type-dropdown {
             position:absolute; z-index:30; left:0; right:0; top:42px; max-height:240px; overflow-y:auto;

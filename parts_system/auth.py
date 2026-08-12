@@ -61,7 +61,7 @@ PURCHASE_ROLE_IDS = _parse_role_ids(
 INTERNAL_ROLE_IDS = ADMIN_ROLE_IDS | SALES_ROLE_IDS | PURCHASE_ROLE_IDS
 
 PUBLIC_PATHS = {"/favicon.ico", "/api/health"}
-PROTECTED_PAGES = {"/", "/goods", "/logs", "/sales"}
+PROTECTED_PAGES = {"/", "/goods", "/logs", "/sales", "/inquiries"}
 PROTECTED_SCHEMA_PATHS = {"/docs", "/redoc", "/openapi.json"}
 
 _current_user: ContextVar[Optional[dict]] = ContextVar(

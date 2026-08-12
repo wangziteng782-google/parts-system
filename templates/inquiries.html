@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>询价记录管理</title>
+    <link rel="icon" href="/static/img/favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="/static/img/site-logo.png">
+    <link rel="stylesheet" href="/static/css/logs.css?v=20260810-2">
+    <link rel="stylesheet" href="/static/css/inquiries.css?v=20260811-1">
+</head>
+<body>
+    <main class="log-page inquiry-page">
+        <header class="page-header">
+            <div class="page-title-group">
+                <img class="page-brand-logo" src="/static/img/site-logo.png" alt="电梯配件管理系统">
+                <div>
+                    <div class="eyebrow">INQUIRY LISTING</div>
+                    <h1>询价记录管理</h1>
+                    <p>处理销售反馈，并控制询价记录是否在销售查询页展示</p>
+                </div>
+            </div>
+            <a class="back-button" href="/goods">
+                <span aria-hidden="true">←</span> 返回配件管理
+            </a>
+        </header>
+
+        <section class="panel">
+            <div class="operation-tabs" id="inquiryTabs">
+                <button class="operation-tab active" data-status="pending">待处理反馈 <span id="statPending">0</span></button>
+                <button class="operation-tab complete" data-status="listed">上架中 <span id="statListed">0</span></button>
+                <button class="operation-tab delete" data-status="hidden">已下架 <span id="statHidden">0</span></button>
+                <button class="operation-tab" data-status="all">全部 <span id="statAll">0</span></button>
+            </div>
+
+            <form class="filter-form inquiry-filter" id="inquiryFilterForm">
+                <label class="field keyword-field">
+                    <span>关键词</span>
+                    <input id="inquiryKeyword" type="search" placeholder="产品名称、型号、规格、品牌">
+                </label>
+                <div class="filter-actions">
+                    <button class="primary-button" type="submit">查询</button>
+                    <button class="secondary-button" id="inquiryReset" type="button">重置</button>
+                </div>
+            </form>
+
+            <div class="table-meta">
+                <div><span class="pulse-dot"></span>共 <strong id="inquiryTotal">0</strong> 条记录</div>
+                <button class="refresh-button" id="inquiryRefresh" type="button">↻ 刷新</button>
+            </div>
+
+            <div class="table-wrap inquiry-table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="seq-col">序号</th>
+                            <th class="image-col">图片</th>
+                            <th>商品信息</th>
+                            <th>报价信息</th>
+                            <th>销售反馈</th>
+                            <th>展示状态</th>
+                            <th>更新时间</th>
+                            <th class="inquiry-actions-col">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inquiryTableBody"></tbody>
+                </table>
+                <div class="table-state" id="inquiryTableState">
+                    <div class="state-icon">⌛</div>
+                    <div>正在加载询价记录...</div>
+                </div>
+            </div>
+
+            <footer class="pagination">
+                <div>
+                    每页
+                    <select id="inquiryPageSize">
+                        <option value="10">10</option>
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                    </select>
+                    条
+                </div>
+                <div class="pager-controls">
+                    <button id="inquiryPrev" type="button">上一页</button>
+                    <span id="inquiryPageInfo">第 1 / 1 页</span>
+                    <button id="inquiryNext" type="button">下一页</button>
+                </div>
+            </footer>
+        </section>
+    </main>
+
+    <div class="toast" id="inquiryToast"></div>
+    <script src="/static/js/inquiries.js?v=20260811-1"></script>
+</body>
+</html>

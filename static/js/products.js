@@ -792,7 +792,6 @@ async function init() {
                 <span class="bc-current">${escapeHtml(data.product_name || '未命名产品')}</span>
                 <div class="breadcrumb-actions" style="display: none">
                     <span class="product-id-badge">ID：${data.id}</span>
-                    <button class="product-delete-btn" onclick="openProductDelete()">删除产品</button>
                 </div>
             </div>`;
 
@@ -1001,94 +1000,6 @@ async function init() {
             renderAllFieldsTable(data);
         }
 
-        function openProductDelete() {
-            if (!currentProductId || !currentData) {
-                showToast('请先选择要删除的产品', 'error');
-                return;
-            }
-            document.getElementById('productDeleteTarget').innerHTML =
-                `<strong>${escapeHtml(currentData.product_name || '未命名产品')}</strong><br>` +
-                `型号：${escapeHtml(currentData.model || '无型号')}　·　ID：${currentProductId}`;
-            document.getElementById('productDeleteExpectedId').textContent = currentProductId;
-            const input = document.getElementById('productDeleteIdInput');
-            input.value = '';
-            document.getElementById('productDeleteConfirmBtn').disabled = true;
-            document.getElementById('productDeleteOverlay').classList.add('open');
-            setTimeout(() => input.focus(), 60);
-        }
-
-        function closeProductDelete(event) {
-            if (event && event.target !== document.getElementById('productDeleteOverlay')) return;
-            document.getElementById('productDeleteOverlay').classList.remove('open');
-        }
-
-        function validateProductDeleteId() {
-            const input = document.getElementById('productDeleteIdInput');
-            const button = document.getElementById('productDeleteConfirmBtn');
-            button.disabled = input.value.trim() !== String(currentProductId);
-        }
-
-        function handleProductDeleteKeydown(event) {
-            if (event.key === 'Escape') {
-                closeProductDelete();
-            } else if (event.key === 'Enter' && !document.getElementById('productDeleteConfirmBtn').disabled) {
-                event.preventDefault();
-                submitProductDelete();
-            }
-        }
-
-        async function submitProductDelete() {
-            const productId = currentProductId;
-            const productName = currentData?.product_name || '未命名产品';
-            const input = document.getElementById('productDeleteIdInput');
-            const button = document.getElementById('productDeleteConfirmBtn');
-            let deleteCompleted = false;
-            if (!productId || input.value.trim() !== String(productId)) {
-                showToast('请输入正确的产品ID后再删除', 'error');
-                return;
-            }
-            button.disabled = true;
-            button.textContent = '正在删除...';
-            try {
-                const res = await fetch(`/api/products/${productId}`, { method: 'DELETE' });
-                const result = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(result.detail || '删除失败');
-                deleteCompleted = true;
-
-                closeProductDelete();
-                currentProductId = null;
-                currentData = null;
-                currentVariantSpecs = [];
-                currentVariantPrices = [];
-                selectedVariantValues = [];
-                currentSelectedVariantPrice = null;
-                document.getElementById('mainContent').innerHTML = `
-                    <div class="empty-state">
-                        <div class="icon">&#10003;</div>
-                        <p>产品“${escapeHtml(productName)}”（ID：${productId}）已删除</p>
-                    </div>`;
-                const remainingPages = Math.max(1, Math.ceil(Math.max(totalRecords - 1, 0) / PAGE_SIZE));
-                currentPage = Math.min(currentPage, remainingPages);
-                try {
-                    await Promise.all([refreshProductClassifications(), loadProducts(currentPage)]);
-                } catch (refreshError) {
-                    console.error('产品已删除，但列表刷新失败', refreshError);
-                    showToast(`产品 ID ${productId} 已删除，请刷新页面更新列表`, 'error');
-                    return;
-                }
-                showToast(`产品 ID ${productId} 删除成功`, 'success');
-            } catch (error) {
-                showToast(
-                    deleteCompleted
-                        ? `产品已删除，但页面更新失败：${error.message}`
-                        : `删除失败：${error.message}`,
-                    'error'
-                );
-            } finally {
-                button.textContent = '确认删除';
-                validateProductDeleteId();
-            }
-        }
 
         function editParam(paramId) {
             const valEl = document.querySelector(`.param-val-${paramId}`);

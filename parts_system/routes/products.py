@@ -47,16 +47,13 @@ async def list_products(
         if duplicates_only:
             duplicate_group_join = (
                 " INNER JOIN ("
-                "SELECT product_name, model FROM parts"
-                " WHERE COALESCE(TRIM(product_name), '') <> ''"
-                " AND COALESCE(TRIM(model), '') <> ''"
-                " GROUP BY product_name, model HAVING COUNT(*) > 1"
+                "SELECT model FROM parts"
+                " WHERE COALESCE(TRIM(model), '') <> ''"
+                " GROUP BY model HAVING COUNT(*) > 1"
                 ") duplicate_group"
-                " ON duplicate_group.product_name = parts.product_name"
-                " AND duplicate_group.model = parts.model"
+                " ON duplicate_group.model = parts.model"
             )
             where += (
-                " AND COALESCE(TRIM(parts.product_name), '') <> ''"
                 " AND COALESCE(TRIM(parts.model), '') <> ''"
             )
 
@@ -92,9 +89,9 @@ async def list_products(
         # 查分页数据
         offset = (page - 1) * page_size
         duplicate_flag_sql = "1" if duplicates_only else \
-            "CASE WHEN COALESCE(TRIM(parts.product_name), '') <> '' AND COALESCE(TRIM(parts.model), '') <> '' " \
-            "AND EXISTS (SELECT 1 FROM parts p2 WHERE p2.product_name = parts.product_name " \
-            "AND p2.model = parts.model AND p2.id <> parts.id) THEN 1 ELSE 0 END"
+            "CASE WHEN COALESCE(TRIM(parts.model), '') <> '' " \
+            "AND EXISTS (SELECT 1 FROM parts p2 WHERE p2.model = parts.model " \
+            "AND p2.id <> parts.id) THEN 1 ELSE 0 END"
         sql = "SELECT parts.id, parts.sku_code, parts.product_name, parts.model, parts.product_brand, parts.category, parts.product_type, parts.update_time_2, " \
               "(SELECT COUNT(*) FROM sales_product_feedback feedback WHERE feedback.parts_id=parts.id AND feedback.status='pending') AS pending_feedback_count, " \
               "CASE WHEN COALESCE((SELECT MAX(done_log.id) FROM employee_operation_logs done_log WHERE done_log.part_id=parts.id AND done_log.operation_type='COMPLETE'),0) " \
@@ -105,7 +102,7 @@ async def list_products(
               "FROM parts" + duplicate_group_join + \
               " LEFT JOIN duplicate_product_marks dpm ON dpm.product_id = parts.id" + where
         if duplicates_only:
-            sql += " ORDER BY parts.product_name, parts.model, parts.id"
+            sql += " ORDER BY parts.model, parts.id"
         else:
             sql += " ORDER BY parts.id"
         sql += " LIMIT %s OFFSET %s"
@@ -224,65 +221,6 @@ async def complete_product_modification(product_id: int):
         raise
     except Exception:
         conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-
-@app.delete("/api/products/{product_id}")
-async def delete_product(product_id: int):
-    """根据产品ID删除 parts 主数据；规格、组合和供应商价格由外键级联删除。"""
-    logger.info(f"[删除产品] 开始 | product_id={product_id}")
-    conn = get_db()
-    try:
-        ensure_duplicate_marks_table(conn)
-        ensure_employee_operation_logs_table(conn)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, product_name, model FROM parts WHERE id = %s FOR UPDATE",
-            (product_id,),
-        )
-        product = cursor.fetchone()
-        if not product:
-            raise HTTPException(status_code=404, detail="产品不存在或已被删除")
-
-        # duplicate_product_marks 没有外键，需要主动清理，避免遗留孤立标记。
-        cursor.execute(
-            "DELETE FROM duplicate_product_marks WHERE product_id = %s",
-            (product_id,),
-        )
-        cursor.execute("DELETE FROM parts WHERE id = %s", (product_id,))
-        if cursor.rowcount != 1:
-            raise HTTPException(status_code=404, detail="产品不存在或已被删除")
-        write_operation_log(
-            cursor,
-            part_id=product_id,
-            product_name=product.get("product_name"),
-            model=product.get("model"),
-            operation_type="DELETE",
-            module_code="PRODUCT",
-            detail=(
-                f"删除产品；产品名称：{display_change_value(product.get('product_name'))}；"
-                f"型号：{display_change_value(product.get('model'))}"
-            ),
-        )
-        conn.commit()
-        logger.info(
-            f"[删除产品] 完成 | product_id={product_id}, "
-            f"name={product.get('product_name')}, model={product.get('model')}"
-        )
-        return {
-            "message": "产品删除成功",
-            "deleted_id": product_id,
-            "product_name": product.get("product_name"),
-            "model": product.get("model"),
-        }
-    except HTTPException:
-        conn.rollback()
-        raise
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"[删除产品] 失败 | product_id={product_id}, error={e}")
         raise
     finally:
         conn.close()
