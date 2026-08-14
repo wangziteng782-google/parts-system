@@ -3,13 +3,14 @@
 -- 用途：销售询价记录反馈与上下架状态控制。
 
 USE `parts_database`;
-
+-----------------1---------------
 ALTER TABLE `sales_product_feedback`
     ADD COLUMN `inquiry_mission_id` BIGINT DEFAULT NULL
     COMMENT '关联OA询价任务ID，对应yh_query_goods_mission.id'
     AFTER `inquiry_goods_id`,
     ADD KEY `idx_feedback_inquiry_mission` (`inquiry_mission_id`, `status`);
 
+-----------------2---------------
 CREATE TABLE `sales_inquiry_listing_status` (
     `inquiry_mission_id` BIGINT NOT NULL
         COMMENT 'OA询价任务ID，对应yh_query_goods_mission.id',

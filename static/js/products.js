@@ -923,47 +923,12 @@ async function init() {
 
             html += `</div></div>`; // 关闭 info-section 和 detail-container
 
-            // 旧代码已删除
-            /*
-                html += `<div class="variant-selector-card">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-                        <div style="font-size:15px;font-weight:600">选择规格与供应商</div>
-                        <div class="variant-manage-actions">
-                            <button class="variant-manage-btn" onclick="openSpecManager()">规格配置</button>
-                            <button class="variant-manage-btn price-entry" onclick="openVariantPriceManager()">供应商价格</button>
-                        </div>
-                    </div>
-                    ${currentVariantSpecs.map(spec => `<div class="variant-selector-row">
-                        <div class="variant-selector-label">${escapeHtml(spec.spec_name)}</div>
-                        <div class="variant-choice-list">${spec.values.map(item => `<button class="variant-choice-btn" data-spec-name="${escapeHtml(spec.spec_name)}" data-spec-value="${escapeHtml(item.value)}" onclick="selectVariantValue(this)">${escapeHtml(item.value)}</button>`).join('')}</div>
-                    </div>`).join('')}
-                    <div class="variant-selector-row">
-                        <div class="variant-selector-label">供应商</div>
-                        <div><select id="variantSupplierSelector" class="variant-supplier-select" onchange="applySelectedVariant()" disabled><option value="">请先选择完整规格</option></select></div>
-                    </div>
-                    <div class="variant-match-hint" id="variantMatchHint">请选择每一个规格，系统将显示对应供应商、价格、发货地和发货时间。</div>
-                </div>`;
-            } else {
-                html += `<div class="variant-selector-card">
-                    <div style="display:flex;align-items:center;justify-content:space-between">
-                        <div style="font-size:15px;font-weight:600">选择规格与供应商</div>
-                        <div class="variant-manage-actions">
-                            <button class="variant-manage-btn" onclick="openSpecManager()">规格配置</button>
-                            <button class="variant-manage-btn price-entry" onclick="openVariantPriceManager()">供应商价格</button>
-                        </div>
-                    </div>
-                    <div class="variant-match-hint" style="margin-top:10px">暂无规格数据，请先点击“规格配置”添加规格名和规格值。</div>
-                </div>`;
-            }
-            */
-
             // 下方标签页
             html += `<div class="tabs-section">
                 <div class="tabs">
                     <div class="tab active" onclick="switchTab(this, 'tab-images')">图片资料</div>
                     <div class="tab" onclick="switchTab(this, 'tab-records')">操作记录</div>
                     <div class="tab" onclick="switchTab(this, 'tab-corrections')">改正日志</div>
-                    <div class="tab" onclick="switchTab(this, 'tab-all')">全部字段</div>
                 </div>
                 <div class="tab-content">
                     <div class="tab-pane active" id="tab-images">
@@ -986,9 +951,6 @@ async function init() {
                     <div class="tab-pane" id="tab-corrections">
                         ${renderProductCorrectionLogs()}
                     </div>
-                    <div class="tab-pane" id="tab-all">
-                        <table class="spec-table" id="allFieldsTable"></table>
-                    </div>
                 </div>
             </div>`;
 
@@ -997,7 +959,6 @@ async function init() {
             // 渲染图片画廊和标签页内容
             renderGallery(data);
             renderImageGrid(data);
-            renderAllFieldsTable(data);
         }
 
 

@@ -1,5 +1,6 @@
 from ..bootstrap import app, templates
 from ..shared import *
+from ..shared import get_oa_db as _get_oa_db
 from ..audit import write_operation_log
 
 # ========== 产品规格与供应商价格 ==========
@@ -33,6 +34,8 @@ class VariantPriceRequest(BaseModel):
     quote_time: Optional[str] = None
     expire_date: Optional[str] = None
     is_external_visible: bool = False
+    oa_supplier_id: Optional[int] = None
+    external_price_fields: Optional[str] = None
     remark: Optional[str] = None
 
 
@@ -260,6 +263,46 @@ def _expand_groups_for_new_spec_value(
         if signature not in existing_signatures:
             _insert_variant_group(cur, product_id, new_ids)
             existing_signatures.add(signature)
+
+
+def _recalculate_part_display_price(product_id, cur):
+    """多规格时把所有对外展示价的 min/max 写回 parts，单规格/无价格时写 NULL。"""
+    cur.execute(
+        """SELECT COUNT(DISTINCT variant_group_id) AS count
+           FROM product_variant_prices WHERE part_id=%s""",
+        (product_id,),
+    )
+    if cur.fetchone()['count'] <= 1:
+        cur.execute(
+            "UPDATE parts SET display_price_min=NULL, display_price_max=NULL WHERE id=%s",
+            (product_id,),
+        )
+        return
+    cur.execute(
+        """SELECT purchase_cost, purchase_special_invoice, purchase_general_invoice,
+                  external_price_fields
+           FROM product_variant_prices WHERE part_id=%s""",
+        (product_id,),
+    )
+    prices = []
+    for row in cur.fetchall():
+        fields = (row.get('external_price_fields') or '').split(',')
+        if 'no_tax' in fields and row.get('purchase_cost') is not None:
+            prices.append(float(row['purchase_cost']))
+        if 'special' in fields and row.get('purchase_special_invoice') is not None:
+            prices.append(float(row['purchase_special_invoice']))
+        if 'general' in fields and row.get('purchase_general_invoice') is not None:
+            prices.append(float(row['purchase_general_invoice']))
+    if prices:
+        cur.execute(
+            "UPDATE parts SET display_price_min=%s, display_price_max=%s WHERE id=%s",
+            (min(prices), max(prices), product_id),
+        )
+    else:
+        cur.execute(
+            "UPDATE parts SET display_price_min=NULL, display_price_max=NULL WHERE id=%s",
+            (product_id,),
+        )
 
 
 @app.get("/api/products/{product_id}/variant-specs")
@@ -755,7 +798,7 @@ async def delete_variant_group(product_id: int, group_id: str):
 async def save_variant_price(product_id: int, req: VariantPriceRequest):
     if not req.supplier.strip() or not req.variant_group_id.strip():
         raise HTTPException(status_code=400, detail="供应商和规格组合不能为空")
-    fields = ['supplier','purchase_cost','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','remark']
+    fields = ['supplier','purchase_cost','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','oa_supplier_id','external_price_fields','remark']
     values = [getattr(req, f) for f in fields]
     conn = get_db()
     try:
@@ -805,6 +848,7 @@ async def save_variant_price(product_id: int, req: VariantPriceRequest):
             ),
         )
         cur.execute("UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s", (product_id,))
+        _recalculate_part_display_price(product_id, cur)
         conn.commit()
         cur.execute("SELECT update_time_2 FROM parts WHERE id=%s", (product_id,))
         updated_at = cur.fetchone()['update_time_2']
@@ -898,6 +942,7 @@ async def delete_variant_price(product_id: int, price_id: int):
             detail=f"删除供应商价格；规格组合：{row['variant_group_id']}；供应商：{row['supplier']}",
         )
         cur.execute("UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s", (product_id,))
+        _recalculate_part_display_price(product_id, cur)
         conn.commit()
         return {'message': '已删除'}
     except HTTPException:
@@ -926,6 +971,8 @@ class VariantPriceUpdateRequest(BaseModel):
     quote_time: Optional[str] = None
     expire_date: Optional[str] = None
     is_external_visible: bool = False
+    oa_supplier_id: Optional[int] = None
+    external_price_fields: Optional[str] = None
     remark: Optional[str] = None
 
 
@@ -999,7 +1046,7 @@ async def update_variant_external_visibility(
 async def update_variant_price(product_id: int, price_id: int, req: VariantPriceUpdateRequest):
     if not req.supplier.strip():
         raise HTTPException(status_code=400, detail="供应商名称不能为空")
-    fields = ['supplier','purchase_cost','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','remark']
+    fields = ['supplier','purchase_cost','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','oa_supplier_id','external_price_fields','remark']
     values = [getattr(req, f) for f in fields]
     conn = get_db()
     try:
@@ -1032,10 +1079,62 @@ async def update_variant_price(product_id: int, price_id: int, req: VariantPrice
             ),
         )
         cur.execute("UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s", (product_id,))
+        _recalculate_part_display_price(product_id, cur)
         conn.commit()
         return {'message': '已更新'}
     except HTTPException:
         conn.rollback()
         raise
+    finally:
+        conn.close()
+
+
+# ========== OA 供应商查询 ==========
+@app.get("/api/oa/suppliers")
+async def list_oa_suppliers():
+    """返回OA供应商列表，供前端下拉选择。"""
+    conn = _get_oa_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT id, supplier_name
+               FROM yh_supplier
+               WHERE delete_time IS NULL
+               ORDER BY id""",
+        )
+        return [
+            {"oa_supplier_id": row["id"], "supplier_name": row["supplier_name"]}
+            for row in cur.fetchall()
+        ]
+    finally:
+        conn.close()
+
+
+@app.get("/api/oa/suppliers/{supplier_id}")
+async def get_oa_supplier(supplier_id: int):
+    """返回OA供应商详情：名称+开票能力+税点。"""
+    conn = _get_oa_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT id, supplier_name, is_special_invoice, is_normal_invoice,
+                      is_no_invoice, special_tax_point, normal_tax_point, no_tax_point
+               FROM yh_supplier
+               WHERE id=%s AND delete_time IS NULL""",
+            (supplier_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="供应商不存在")
+        return {
+            "oa_supplier_id": row["id"],
+            "supplier_name": row["supplier_name"],
+            "is_special_invoice": bool(row["is_special_invoice"]),
+            "is_normal_invoice": bool(row["is_normal_invoice"]),
+            "is_no_invoice": bool(row["is_no_invoice"]),
+            "special_tax_point": row["special_tax_point"],
+            "normal_tax_point": row["normal_tax_point"],
+            "no_tax_point": row["no_tax_point"],
+        }
     finally:
         conn.close()

@@ -51,6 +51,26 @@ DB_CONFIG = {
     'connect_timeout': int(os.getenv('PARTS_DB_CONNECT_TIMEOUT', '10')),
 }
 
+# OA 数据库连接配置（fallback 仅本地开发占位，生产值通过 .env 注入）
+OA_DB_CONFIG = {
+    "host": os.getenv("OA_DB_HOST", "localhost").strip(),
+    "port": int(os.getenv("OA_DB_PORT", "3306")),
+    "user": os.getenv("OA_DB_USER", "root").strip(),
+    "password": os.getenv("OA_DB_PASSWORD", ""),
+    "database": os.getenv("OA_DB_NAME", "oa_yixiuti").strip(),
+    "charset": "utf8mb4",
+    "cursorclass": pymysql.cursors.DictCursor,
+    "connect_timeout": int(os.getenv("OA_DB_CONNECT_TIMEOUT", "5")),
+    "read_timeout": int(os.getenv("OA_DB_READ_TIMEOUT", "12")),
+}
+
+
+def get_oa_db():
+    """获取 OA 数据库连接。"""
+    if not OA_DB_CONFIG["password"]:
+        raise RuntimeError("未配置 OA_DB_PASSWORD")
+    return pymysql.connect(**OA_DB_CONFIG)
+
 QINIU_LOCAL_CONFIG_FILE = os.path.join(LOG_DIR, 'qiniu_config.local.json')
 
 
@@ -331,6 +351,15 @@ def ensure_technical_params_column(conn):
     if column and str(column.get('Type', '')).lower() != 'text':
         logger.info("[数据库迁移] parts.technical_params -> TEXT")
         cursor.execute("ALTER TABLE parts MODIFY COLUMN technical_params TEXT NULL COMMENT '技术参数（多行文本）'")
+    # parts 新增展示价格区间（所有规格组合对外展示价的最低/最高）
+    for col_name, col_def in [
+        ("display_price_min", "DECIMAL(14,2) NULL COMMENT '所有规格组合对外展示价中的最低价'"),
+        ("display_price_max", "DECIMAL(14,2) NULL COMMENT '所有规格组合对外展示价中的最高价'"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE parts ADD COLUMN {col_name} {col_def}")
+        except:
+            pass  # 列已存在
 
 
 def ensure_duplicate_marks_table(conn):
@@ -565,7 +594,9 @@ def ensure_product_variant_tables(conn):
         ("daily_order_time", "VARCHAR(100) NULL COMMENT '每日结单时间'"),
         ("quote_time", "VARCHAR(100) NULL COMMENT '报价时间'"),
         ("expire_date", "VARCHAR(100) NULL COMMENT '报价有效期'"),
-        ("is_external_visible", "TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否对外展示：0否，1是'"),
+        ("is_external_visible", "TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否对外展示：0否，1是（旧逻辑，后续删除）'"),
+        ("oa_supplier_id", "BIGINT(20) NULL COMMENT 'OA供应商ID，对应oa_yixiuti.yh_supplier.id'"),
+        ("external_price_fields", "SET('no_tax','special','general') NULL COMMENT '员工选择的对外展示价格字段'"),
     ]
     for col_name, col_def in new_columns:
         try:

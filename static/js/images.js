@@ -602,28 +602,6 @@
             }
         }
 
-        // ========== 全部字段表格 ==========
-        function renderAllFieldsTable(data) {
-            const tableEl = document.getElementById('allFieldsTable');
-            const allFields = Object.keys(fieldLabels).filter(f => f !== 'id');
-            let html = '';
-            for (let i = 0; i < allFields.length; i += 2) {
-                html += '<tr>';
-                const f1 = allFields[i];
-                html += `<td>${fieldLabels[f1]}</td>`;
-                html += `<td>${f1 === 'update_time_2' ? renderVal(data[f1]) : `<span class="field-value" id="fv-${f1}" onclick="editField('${f1}')">${renderVal(data[f1])}</span>`}</td>`;
-                if (allFields[i + 1]) {
-                    const f2 = allFields[i + 1];
-                    html += `<td>${fieldLabels[f2]}</td>`;
-                    html += `<td>${f2 === 'update_time_2' ? renderVal(data[f2]) : `<span class="field-value" id="fv-${f2}" onclick="editField('${f2}')">${renderVal(data[f2])}</span>`}</td>`;
-                } else {
-                    html += '<td></td><td></td>';
-                }
-                html += '</tr>';
-            }
-            tableEl.innerHTML = html;
-        }
-
         // ========== 标签页切换 ==========
         function switchTab(tabEl, paneId) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));

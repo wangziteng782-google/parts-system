@@ -199,20 +199,25 @@
                 if (matchingPrices.length > 0) {
                     listEl.innerHTML = matchingPrices.map(p => {
                         const isActive = currentPanelPriceId === p.id;
-                        const noTax = hasConfiguredSupplierPrice(p.no_tax_price) ? `¥${escapeHtml(String(p.no_tax_price))}` : '-';
-                        const specialTax = supplierInvoicePriceText(p.purchase_special_invoice, '专票');
-                        const normalTax = supplierInvoicePriceText(p.purchase_general_invoice, '普票');
+                        const extFields = (p.external_price_fields || '').split(',').filter(Boolean);
+                        const priceMap = {
+                            no_tax: hasConfiguredSupplierPrice(p.no_tax_price) ? `¥${escapeHtml(String(p.no_tax_price))}` : null,
+                            special: supplierInvoicePriceText(p.purchase_special_invoice, '专票'),
+                            general: supplierInvoicePriceText(p.purchase_general_invoice, '普票'),
+                        };
+                        const labelMap = { no_tax: '不含票', special: '含专票', general: '含普票' };
+                        // 展示全部 3 个价格，对外展示的加标记
+                        const allRows = Object.keys(labelMap).map(f => {
+                            const val = priceMap[f] || '-';
+                            const badge = extFields.includes(f) ? '<span class="sp-ext-badge">外</span>' : '';
+                            return `<div class="sp-info-row"><span class="sp-label">${labelMap[f]}</span><span class="sp-val">${escapeHtml(val)}${badge}</span></div>`;
+                        }).join('');
                         return `<div class="sp-supplier-card ${isActive ? 'active' : ''}" data-price-id="${p.id}" onclick="selectPanelSupplier(${p.id})">
                             <div class="sp-card-header">
                                 <span class="sp-card-name">${escapeHtml(p.supplier || '未命名')}</span>
-                                <span class="sp-external-badge ${Number(p.is_external_visible) === 1 ? 'visible' : ''}">${Number(p.is_external_visible) === 1 ? '对外展示' : '内部使用'}</span>
                                 <button class="sp-card-del" onclick="event.stopPropagation();deletePanelSupplier(${p.id})" title="删除">×</button>
                             </div>
-                            <div class="sp-card-info">
-                                <div class="sp-info-row"><span class="sp-label">不含票单价</span><span class="sp-val">${noTax}</span></div>
-                                <div class="sp-info-row"><span class="sp-label">含专票</span><span class="sp-val">${escapeHtml(specialTax || '-')}</span></div>
-                                <div class="sp-info-row"><span class="sp-label">含普票</span><span class="sp-val">${escapeHtml(normalTax || '-')}</span></div>
-                            </div>
+                            ${allRows ? `<div class="sp-card-info">${allRows}</div>` : ''}
                         </div>`;
                     }).join('');
                 } else {
@@ -223,14 +228,21 @@
             // 右侧详情表单
             const detailEl = document.getElementById('spDetailArea');
             if (detailEl) {
+                // 缓存同规格组合的所有供应商价格 + 当前编辑的 priceId，供 _limitExtFields 统计用
+                detailEl.dataset.matchingPrices = JSON.stringify(matchingPrices);
+                detailEl.dataset.currentPriceId = currentPanelPriceId || '';
                 if (isNewSupplierMode) {
                     detailEl.innerHTML = renderSupplierDetailForm({ isNew: true });
-                    loadSupplierDropdown(''); // 加载供应商列表
+                    loadSupplierDropdown(''); // 加载供应商列表（旧，兼容）
+                    _initSupplierSelect(null, ''); // 初始化 OA 供应商下拉
+                    _limitExtFields(); // 应用对外展示数量限制
                 } else if (currentPanelPriceId) {
                     const p = matchingPrices.find(x => x.id === currentPanelPriceId);
                     if (p) {
                         detailEl.innerHTML = renderSupplierDetailForm(p);
-                        loadSupplierDropdown(p.supplier); // 加载并选中当前供应商
+                        loadSupplierDropdown(p.supplier); // 加载并选中当前供应商（旧，兼容）
+                        _initSupplierSelect(p.oa_supplier_id, p.supplier); // 初始化 OA 供应商下拉
+                        _limitExtFields(); // 应用对外展示数量限制
                     }
                 } else {
                     detailEl.innerHTML = '<div class="sp-detail-empty">请选择左侧供应商查看详情，或点击上方按钮新增供应商</div>';
@@ -245,15 +257,6 @@
             const unifiedBox = document.getElementById('spUnifiedPriceBox');
             if (multiBox) multiBox.classList.toggle('hide', isUnified);
             if (unifiedBox) unifiedBox.classList.toggle('hide', !isUnified);
-        }
-
-        function toggleSupplierQuoteInput(checkboxId, inputId) {
-            const checkbox = document.getElementById(checkboxId);
-            const input = document.getElementById(inputId);
-            if (!checkbox || !input) return;
-            input.disabled = !checkbox.checked;
-            input.classList.remove('sp-input-error');
-            if (checkbox.checked) input.focus();
         }
 
         function toggleSupplierFreight() {
@@ -329,6 +332,98 @@
             }
         }
 
+        // OA 供应商缓存（避免重复请求）
+        let _oaSupplierCache = null;
+        let _oaSupplierCapability = {}; // { oa_supplier_id: { is_special_invoice, is_normal_invoice, is_no_invoice, tax_points } }
+
+        async function _loadOaSuppliers() {
+            if (_oaSupplierCache) return _oaSupplierCache;
+            try {
+                const res = await fetch('/api/suppliers');
+                if (res.ok) _oaSupplierCache = await res.json();
+            } catch (e) { /* 忽略，使用手动输入兜底 */ }
+            return _oaSupplierCache || [];
+        }
+
+        async function _loadOaSupplierCapability(oaId) {
+            if (!oaId || _oaSupplierCapability[oaId]) return _oaSupplierCapability[oaId];
+            try {
+                const res = await fetch(`/api/oa/suppliers/${oaId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    _oaSupplierCapability[oaId] = {
+                        is_special: !!data.is_special_invoice,
+                        is_normal: !!data.is_normal_invoice,
+                        is_no_tax: !!data.is_no_invoice,
+                        special_tax: Number(data.special_tax_point) || 0,
+                        normal_tax: Number(data.normal_tax_point) || 0,
+                        no_tax_point: Number(data.no_tax_point) || 0,
+                    };
+                }
+            } catch (e) { /* 忽略 */ }
+            return _oaSupplierCapability[oaId] || null;
+        }
+
+        // 根据供应商选择更新开票能力 → 禁用不支持的票种输入框和对外展示开关
+        async function _onSupplierChanged() {
+            const oaSel = document.getElementById('spOaSupplierSelect');
+            const oaId = oaSel ? Number(oaSel.value) : null;
+            const cap = oaId ? await _loadOaSupplierCapability(oaId) : null;
+            const fields = [
+                { key: 'noTax', input: 'spInputNoTax', extSwitch: 'spExtNoTax', supported: cap ? cap.is_no_tax : true },
+                { key: 'special', input: 'spSpecialVal', extSwitch: 'spExtSpecial', supported: cap ? cap.is_special : true },
+                { key: 'normal', input: 'spNormalVal', extSwitch: 'spExtNormal', supported: cap ? cap.is_normal : true },
+            ];
+            for (const f of fields) {
+                const inp = document.getElementById(f.input);
+                const sw = document.getElementById(f.extSwitch);
+                if (!f.supported) {
+                    if (inp) { inp.value = ''; inp.disabled = true; inp.classList.add('sp-input-disabled'); }
+                    if (sw) { sw.checked = false; sw.disabled = true; sw.dataset.oaDisabled = '1'; }
+                } else {
+                    if (inp) { inp.disabled = false; inp.classList.remove('sp-input-disabled'); }
+                    if (sw) { sw.disabled = false; sw.dataset.oaDisabled = ''; }
+                }
+            }
+            // 重新校验3选限制（供应商变更后可能所有开关都启用）
+            _limitExtFields();
+            // 缓存税点供价格自动计算使用
+            if (cap) {
+                document.getElementById('spDetailArea').dataset.taxSpecial = cap.special_tax;
+                document.getElementById('spDetailArea').dataset.taxNormal = cap.normal_tax;
+            }
+        }
+
+        // 价格自动计算：填写一个价格 → 根据税点算另外两个
+        function _autoCalcPrices(sourceKey) {
+            const taxSpecial = Number(document.getElementById('spDetailArea')?.dataset.taxSpecial) || 0;
+            const taxNormal = Number(document.getElementById('spDetailArea')?.dataset.taxNormal) || 0;
+            const noTaxEl = document.getElementById('spInputNoTax');
+            const specialEl = document.getElementById('spSpecialVal');
+            const normalEl = document.getElementById('spNormalVal');
+            if (!noTaxEl || !specialEl || !normalEl) return;
+            // 统一价模式下不自动算
+            if (document.getElementById('spCkUnified')?.checked) return;
+
+            const noTaxVal = noTaxEl.value.trim();
+            const specialVal = specialEl.value.trim();
+            const normalVal = normalEl.value.trim();
+
+            if (sourceKey === 'noTax' && noTaxVal !== '' && !isNaN(Number(noTaxVal))) {
+                const base = Number(noTaxVal);
+                if (taxSpecial && !specialVal) specialEl.value = (base * (1 + taxSpecial / 100)).toFixed(2);
+                if (taxNormal && !normalVal) normalEl.value = (base * (1 + taxNormal / 100)).toFixed(2);
+            } else if (sourceKey === 'special' && specialVal !== '' && !isNaN(Number(specialVal)) && taxSpecial) {
+                const base = Number(specialVal) / (1 + taxSpecial / 100);
+                if (!noTaxVal) noTaxEl.value = base.toFixed(2);
+                if (taxNormal && !normalVal) normalEl.value = (base * (1 + taxNormal / 100)).toFixed(2);
+            } else if (sourceKey === 'normal' && normalVal !== '' && !isNaN(Number(normalVal)) && taxNormal) {
+                const base = Number(normalVal) / (1 + taxNormal / 100);
+                if (!noTaxVal) noTaxEl.value = base.toFixed(2);
+                if (taxSpecial && !specialVal) specialEl.value = (base * (1 + taxSpecial / 100)).toFixed(2);
+            }
+        }
+
         function renderSupplierDetailForm(p) {
             const isNew = p.isNew || false;
             const hasNoTax = !isNew && p.no_tax_price !== null && p.no_tax_price !== undefined && p.no_tax_price !== '';
@@ -338,6 +433,11 @@
             const isUnified = hasNoTax && hasSpecial && hasNormal && Number(p.no_tax_price) === Number(p.purchase_special_invoice) && Number(p.no_tax_price) === Number(p.purchase_general_invoice);
             const unifiedValue = isUnified ? p.no_tax_price : '';
             const freightChoice = p.freight_remark === '不含运费' ? 'exclude' : (p.freight_remark ? 'include' : '');
+            // external_price_fields → 三个 SET 开关
+            const extFields = (p.external_price_fields || '').split(',').filter(Boolean);
+            const extNoTax = extFields.includes('no_tax');
+            const extSpecial = extFields.includes('special');
+            const extNormal = extFields.includes('general');
             return `<div class="sp-detail-form">
                 <!-- 基础信息 -->
                 <div class="sp-card">
@@ -345,22 +445,18 @@
                     <div class="sp-row-main" style="margin-top:12px;">
                         <div class="sp-col-item" style="flex:2">
                             <label>供应商名称<span class="sp-required-mark">*</span></label>
-                            <input id="spSupplierName" class="sp-input-text" list="spSupplierNameList" autocomplete="off" placeholder="输入名称搜索，或直接填写新供应商" value="${escapeHtml(p.supplier || '')}">
-                            <datalist id="spSupplierNameList"></datalist>
+                            <select id="spOaSupplierSelect" class="sp-input-text" style="width:100%" onchange="_onSupplierChanged()">
+                                <option value="">-- 选择或手动输入 --</option>
+                            </select>
+                            <input id="spSupplierName" class="sp-input-text" style="margin-top:6px" placeholder="手动输入供应商名称（非OA供应商）" value="${escapeHtml(p.supplier || '')}">
                         </div>
-                        <label class="sp-external-switch">
-                            <input id="spExternalVisible" type="checkbox" ${Number(p.is_external_visible) === 1 ? 'checked' : ''}
-                                   onchange="toggleSupplierExternalVisible(this, ${isNew ? 'null' : p.id})">
-                            <span class="sp-external-switch-control"></span>
-                            <span><strong>是否对外展示</strong><small>开启后销售页面使用该供应商报价</small></span>
-                        </label>
                     </div>
                 </div>
 
                 <!-- 供应商报价设置 -->
                 <div class="sp-card">
                     <div class="sp-card-title-bar">
-                        <h3>供应商报价设置<span class="sp-required-mark">*</span><span class="sp-required-tip">至少选择并填写一种报价</span></h3>
+                        <h3>供应商报价设置<span class="sp-required-mark">*</span><span class="sp-required-tip">至少填写一种报价</span></h3>
                         <label class="sp-unified-check">
                             <input id="spCkUnified" type="checkbox" ${isUnified ? 'checked' : ''} onchange="toggleUnifiedPrice()">
                             <span>统一价（无票 / 专票 / 普票同价）</span>
@@ -373,29 +469,47 @@
                         <!-- 不含票单价 -->
                         <div class="sp-col-item">
                             <div class="sp-title-row">
-                                <input id="spCkNoTax" type="checkbox" ${hasNoTax ? 'checked' : ''} onchange="toggleSupplierQuoteInput('spCkNoTax','spInputNoTax')">
-                                <label for="spCkNoTax">不含票单价<span class="sp-required-mark sp-conditional-required">*</span></label>
+                                <label>不含票单价<span class="sp-required-mark">*</span></label>
+                                <label class="sp-ext-mini">
+                                    <span class="sp-toggle">
+                                        <input id="spExtNoTax" type="checkbox" ${extNoTax ? 'checked' : ''} data-was-checked="${extNoTax ? '1' : ''}" data-oa-disabled="" onchange="_limitExtFields()">
+                                        <span class="sp-toggle-track"></span>
+                                    </span>
+                                    <small>展示</small>
+                                </label>
                             </div>
-                            <input id="spInputNoTax" class="sp-input-money" type="text" value="${p.no_tax_price ?? ''}" placeholder="0.00" ${hasNoTax ? '' : 'disabled'}>
+                            <input id="spInputNoTax" class="sp-input-money" type="text" value="${p.no_tax_price ?? ''}" placeholder="0.00" oninput="_autoCalcPrices('noTax')">
                         </div>
 
                         <!-- 含专票 -->
                         <div class="sp-col-item">
                             <div class="sp-title-row">
-                                <input id="spCkSpecial" type="checkbox" ${hasSpecial ? 'checked' : ''} onchange="toggleSupplierQuoteInput('spCkSpecial','spSpecialVal')">
-                                <label for="spCkSpecial">含专票<span class="sp-required-mark sp-conditional-required">*</span></label>
+                                <label>含专票<span class="sp-required-mark">*</span></label>
+                                <label class="sp-ext-mini">
+                                    <span class="sp-toggle">
+                                        <input id="spExtSpecial" type="checkbox" ${extSpecial ? 'checked' : ''} data-was-checked="${extSpecial ? '1' : ''}" data-oa-disabled="" onchange="_limitExtFields()">
+                                        <span class="sp-toggle-track"></span>
+                                    </span>
+                                    <small>展示</small>
+                                </label>
                             </div>
-                            <input id="spSpecialVal" class="sp-input-money" type="text" value="${p.purchase_special_invoice ?? ''}" placeholder="0.00" ${hasSpecial ? '' : 'disabled'}>
+                            <input id="spSpecialVal" class="sp-input-money" type="text" value="${p.purchase_special_invoice ?? ''}" placeholder="0.00" oninput="_autoCalcPrices('special')">
                             <div class="sp-price-zero-tip">填写 0 表示可以开专票，但价格待定</div>
                         </div>
 
                         <!-- 含普票 -->
                         <div class="sp-col-item">
                             <div class="sp-title-row">
-                                <input id="spCkNormal" type="checkbox" ${hasNormal ? 'checked' : ''} onchange="toggleSupplierQuoteInput('spCkNormal','spNormalVal')">
-                                <label for="spCkNormal">含普票<span class="sp-required-mark sp-conditional-required">*</span></label>
+                                <label>含普票<span class="sp-required-mark">*</span></label>
+                                <label class="sp-ext-mini">
+                                    <span class="sp-toggle">
+                                        <input id="spExtNormal" type="checkbox" ${extNormal ? 'checked' : ''} data-was-checked="${extNormal ? '1' : ''}" data-oa-disabled="" onchange="_limitExtFields()">
+                                        <span class="sp-toggle-track"></span>
+                                    </span>
+                                    <small>展示</small>
+                                </label>
                             </div>
-                            <input id="spNormalVal" class="sp-input-money" type="text" value="${p.purchase_general_invoice ?? ''}" placeholder="0.00" ${hasNormal ? '' : 'disabled'}>
+                            <input id="spNormalVal" class="sp-input-money" type="text" value="${p.purchase_general_invoice ?? ''}" placeholder="0.00" oninput="_autoCalcPrices('normal')">
                             <div class="sp-price-zero-tip">填写 0 表示可以开普票，但价格待定</div>
                         </div>
                     </div>
@@ -501,43 +615,6 @@
             </div>`;
         }
 
-        async function toggleSupplierExternalVisible(input, priceId) {
-            const visible = input.checked;
-            if (!priceId) {
-                showToast('对外展示设置将在保存新增后生效');
-                return;
-            }
-            input.disabled = true;
-            try {
-                const res = await fetch(`/api/products/${currentProductId}/variant-prices/${priceId}/external-visible`, {
-                    method: 'PATCH',
-                    headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({is_external_visible: visible}),
-                });
-                const result = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(result.detail || '对外展示设置保存失败');
-
-                currentVariantPrices.forEach(price => {
-                    if (price.id === priceId) price.is_external_visible = visible ? 1 : 0;
-                    else if (visible && matchSpecs(price.specs, currentPanelSpecs)) price.is_external_visible = 0;
-                });
-                document.querySelectorAll('#spSupplierList .sp-supplier-card').forEach(card => {
-                    const price = currentVariantPrices.find(item => item.id === Number(card.dataset.priceId));
-                    const badge = card.querySelector('.sp-external-badge');
-                    if (!price || !badge) return;
-                    const isVisible = Number(price.is_external_visible) === 1;
-                    badge.classList.toggle('visible', isVisible);
-                    badge.textContent = isVisible ? '对外展示' : '内部使用';
-                });
-                showToast(result.message || (visible ? '已设为对外展示' : '已取消对外展示'), 'success');
-            } catch (error) {
-                input.checked = !visible;
-                showToast(error.message || '对外展示设置保存失败', 'error');
-            } finally {
-                input.disabled = false;
-            }
-        }
-
         function selectPanelSupplier(priceId) {
             currentPanelPriceId = priceId;
             isNewSupplierMode = false; // 退出新增模式
@@ -553,6 +630,77 @@
 
         let supplierSaveInProgress = false;
 
+        // 整个规格组合下所有供应商加起来最多对外展示 3 个价格
+        function _limitExtFields() {
+            const ids = ['spExtNoTax', 'spExtSpecial', 'spExtNormal'];
+            // 统计同规格组合下其他供应商已对外展示的价格数量
+            const matchingPrices = JSON.parse(document.getElementById('spDetailArea')?.dataset.matchingPrices || '[]');
+            const currentPriceId = document.getElementById('spDetailArea')?.dataset.currentPriceId || null;
+            let savedExtCount = 0;
+            for (const p of matchingPrices) {
+                if (currentPriceId && String(p.id) === String(currentPriceId)) continue;
+                const fields = (p.external_price_fields || '').split(',').filter(Boolean);
+                savedExtCount += fields.length;
+            }
+            // 当前表单勾选的开关
+            let checked = ids.filter(id => document.getElementById(id)?.checked);
+            const total = savedExtCount + checked.length;
+            // 找到刚被勾选的那个（本次点击触发而非之前已勾选的），回滚并提示
+            if (total > 3) {
+                const clicked = ids.find(id => {
+                    const el = document.getElementById(id);
+                    return el && el.checked && el.dataset.wasChecked !== '1';
+                });
+                if (clicked) {
+                    document.getElementById(clicked).checked = false;
+                    showToast(`该规格组合已对外展示 ${savedExtCount} 个价格，最多 3 个`, 'error');
+                    checked = ids.filter(id => document.getElementById(id)?.checked); // 回滚后重新统计
+                }
+            }
+            // 根据剩余额度禁用/启用未勾选的开关
+            const remaining = Math.max(0, 3 - savedExtCount);
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el || el.dataset.oaDisabled === '1') return;
+                if (!el.checked && checked.length >= remaining) {
+                    el.disabled = true;
+                } else {
+                    el.disabled = false;
+                }
+            });
+            // 记录当前勾选状态供下次对比
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.dataset.wasChecked = el.checked ? '1' : '';
+            });
+        }
+
+        // 收集 external_price_fields 值（逗号分隔的 SET 字符串）
+        function _collectExtPriceFields() {
+            const fields = [];
+            if (document.getElementById('spExtNoTax')?.checked) fields.push('no_tax');
+            if (document.getElementById('spExtSpecial')?.checked) fields.push('special');
+            if (document.getElementById('spExtNormal')?.checked) fields.push('general');
+            return fields.join(',') || null;
+        }
+
+        // 初始化供应商下拉（OA供应商 + 本地兜底）
+        async function _initSupplierSelect(currentOaId, currentName) {
+            const sel = document.getElementById('spOaSupplierSelect');
+            if (!sel) return;
+            sel.innerHTML = '<option value="">-- 选择或手动输入 --</option>';
+            const list = await _loadOaSuppliers();
+            for (const s of list) {
+                const opt = document.createElement('option');
+                opt.value = s.oa_supplier_id ?? '';
+                opt.text = s.supplier_name;
+                if (s.oa_supplier_id && s.oa_supplier_id === currentOaId) opt.selected = true;
+                sel.appendChild(opt);
+            }
+            // 选中 OA 供应商后自动触发能力校验
+            if (currentOaId) _onSupplierChanged();
+        }
+
         async function savePanelSupplier(priceId) {
             // 获取供应商名称
             const supplierInput = document.getElementById('spSupplierName');
@@ -562,7 +710,7 @@
             // 获取统一价状态
             const isUnified = document.getElementById('spCkUnified')?.checked || false;
 
-            // 报价设置为必填：统一价需填写统一单价；多报价中勾选几项就必须填写几项
+            // 报价设置：统一价需填写统一单价；多报价至少填写一项
             let unifiedPrice = null;
             let noTaxPrice = null;
             let specialPrice = null;
@@ -572,24 +720,18 @@
                 if (unifiedPrice === null) return;
                 noTaxPrice = specialPrice = normalPrice = unifiedPrice;
             } else {
-                const quoteOptions = [
-                    {checkbox:'spCkNoTax', input:'spInputNoTax', label:'不含票单价', key:'noTax'},
-                    {checkbox:'spCkSpecial', input:'spSpecialVal', label:'含专票价格', key:'special'},
-                    {checkbox:'spCkNormal', input:'spNormalVal', label:'含普票价格', key:'normal'}
-                ];
-                const selectedQuotes = quoteOptions.filter(item => document.getElementById(item.checkbox)?.checked);
-                if (!selectedQuotes.length) {
+                // 读取三个价格输入框的值（有值才校验格式，无值视为未填写）
+                const noTaxRaw = document.getElementById('spInputNoTax')?.value.trim() || '';
+                const specialRaw = document.getElementById('spSpecialVal')?.value.trim() || '';
+                const normalRaw = document.getElementById('spNormalVal')?.value.trim() || '';
+                if (!noTaxRaw && !specialRaw && !normalRaw) {
                     document.getElementById('spMultiPriceBox')?.scrollIntoView({behavior:'smooth', block:'center'});
-                    showToast('供应商报价设置至少勾选一种报价', 'error');
+                    showToast('供应商报价设置至少填写一种报价', 'error');
                     return;
                 }
-                for (const item of selectedQuotes) {
-                    const value = requiredSupplierPrice(item.input, item.label);
-                    if (value === null) return;
-                    if (item.key === 'noTax') noTaxPrice = value;
-                    if (item.key === 'special') specialPrice = value;
-                    if (item.key === 'normal') normalPrice = value;
-                }
+                if (noTaxRaw) { noTaxPrice = Number(noTaxRaw); if (!Number.isFinite(noTaxPrice) || noTaxPrice < 0) { showSupplierRequiredError(document.getElementById('spInputNoTax'), '请填写正确的不含票单价'); return; } }
+                if (specialRaw) { specialPrice = Number(specialRaw); if (!Number.isFinite(specialPrice) || specialPrice < 0) { showSupplierRequiredError(document.getElementById('spSpecialVal'), '请填写正确的含专票价格'); return; } }
+                if (normalRaw) { normalPrice = Number(normalRaw); if (!Number.isFinite(normalPrice) || normalPrice < 0) { showSupplierRequiredError(document.getElementById('spNormalVal'), '请填写正确的含普票价格'); return; } }
             }
 
             // 运费设置为必填，必须明确选择含运费或不含运费
@@ -611,8 +753,17 @@
             const warrantyTime = warrantyInput?.value.trim() || '';
             if (!warrantyTime) { showSupplierRequiredError(warrantyInput, '请填写质保时间，若无质保请选择“无质保”'); return; }
 
+            // OA 供应商：从下拉取值，同时写入 supplier 字段（用OA名称）
+            const oaSel = document.getElementById('spOaSupplierSelect');
+            const oaId = oaSel ? Number(oaSel.value) : null;
+            const oaName = oaId ? oaSel.options[oaSel.selectedIndex].text : '';
+            const finalSupplier = oaId ? oaName : supplierName;
+
+            // external_price_fields：收集勾选的对外展示开关
+            const extFields = _collectExtPriceFields();
+
             const payload = {
-                supplier: supplierName,
+                supplier: finalSupplier,
                 purchase_cost: isUnified ? unifiedPrice : null,
                 no_tax_price: noTaxPrice,
                 purchase_special_invoice: specialPrice,
@@ -624,7 +775,8 @@
                 shipping_origin: document.getElementById('spDeliveryPlace')?.value.trim() || null,
                 remark: document.getElementById('spRemark')?.value.trim() || null,
                 expire_date: document.getElementById('spValidTime')?.value || null,
-                is_external_visible: document.getElementById('spExternalVisible')?.checked || false,
+                oa_supplier_id: oaId || null,
+                external_price_fields: extFields,
             };
 
             if (supplierSaveInProgress) return;

@@ -12,7 +12,7 @@ import pymysql
 from ..bootstrap import app
 from ..auth import get_current_user, get_current_user_id
 from ..feedback import FEEDBACK_TYPE_LABELS
-from ..shared import IMAGE_FIELDS, get_db, logger, parse_image_urls
+from ..shared import IMAGE_FIELDS, get_db, get_oa_db, logger, parse_image_urls
 
 
 # 配件库销售价系数。匹配优先级：产品名称 > 产品分类 > 默认系数。
@@ -26,17 +26,6 @@ SALES_PRODUCT_TYPE_MULTIPLIERS = {}
 # 默认系数
 DEFAULT_SALES_PRICE_MULTIPLIER = Decimal("1.15")
 
-OA_DB_CONFIG = {
-    "host": os.getenv("OA_DB_HOST", "120.46.152.222").strip(),
-    "port": int(os.getenv("OA_DB_PORT", "3306")),
-    "user": os.getenv("OA_DB_USER", "oa_yixiuti").strip(),
-    "password": os.getenv("OA_DB_PASSWORD", ""),
-    "database": os.getenv("OA_DB_NAME", "oa_yixiuti").strip(),
-    "charset": "utf8mb4",
-    "cursorclass": pymysql.cursors.DictCursor,
-    "connect_timeout": int(os.getenv("OA_DB_CONNECT_TIMEOUT", "5")),
-    "read_timeout": int(os.getenv("OA_DB_READ_TIMEOUT", "12")),
-}
 
 
 class SalesFeedbackRequest(BaseModel):
@@ -115,10 +104,6 @@ def _oa_image(value) -> Optional[str]:
     return urls[0] if urls else None
 
 
-def _oa_connection():
-    if not OA_DB_CONFIG["password"]:
-        raise RuntimeError("未配置 OA_DB_PASSWORD")
-    return pymysql.connect(**OA_DB_CONFIG)
 
 
 def _record_sales_query(
@@ -545,7 +530,7 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
         "price_asc": f"({price_sql} IS NULL), {price_sql} ASC, m.id DESC",
         "price_desc": f"({price_sql} IS NULL), {price_sql} DESC, m.id DESC",
     }[sort]
-    conn = _oa_connection()
+    conn = get_oa_db()
     try:
         cursor = conn.cursor()
         from_sql = (
@@ -619,7 +604,7 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
 
 
 def _fetch_inquiry_communications(order_goods_id: int) -> list:
-    conn = _oa_connection()
+    conn = get_oa_db()
     try:
         cursor = conn.cursor()
         cursor.execute(

@@ -11,8 +11,8 @@ from pydantic import BaseModel
 from ..auth import get_current_user_id
 from ..bootstrap import app, templates
 from ..feedback import FEEDBACK_TYPE_LABELS
-from ..shared import get_db, logger
-from .sales import _oa_connection, _oa_image
+from ..shared import get_db, get_oa_db, logger
+from .sales import _oa_image
 
 
 class InquiryListingRequest(BaseModel):
@@ -103,7 +103,7 @@ def _fetch_oa_inquiries(keyword: str) -> list[dict]:
             "OR g.goods_spec LIKE %s OR f.factory_name LIKE %s)"
         )
         params.extend([like_keyword] * 4)
-    conn = _oa_connection()
+    conn = get_oa_db()
     try:
         cursor = conn.cursor()
         cursor.execute(

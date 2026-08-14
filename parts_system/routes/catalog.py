@@ -27,19 +27,39 @@ async def list_categories():
 
 @app.get("/api/suppliers")
 async def list_suppliers():
-    """获取所有去重后的供应商名称列表"""
+    """获取供应商列表：OA供应商为主，本地历史供应商名作为兜底。"""
     logger.info("[查询] 供应商列表")
+    # 1. 从 OA 表拿全量供应商
+    oa_suppliers = []
+    try:
+        oa_conn = get_oa_db()
+        try:
+            oa_cur = oa_conn.cursor()
+            oa_cur.execute(
+                "SELECT id, supplier_name FROM yh_supplier WHERE delete_time IS NULL ORDER BY id"
+            )
+            oa_suppliers = [
+                {"oa_supplier_id": row["id"], "supplier_name": row["supplier_name"], "from_oa": True}
+                for row in oa_cur.fetchall()
+            ]
+        finally:
+            oa_conn.close()
+    except Exception as e:
+        logger.warning(f"[查询] OA供应商读取失败，仅使用本地供应商 | error={e}")
+
+    # 2. 从本地拿历史供应商名称（兜底，防止历史数据断档）
     conn = get_db()
     try:
         cursor = conn.cursor()
-        # 分别从 parts 与 product_variant_prices 取供应商，Python 层合并去重，
-        # 避免两表 supplier 列 collation 不同导致 UNION 报错
-        cursor.execute("SELECT DISTINCT supplier FROM parts WHERE supplier IS NOT NULL AND supplier != ''")
-        rows_parts = cursor.fetchall()
         cursor.execute("SELECT DISTINCT supplier FROM product_variant_prices WHERE supplier IS NOT NULL AND supplier != ''")
-        rows_prices = cursor.fetchall()
-        result = sorted({r['supplier'] for r in rows_parts} | {r['supplier'] for r in rows_prices})
-        logger.info(f"[查询] 供应商列表完成 | 共 {len(result)} 个供应商")
+        local_names = {r['supplier'] for r in cursor.fetchall()}
+        # 3. 合并：OA 优先，本地名称作为补充
+        oa_names = {s["supplier_name"] for s in oa_suppliers}
+        result = list(oa_suppliers)
+        for name in sorted(local_names):
+            if name not in oa_names:
+                result.append({"oa_supplier_id": None, "supplier_name": name, "from_oa": False})
+        logger.info(f"[查询] 供应商列表完成 | 共 {len(result)} 个供应商（OA {len(oa_suppliers)}，本地兜底 {len(result) - len(oa_suppliers)}）")
         return result
     except Exception as e:
         logger.error(f"[查询] 供应商列表失败 | error={e}")
