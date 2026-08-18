@@ -11,7 +11,8 @@ import jwt
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .shared import get_db, logger
+from .model import get_db
+from .config import logger
 
 
 JWT_QUERY_NAME = "t"

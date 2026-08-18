@@ -12,7 +12,9 @@ import pymysql
 from ..bootstrap import app
 from ..auth import get_current_user, get_current_user_id
 from ..feedback import FEEDBACK_TYPE_LABELS
-from ..shared import IMAGE_FIELDS, get_db, get_oa_db, logger, parse_image_urls
+from ..config import IMAGE_FIELDS, logger
+from ..model import get_db, get_oa_db
+from ..util import parse_image_urls
 
 
 # 配件库销售价系数。匹配优先级：产品名称 > 产品分类 > 默认系数。
@@ -647,7 +649,7 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
         cursor.execute(
             """SELECT price.id, price.variant_group_id, price.supplier,
                       price.is_external_visible,
-                      price.purchase_cost, price.no_tax_price,
+                      price.no_tax_price,
                        price.purchase_special_invoice,
                        price.purchase_general_invoice,
                        price.purchase_shipping, price.freight_remark,
@@ -691,7 +693,7 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
                    ON spec.id=link.spec_id
                 GROUP BY price.id, price.variant_group_id, price.supplier,
                          price.is_external_visible,
-                          price.purchase_cost, price.no_tax_price,
+                          price.no_tax_price,
                           price.purchase_special_invoice,
                           price.purchase_general_invoice,
                           price.purchase_shipping, price.freight_remark,

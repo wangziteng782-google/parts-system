@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import HTTPException
 
 from ..bootstrap import app
-from ..shared import get_db
+from ..model import get_db
 
 
 @app.get("/health")

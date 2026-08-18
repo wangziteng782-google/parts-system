@@ -643,6 +643,9 @@ async function init() {
                 currentVariantCombinations = combinationsRes.ok ? await combinationsRes.json() : [];
                 currentProductFeedback = feedbackRes.ok ? await feedbackRes.json() : [];
                 currentProductFeedbackHistory = feedbackHistoryRes.ok ? await feedbackHistoryRes.json() : [];
+                // 预加载所有供应商的开票能力，用于价格展示过滤
+                const oaIds = [...new Set(currentVariantPrices.map(p => p.oa_supplier_id).filter(Boolean))];
+                await Promise.all(oaIds.map(id => _loadOaSupplierCapability(id)));
                 selectedVariantValues = [];
                 currentSelectedVariantPrice = null;
                 renderDetail(currentData);

@@ -96,20 +96,21 @@
             if (hasSupplier) {
                 supplierPricesHtml = prices.map(p => {
                     const name = escapeHtml(p.supplier || '未命名');
+                    const cap = p.oa_supplier_id ? _oaSupplierCapability[p.oa_supplier_id] : null;
                     return `<div class="vs-supplier-price-card">
                         <div class="vs-supplier-price-name">${name}</div>
                         <div class="vs-supplier-price-list">
                             <div class="vs-supplier-price-row">
                                 <span class="vs-price-label">不含票单价</span>
-                                ${formatSpecSupplierPrice(p.no_tax_price)}
+                                ${(!cap || cap.is_no_tax) ? formatSpecSupplierPrice(p.no_tax_price) : '<span class="vs-price-empty">不支持</span>'}
                             </div>
                             <div class="vs-supplier-price-row">
                                 <span class="vs-price-label">含专票</span>
-                                ${formatSpecSupplierPrice(p.purchase_special_invoice, '专票')}
+                                ${(!cap || cap.is_special) ? formatSpecSupplierPrice(p.purchase_special_invoice, '专票') : '<span class="vs-price-empty">不支持</span>'}
                             </div>
                             <div class="vs-supplier-price-row">
                                 <span class="vs-price-label">含普票</span>
-                                ${formatSpecSupplierPrice(p.purchase_general_invoice, '普票')}
+                                ${(!cap || cap.is_normal) ? formatSpecSupplierPrice(p.purchase_general_invoice, '普票') : '<span class="vs-price-empty">不支持</span>'}
                             </div>
                         </div>
                     </div>`;
@@ -184,10 +185,14 @@
         }
 
         // 只更新内容区域（左侧列表 + 右侧详情），不重新创建容器
-        function renderPanelContent() {
+        async function renderPanelContent() {
             if (!currentPanelSpecs) return;
 
             const matchingPrices = currentVariantPrices.filter(p => matchSpecs(p.specs, currentPanelSpecs));
+
+            // 预加载所有供应商的开票能力，用于判断是否显示价格
+            const oaIds = [...new Set(matchingPrices.map(p => p.oa_supplier_id).filter(Boolean))];
+            await Promise.all(oaIds.map(id => _loadOaSupplierCapability(id)));
 
             // 更新供应商数量
             const countEl = document.getElementById('spSupplierCount');
@@ -200,10 +205,11 @@
                     listEl.innerHTML = matchingPrices.map(p => {
                         const isActive = currentPanelPriceId === p.id;
                         const extFields = (p.external_price_fields || '').split(',').filter(Boolean);
+                        const cap = p.oa_supplier_id ? _oaSupplierCapability[p.oa_supplier_id] : null;
                         const priceMap = {
-                            no_tax: hasConfiguredSupplierPrice(p.no_tax_price) ? `¥${escapeHtml(String(p.no_tax_price))}` : null,
-                            special: supplierInvoicePriceText(p.purchase_special_invoice, '专票'),
-                            general: supplierInvoicePriceText(p.purchase_general_invoice, '普票'),
+                            no_tax: (!cap || cap.is_no_tax) && hasConfiguredSupplierPrice(p.no_tax_price) ? `¥${escapeHtml(String(p.no_tax_price))}` : null,
+                            special: (!cap || cap.is_special) && supplierInvoicePriceText(p.purchase_special_invoice, '专票'),
+                            general: (!cap || cap.is_normal) && supplierInvoicePriceText(p.purchase_general_invoice, '普票'),
                         };
                         const labelMap = { no_tax: '不含票', special: '含专票', general: '含普票' };
                         // 展示全部 3 个价格，对外展示的加标记
@@ -248,15 +254,6 @@
                     detailEl.innerHTML = '<div class="sp-detail-empty">请选择左侧供应商查看详情，或点击上方按钮新增供应商</div>';
                 }
             }
-        }
-
-        // 切换统一价显示
-        function toggleUnifiedPrice() {
-            const isUnified = document.getElementById('spCkUnified')?.checked;
-            const multiBox = document.getElementById('spMultiPriceBox');
-            const unifiedBox = document.getElementById('spUnifiedPriceBox');
-            if (multiBox) multiBox.classList.toggle('hide', isUnified);
-            if (unifiedBox) unifiedBox.classList.toggle('hide', !isUnified);
         }
 
         function toggleSupplierFreight() {
@@ -351,13 +348,14 @@
                 const res = await fetch(`/api/oa/suppliers/${oaId}`);
                 if (res.ok) {
                     const data = await res.json();
+                    const parseTaxPoint = (v) => { const n = parseFloat(String(v).replace('%', '')); return isNaN(n) ? 0 : n; };
                     _oaSupplierCapability[oaId] = {
                         is_special: !!data.is_special_invoice,
                         is_normal: !!data.is_normal_invoice,
                         is_no_tax: !!data.is_no_invoice,
-                        special_tax: Number(data.special_tax_point) || 0,
-                        normal_tax: Number(data.normal_tax_point) || 0,
-                        no_tax_point: Number(data.no_tax_point) || 0,
+                        special_tax: parseTaxPoint(data.special_tax_point),
+                        normal_tax: parseTaxPoint(data.normal_tax_point),
+                        no_tax_point: parseTaxPoint(data.no_tax_point),
                     };
                 }
             } catch (e) { /* 忽略 */ }
@@ -387,10 +385,20 @@
             }
             // 重新校验3选限制（供应商变更后可能所有开关都启用）
             _limitExtFields();
-            // 缓存税点供价格自动计算使用
+            // 缓存税点供价格自动计算使用 + 显示税率
+            const taxRow = document.getElementById('spTaxRateRow');
+            const taxSpecialEl = document.getElementById('spTaxSpecial');
+            const taxNormalEl = document.getElementById('spTaxNormal');
             if (cap) {
                 document.getElementById('spDetailArea').dataset.taxSpecial = cap.special_tax;
                 document.getElementById('spDetailArea').dataset.taxNormal = cap.normal_tax;
+                if (taxSpecialEl) taxSpecialEl.textContent = cap.special_tax || '—';
+                if (taxNormalEl) taxNormalEl.textContent = cap.normal_tax || '—';
+                if (taxRow) taxRow.classList.remove('hide');
+            } else {
+                document.getElementById('spDetailArea').dataset.taxSpecial = 0;
+                document.getElementById('spDetailArea').dataset.taxNormal = 0;
+                if (taxRow) taxRow.classList.add('hide');
             }
         }
 
@@ -402,8 +410,6 @@
             const specialEl = document.getElementById('spSpecialVal');
             const normalEl = document.getElementById('spNormalVal');
             if (!noTaxEl || !specialEl || !normalEl) return;
-            // 统一价模式下不自动算
-            if (document.getElementById('spCkUnified')?.checked) return;
 
             const noTaxVal = noTaxEl.value.trim();
             const specialVal = specialEl.value.trim();
@@ -411,16 +417,16 @@
 
             if (sourceKey === 'noTax' && noTaxVal !== '' && !isNaN(Number(noTaxVal))) {
                 const base = Number(noTaxVal);
-                if (taxSpecial && !specialVal) specialEl.value = (base * (1 + taxSpecial / 100)).toFixed(2);
-                if (taxNormal && !normalVal) normalEl.value = (base * (1 + taxNormal / 100)).toFixed(2);
+                if (taxSpecial) specialEl.value = (base * (1 + taxSpecial / 100)).toFixed(2);
+                if (taxNormal) normalEl.value = (base * (1 + taxNormal / 100)).toFixed(2);
             } else if (sourceKey === 'special' && specialVal !== '' && !isNaN(Number(specialVal)) && taxSpecial) {
                 const base = Number(specialVal) / (1 + taxSpecial / 100);
-                if (!noTaxVal) noTaxEl.value = base.toFixed(2);
-                if (taxNormal && !normalVal) normalEl.value = (base * (1 + taxNormal / 100)).toFixed(2);
+                noTaxEl.value = base.toFixed(2);
+                if (taxNormal) normalEl.value = (base * (1 + taxNormal / 100)).toFixed(2);
             } else if (sourceKey === 'normal' && normalVal !== '' && !isNaN(Number(normalVal)) && taxNormal) {
                 const base = Number(normalVal) / (1 + taxNormal / 100);
-                if (!noTaxVal) noTaxEl.value = base.toFixed(2);
-                if (taxSpecial && !specialVal) specialEl.value = (base * (1 + taxSpecial / 100)).toFixed(2);
+                noTaxEl.value = base.toFixed(2);
+                if (taxSpecial) specialEl.value = (base * (1 + taxSpecial / 100)).toFixed(2);
             }
         }
 
@@ -429,9 +435,6 @@
             const hasNoTax = !isNew && p.no_tax_price !== null && p.no_tax_price !== undefined && p.no_tax_price !== '';
             const hasSpecial = !isNew && p.purchase_special_invoice !== null && p.purchase_special_invoice !== undefined && p.purchase_special_invoice !== '';
             const hasNormal = !isNew && p.purchase_general_invoice !== null && p.purchase_general_invoice !== undefined && p.purchase_general_invoice !== '';
-            // 判断是否为统一价：三个价格字段均有值且相同（0 元也是有效价格）
-            const isUnified = hasNoTax && hasSpecial && hasNormal && Number(p.no_tax_price) === Number(p.purchase_special_invoice) && Number(p.no_tax_price) === Number(p.purchase_general_invoice);
-            const unifiedValue = isUnified ? p.no_tax_price : '';
             const freightChoice = p.freight_remark === '不含运费' ? 'exclude' : (p.freight_remark ? 'include' : '');
             // external_price_fields → 三个 SET 开关
             const extFields = (p.external_price_fields || '').split(',').filter(Boolean);
@@ -457,15 +460,15 @@
                 <div class="sp-card">
                     <div class="sp-card-title-bar">
                         <h3>供应商报价设置<span class="sp-required-mark">*</span><span class="sp-required-tip">至少填写一种报价</span></h3>
-                        <label class="sp-unified-check">
-                            <input id="spCkUnified" type="checkbox" ${isUnified ? 'checked' : ''} onchange="toggleUnifiedPrice()">
-                            <span>统一价（无票 / 专票 / 普票同价）</span>
-                        </label>
                     </div>
-                    <div class="sp-tip-desc">说明：此处仅记录供应商多套报价，正式下单采购时需保证发票、合同、结算价格一致。</div>
+                    <div id="spTaxRateRow" class="sp-tax-rate-row hide">
+                        <span class="sp-tax-rate-label">供应商税率：</span>
+                        <span class="sp-tax-rate-item">含专票 <strong id="spTaxSpecial">—</strong>%</span>
+                        <span class="sp-tax-rate-item">含普票 <strong id="spTaxNormal">—</strong>%</span>
+                    </div>
 
                     <!-- 多报价区域 -->
-                    <div id="spMultiPriceBox" class="sp-row-main ${isUnified ? 'hide' : ''}">
+                    <div id="spMultiPriceBox" class="sp-row-main">
                         <!-- 不含票单价 -->
                         <div class="sp-col-item">
                             <div class="sp-title-row">
@@ -478,7 +481,7 @@
                                     <small>展示</small>
                                 </label>
                             </div>
-                            <input id="spInputNoTax" class="sp-input-money" type="text" value="${p.no_tax_price ?? ''}" placeholder="0.00" oninput="_autoCalcPrices('noTax')">
+                            <input id="spInputNoTax" class="sp-input-money" type="text" value="${p.no_tax_price ?? ''}" placeholder="0.00" onblur="_autoCalcPrices('noTax')">
                         </div>
 
                         <!-- 含专票 -->
@@ -493,8 +496,7 @@
                                     <small>展示</small>
                                 </label>
                             </div>
-                            <input id="spSpecialVal" class="sp-input-money" type="text" value="${p.purchase_special_invoice ?? ''}" placeholder="0.00" oninput="_autoCalcPrices('special')">
-                            <div class="sp-price-zero-tip">填写 0 表示可以开专票，但价格待定</div>
+                            <input id="spSpecialVal" class="sp-input-money" type="text" value="${p.purchase_special_invoice ?? ''}" placeholder="0.00" onblur="_autoCalcPrices('special')">
                         </div>
 
                         <!-- 含普票 -->
@@ -509,18 +511,9 @@
                                     <small>展示</small>
                                 </label>
                             </div>
-                            <input id="spNormalVal" class="sp-input-money" type="text" value="${p.purchase_general_invoice ?? ''}" placeholder="0.00" oninput="_autoCalcPrices('normal')">
-                            <div class="sp-price-zero-tip">填写 0 表示可以开普票，但价格待定</div>
+                            <input id="spNormalVal" class="sp-input-money" type="text" value="${p.purchase_general_invoice ?? ''}" placeholder="0.00" onblur="_autoCalcPrices('normal')">
                         </div>
                     </div>
-                    </div>
-
-                    <!-- 统一价区域 -->
-                    <div id="spUnifiedPriceBox" class="${isUnified ? '' : 'hide'}">
-                        <div class="sp-col-item sp-unified-col">
-                            <label>统一单价<span class="sp-required-mark">*</span></label>
-                            <input id="spInputUnified" class="sp-input-money" type="text" value="${unifiedValue || ''}" placeholder="0.00">
-                        </div>
                     </div>
 
                     <!-- 报价有效期 -->
@@ -707,32 +700,22 @@
             const supplierName = supplierInput?.value.trim() || '';
             if (!supplierName) { showSupplierRequiredError(supplierInput, '请填写供应商名称'); return; }
 
-            // 获取统一价状态
-            const isUnified = document.getElementById('spCkUnified')?.checked || false;
-
-            // 报价设置：统一价需填写统一单价；多报价至少填写一项
-            let unifiedPrice = null;
+            // 报价设置：至少填写一项
             let noTaxPrice = null;
             let specialPrice = null;
             let normalPrice = null;
-            if (isUnified) {
-                unifiedPrice = requiredSupplierPrice('spInputUnified', '统一单价');
-                if (unifiedPrice === null) return;
-                noTaxPrice = specialPrice = normalPrice = unifiedPrice;
-            } else {
-                // 读取三个价格输入框的值（有值才校验格式，无值视为未填写）
-                const noTaxRaw = document.getElementById('spInputNoTax')?.value.trim() || '';
-                const specialRaw = document.getElementById('spSpecialVal')?.value.trim() || '';
-                const normalRaw = document.getElementById('spNormalVal')?.value.trim() || '';
-                if (!noTaxRaw && !specialRaw && !normalRaw) {
-                    document.getElementById('spMultiPriceBox')?.scrollIntoView({behavior:'smooth', block:'center'});
-                    showToast('供应商报价设置至少填写一种报价', 'error');
-                    return;
-                }
-                if (noTaxRaw) { noTaxPrice = Number(noTaxRaw); if (!Number.isFinite(noTaxPrice) || noTaxPrice < 0) { showSupplierRequiredError(document.getElementById('spInputNoTax'), '请填写正确的不含票单价'); return; } }
-                if (specialRaw) { specialPrice = Number(specialRaw); if (!Number.isFinite(specialPrice) || specialPrice < 0) { showSupplierRequiredError(document.getElementById('spSpecialVal'), '请填写正确的含专票价格'); return; } }
-                if (normalRaw) { normalPrice = Number(normalRaw); if (!Number.isFinite(normalPrice) || normalPrice < 0) { showSupplierRequiredError(document.getElementById('spNormalVal'), '请填写正确的含普票价格'); return; } }
+            // 读取三个价格输入框的值（有值才校验格式，无值视为未填写）
+            const noTaxRaw = document.getElementById('spInputNoTax')?.value.trim() || '';
+            const specialRaw = document.getElementById('spSpecialVal')?.value.trim() || '';
+            const normalRaw = document.getElementById('spNormalVal')?.value.trim() || '';
+            if (!noTaxRaw && !specialRaw && !normalRaw) {
+                document.getElementById('spMultiPriceBox')?.scrollIntoView({behavior:'smooth', block:'center'});
+                showToast('供应商报价设置至少填写一种报价', 'error');
+                return;
             }
+            if (noTaxRaw) { noTaxPrice = Number(noTaxRaw); if (!Number.isFinite(noTaxPrice) || noTaxPrice < 0) { showSupplierRequiredError(document.getElementById('spInputNoTax'), '请填写正确的不含票单价'); return; } }
+            if (specialRaw) { specialPrice = Number(specialRaw); if (!Number.isFinite(specialPrice) || specialPrice < 0) { showSupplierRequiredError(document.getElementById('spSpecialVal'), '请填写正确的含专票价格'); return; } }
+            if (normalRaw) { normalPrice = Number(normalRaw); if (!Number.isFinite(normalPrice) || normalPrice < 0) { showSupplierRequiredError(document.getElementById('spNormalVal'), '请填写正确的含普票价格'); return; } }
 
             // 运费设置为必填，必须明确选择含运费或不含运费
             const shipType = document.querySelector('input[name="spShipType"]:checked')?.value || '';
@@ -764,7 +747,6 @@
 
             const payload = {
                 supplier: finalSupplier,
-                purchase_cost: isUnified ? unifiedPrice : null,
                 no_tax_price: noTaxPrice,
                 purchase_special_invoice: specialPrice,
                 purchase_general_invoice: normalPrice,
@@ -919,15 +901,15 @@
             const row = currentVariantPrices.find(item => String(item.id) === selector.value);
             if (!row) return;
             currentSelectedVariantPrice = row;
+            const cap = row.oa_supplier_id ? _oaSupplierCapability[row.oa_supplier_id] : null;
             setVariantText('fv-retail_price', row.retail_price, '0');
-            setVariantText('fv-purchase_cost', row.purchase_cost, '0');
             setVariantText(
                 'fv-purchase_special_invoice',
-                supplierInvoicePriceText(row.purchase_special_invoice, '专票')
+                (!cap || cap.is_special) ? supplierInvoicePriceText(row.purchase_special_invoice, '专票') : '不支持'
             );
             setVariantText(
                 'fv-purchase_general_invoice',
-                supplierInvoicePriceText(row.purchase_general_invoice, '普票')
+                (!cap || cap.is_normal) ? supplierInvoicePriceText(row.purchase_general_invoice, '普票') : '不支持'
             );
             setVariantText('fv-purchase_shipping', row.purchase_shipping);
             setVariantText('fv-retail_ladder_price', row.retail_ladder_price);
@@ -939,7 +921,7 @@
         }
 
         const VARIANT_NUMBER_FIELDS = new Set([
-            'purchase_cost','purchase_special_invoice','purchase_general_invoice','purchase_shipping',
+            'purchase_special_invoice','purchase_general_invoice','purchase_shipping',
             'retail_price','retail_ladder_price','retail_tax','retail_shipping'
         ]);
 
@@ -1041,7 +1023,7 @@
 
         function combinationPriceText(price) {
             if (!price) return '';
-            const value = price.purchase_cost ?? price.no_tax_price
+            const value = price.no_tax_price
                 ?? price.purchase_special_invoice ?? price.purchase_general_invoice
                 ?? price.retail_price;
             return value === null || value === undefined || value === '' ? '已配置报价' : String(value);
@@ -1132,7 +1114,7 @@
         }
 
         const MANAGER_PRICE_INPUTS = {
-            retail_price:'variantRetailPrice', purchase_cost:'variantPurchaseCost',
+            retail_price:'variantRetailPrice',
             purchase_special_invoice:'variantPurchaseSpecialInvoice', purchase_general_invoice:'variantPurchaseGeneralInvoice',
             purchase_shipping:'variantPurchaseShipping', retail_ladder_price:'variantRetailLadderPrice',
             retail_tax:'variantRetailTax', retail_shipping:'variantRetailShipping',
@@ -1140,7 +1122,7 @@
         };
 
         function clearManagerPriceInputs() {
-            Object.values(MANAGER_PRICE_INPUTS).forEach(id => { const input=document.getElementById(id); if(input) input.value=''; });
+            Object.values(MANAGER_PRICE_INPUTS).forEach(id => { const input=document.getElementById(id); if(input) { input.value=''; input.disabled=false; input.classList.remove('sp-input-disabled'); } });
         }
 
         function managerSelectedSpecs() {
@@ -1201,8 +1183,14 @@
             const row = currentVariantPrices.find(item => String(item.id) === supplierSelect.value);
             if (!row) { supplierInput.value=''; clearManagerPriceInputs(); return; }
             supplierInput.value=row.supplier;
+            const cap = row.oa_supplier_id ? _oaSupplierCapability[row.oa_supplier_id] : null;
             Object.entries(MANAGER_PRICE_INPUTS).forEach(([field,id]) => {
-                const input=document.getElementById(id); if(input) input.value=row[field] ?? '';
+                const input=document.getElementById(id); if(!input) return;
+                // 含专票/含普票：供应商不支持时清空并禁用
+                if(field === 'purchase_special_invoice' && cap && !cap.is_special) { input.value=''; input.disabled=true; input.classList.add('sp-input-disabled'); return; }
+                if(field === 'purchase_general_invoice' && cap && !cap.is_normal) { input.value=''; input.disabled=true; input.classList.add('sp-input-disabled'); return; }
+                input.disabled=false; input.classList.remove('sp-input-disabled');
+                input.value=row[field] ?? '';
             });
             if(hint) hint.textContent=`已载入供应商“${row.supplier}”的价格，可直接修改后保存。`;
         }
@@ -1408,7 +1396,7 @@
             const {variant_group_id}=await groupRes.json();
             const numberOrNull=id=>{const value=document.getElementById(id).value;return value===''?null:Number(value)};
             const payload={variant_group_id,supplier,
-                retail_price:numberOrNull('variantRetailPrice'),purchase_cost:numberOrNull('variantPurchaseCost'),
+                retail_price:numberOrNull('variantRetailPrice'),
                 purchase_special_invoice:numberOrNull('variantPurchaseSpecialInvoice'),purchase_general_invoice:numberOrNull('variantPurchaseGeneralInvoice'),
                 purchase_shipping:numberOrNull('variantPurchaseShipping'),retail_ladder_price:numberOrNull('variantRetailLadderPrice'),
                 retail_tax:numberOrNull('variantRetailTax'),retail_shipping:numberOrNull('variantRetailShipping'),

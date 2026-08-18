@@ -12,7 +12,8 @@ from ..feedback import (
     FEEDBACK_STATUSES,
     FEEDBACK_TYPE_LABELS,
 )
-from ..shared import get_db, logger
+from ..model import get_db
+from ..config import logger
 
 
 class FeedbackStatusRequest(BaseModel):

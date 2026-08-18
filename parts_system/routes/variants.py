@@ -1,6 +1,13 @@
+from typing import Optional, List
+
+from fastapi import HTTPException
+from pydantic import BaseModel
+
 from ..bootstrap import app, templates
-from ..shared import *
-from ..shared import get_oa_db as _get_oa_db
+from ..config import *
+from ..model import *
+from ..model import get_oa_db as _get_oa_db
+from ..util import *
 from ..audit import write_operation_log
 
 # ========== 产品规格与供应商价格 ==========
@@ -17,7 +24,6 @@ class VariantSpecNameUpdateRequest(BaseModel):
 class VariantPriceRequest(BaseModel):
     variant_group_id: str
     supplier: str
-    purchase_cost: Optional[float] = None
     no_tax_price: Optional[float] = None
     purchase_special_invoice: Optional[float] = None
     purchase_general_invoice: Optional[float] = None
@@ -279,7 +285,7 @@ def _recalculate_part_display_price(product_id, cur):
         )
         return
     cur.execute(
-        """SELECT purchase_cost, purchase_special_invoice, purchase_general_invoice,
+        """SELECT no_tax_price, purchase_special_invoice, purchase_general_invoice,
                   external_price_fields
            FROM product_variant_prices WHERE part_id=%s""",
         (product_id,),
@@ -287,8 +293,8 @@ def _recalculate_part_display_price(product_id, cur):
     prices = []
     for row in cur.fetchall():
         fields = (row.get('external_price_fields') or '').split(',')
-        if 'no_tax' in fields and row.get('purchase_cost') is not None:
-            prices.append(float(row['purchase_cost']))
+        if 'no_tax' in fields and row.get('no_tax_price') is not None:
+            prices.append(float(row['no_tax_price']))
         if 'special' in fields and row.get('purchase_special_invoice') is not None:
             prices.append(float(row['purchase_special_invoice']))
         if 'general' in fields and row.get('purchase_general_invoice') is not None:
@@ -798,7 +804,7 @@ async def delete_variant_group(product_id: int, group_id: str):
 async def save_variant_price(product_id: int, req: VariantPriceRequest):
     if not req.supplier.strip() or not req.variant_group_id.strip():
         raise HTTPException(status_code=400, detail="供应商和规格组合不能为空")
-    fields = ['supplier','purchase_cost','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','oa_supplier_id','external_price_fields','remark']
+    fields = ['supplier','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','oa_supplier_id','external_price_fields','remark']
     values = [getattr(req, f) for f in fields]
     conn = get_db()
     try:
@@ -843,7 +849,7 @@ async def save_variant_price(product_id: int, req: VariantPriceRequest):
             module_code='PRICE',
             detail=(
                 f"{'修改' if existed else '新增'}供应商价格；规格组合：{req.variant_group_id}；"
-                f"供应商：{req.supplier}；采购成本价：{req.purchase_cost if req.purchase_cost is not None else '未填写'}；"
+                f"供应商：{req.supplier}；"
                 f"对外展示：{'是' if req.is_external_visible else '否'}"
             ),
         )
@@ -954,7 +960,6 @@ async def delete_variant_price(product_id: int, price_id: int):
 
 class VariantPriceUpdateRequest(BaseModel):
     supplier: str
-    purchase_cost: Optional[float] = None
     no_tax_price: Optional[float] = None
     purchase_special_invoice: Optional[float] = None
     purchase_general_invoice: Optional[float] = None
@@ -1046,7 +1051,7 @@ async def update_variant_external_visibility(
 async def update_variant_price(product_id: int, price_id: int, req: VariantPriceUpdateRequest):
     if not req.supplier.strip():
         raise HTTPException(status_code=400, detail="供应商名称不能为空")
-    fields = ['supplier','purchase_cost','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','oa_supplier_id','external_price_fields','remark']
+    fields = ['supplier','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','oa_supplier_id','external_price_fields','remark']
     values = [getattr(req, f) for f in fields]
     conn = get_db()
     try:
@@ -1074,7 +1079,6 @@ async def update_variant_price(product_id: int, price_id: int, req: VariantPrice
             detail=(
                 f"修改供应商价格；规格组合：{existing['variant_group_id']}；"
                 f"供应商：{existing['old_supplier']} → {req.supplier}；"
-                f"采购成本价：{req.purchase_cost if req.purchase_cost is not None else '未填写'}；"
                 f"对外展示：{'是' if req.is_external_visible else '否'}"
             ),
         )

@@ -2,7 +2,7 @@ from fastapi import Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from ..bootstrap import app, templates
-from ..shared import PROJECT_ROOT
+from ..config import PROJECT_ROOT
 
 
 @app.get("/", include_in_schema=False)

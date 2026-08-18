@@ -1,233 +1,10 @@
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
-from typing import Dict, Optional, List
-import pymysql
-from dotenv import load_dotenv
-import logging
-import os
-import json
-import mimetypes
-import time
-import uuid
-from itertools import product
-from datetime import datetime
-from urllib.parse import quote
-from qiniu import Auth, put_data
+"""数据库迁移：建表、加列、数据修复等惰性迁移逻辑。"""
 
-# ========== 日志配置 ==========
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOG_DIR = PROJECT_ROOT
-load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
-
-logger = logging.getLogger("parts_system")
-logger.setLevel(logging.DEBUG)
-logger.handlers.clear()
-logger.propagate = False
-
-# 只输出到控制台，不创建文件日志。
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-console_handler.setFormatter(logging.Formatter(
-    "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-))
-
-logger.addHandler(console_handler)
-
-logger.info("=" * 60)
-logger.info("电梯配件管理系统启动 | 日志输出方式=仅控制台 | 级别=DEBUG")
-logger.info("=" * 60)
-
-DB_CONFIG = {
-    'host': os.getenv('PARTS_DB_HOST', 'localhost').strip(),
-    'port': int(os.getenv('PARTS_DB_PORT', '3306')),
-    'user': os.getenv('PARTS_DB_USER', 'root').strip(),
-    'password': os.getenv('PARTS_DB_PASSWORD', '1234'),
-    'database': os.getenv('PARTS_DB_NAME', 'parts_database').strip(),
-    'charset': os.getenv('PARTS_DB_CHARSET', 'utf8mb4').strip(),
-    'cursorclass': pymysql.cursors.DictCursor,
-    'connect_timeout': int(os.getenv('PARTS_DB_CONNECT_TIMEOUT', '10')),
-}
-
-# OA 数据库连接配置（fallback 仅本地开发占位，生产值通过 .env 注入）
-OA_DB_CONFIG = {
-    "host": os.getenv("OA_DB_HOST", "localhost").strip(),
-    "port": int(os.getenv("OA_DB_PORT", "3306")),
-    "user": os.getenv("OA_DB_USER", "root").strip(),
-    "password": os.getenv("OA_DB_PASSWORD", ""),
-    "database": os.getenv("OA_DB_NAME", "oa_yixiuti").strip(),
-    "charset": "utf8mb4",
-    "cursorclass": pymysql.cursors.DictCursor,
-    "connect_timeout": int(os.getenv("OA_DB_CONNECT_TIMEOUT", "5")),
-    "read_timeout": int(os.getenv("OA_DB_READ_TIMEOUT", "12")),
-}
-
-
-def get_oa_db():
-    """获取 OA 数据库连接。"""
-    if not OA_DB_CONFIG["password"]:
-        raise RuntimeError("未配置 OA_DB_PASSWORD")
-    return pymysql.connect(**OA_DB_CONFIG)
-
-QINIU_LOCAL_CONFIG_FILE = os.path.join(LOG_DIR, 'qiniu_config.local.json')
-
-
-def load_qiniu_local_config():
-    """读取不进入版本管理的本地七牛配置；环境变量优先级更高。"""
-    if not os.path.exists(QINIU_LOCAL_CONFIG_FILE):
-        return {}
-    try:
-        with open(QINIU_LOCAL_CONFIG_FILE, 'r', encoding='utf-8') as config_file:
-            config = json.load(config_file)
-        return config if isinstance(config, dict) else {}
-    except Exception as e:
-        logger.warning(f"[七牛配置] 本地配置文件读取失败 | error={e}")
-        return {}
-
-
-_qiniu_local_config = load_qiniu_local_config()
-QINIU_CONFIG = {
-    'access_key': os.getenv('QINIU_ACCESS_KEY', '').strip() or str(_qiniu_local_config.get('access_key', '')).strip(),
-    'secret_key': os.getenv('QINIU_SECRET_KEY', '').strip() or str(_qiniu_local_config.get('secret_key', '')).strip(),
-    'bucket': os.getenv('QINIU_BUCKET', '').strip() or str(_qiniu_local_config.get('bucket', '')).strip(),
-    'domain': (
-        os.getenv('QINIU_DOMAIN', '').strip()
-        or str(_qiniu_local_config.get('domain', '')).strip()
-    ).rstrip('/'),
-}
-MAX_UPLOAD_IMAGE_SIZE = 10 * 1024 * 1024
-MAX_UPLOAD_IMAGE_COUNT = 20
-ALLOWED_IMAGE_MIME_TYPES = {
-    'image/jpeg': '.jpg',
-    'image/png': '.png',
-    'image/gif': '.gif',
-    'image/webp': '.webp',
-    'image/bmp': '.bmp',
-}
-
-
-# 产品分类方案（来源：配件分类方案.xlsx / sheet2）。
-# 黄色单元格为一级分类，B 列普通单元格为二级分类，C 列为最终三级分类。
-PRODUCT_CLASSIFICATION_TREE = [
-    {
-        "name": "机房部件",
-        "children": [
-            {"name": "控制柜类", "children": ["主板", "驱动板", "变频器", "机房话机", "制动电阻", "开关电源", "一体机", "变频器风扇", "接触器", "相序继电器", "松闸电源"]},
-            {"name": "曳引机类", "children": ["曳引机", "编码器", "制动器", "曳引轮"]},
-            {"name": "限速器类", "children": ["限速器", "限速器开关"]},
-        ],
-    },
-    {
-        "name": "轿厢部件",
-        "children": [
-            {"name": "操纵盘类", "children": ["轿厢显示板", "指令板", "轿厢通讯板", "按钮"]},
-            {"name": "轿顶检修箱类", "children": ["轿顶板", "应急电池", "检修按钮"]},
-            {"name": "平层感应器类", "children": ["平层感应器", "平层开关"]},
-            {"name": "反绳轮类", "children": ["反绳轮"]},
-            {"name": "光幕类", "children": ["光幕"]},
-        ],
-    },
-    {
-        "name": "井道部件",
-        "children": [
-            {"name": "井道灯类", "children": ["井道灯"]},
-            {"name": "钢丝绳类", "children": ["钢丝绳", "钢丝绳绳头"]},
-            {"name": "导轨类", "children": ["导轨", "导轨支架", "连接板", "螺丝"]},
-            {"name": "钢带类", "children": ["钢带"]},
-            {"name": "电缆线类", "children": ["随行电缆", "门锁电缆", "安全回路电缆"]},
-            {"name": "外呼部件", "children": ["外呼显示板", "外呼板"]},
-        ],
-    },
-    {
-        "name": "底坑部件",
-        "children": [
-            {"name": "底坑检修盒类", "children": ["检修开关"]},
-            {"name": "缓冲器类", "children": ["缓冲器", "缓冲器开关"]},
-            {"name": "涨紧装置类", "children": ["张紧轮", "整套张紧装置"]},
-            {"name": "安全钳类", "children": ["安全钳"]},
-            {"name": "导靴类", "children": ["导靴轮", "导靴"]},
-        ],
-    },
-    {
-        "name": "厅轿门部件",
-        "children": [
-            {"name": "门电机类", "children": ["门电机", "电机轮"]},
-            {"name": "门机变频器类", "children": ["门机变频器"]},
-            {"name": "地坎类", "children": ["地坎"]},
-            {"name": "门板类", "children": ["厅门板", "轿门板"]},
-            {"name": "门头类", "children": ["厅门门头", "轿门门头", "门头钢丝绳", "门挂板", "锁钩", "门锁装置"]},
-            {"name": "门轮类", "children": ["门挂轮"]},
-            {"name": "门刀类", "children": ["门刀"]},
-            {"name": "门机皮带类", "children": ["门机皮带"]},
-        ],
-    },
-    {"name": "其他机械类", "children": [
-        {"name": "其他机械类", "children": ["砝码"]},
-    ]},
-    {"name": "其他电子类", "children": []},
-    {"name": "扶梯配件", "children": []},
-    {"name": "对讲类", "children": [
-        {"name": "对讲类", "children": ["无线对讲", "有线对讲"]},
-    ]},
-]
-
-PRODUCT_TYPE_VALUES = [
-    third_level
-    for first_level in PRODUCT_CLASSIFICATION_TREE
-    for second_level in first_level["children"]
-    for third_level in second_level["children"]
-]
-
-CLASSIFICATION_FILE = os.path.join(LOG_DIR, "product_classifications.json")
-
-
-def refresh_product_type_values():
-    """分类树变更后刷新允许写入的三级分类集合。"""
-    # 保持列表对象不变，让按业务拆分后的各路由模块始终看到最新数据。
-    PRODUCT_TYPE_VALUES[:] = [
-        third_level
-        for first_level in PRODUCT_CLASSIFICATION_TREE
-        for second_level in first_level["children"]
-        for third_level in second_level["children"]
-    ]
-
-
-def load_classification_tree():
-    """优先加载运行期间新增的分类；首次运行使用 Excel 内置方案。"""
-    global PRODUCT_CLASSIFICATION_TREE
-    if not os.path.exists(CLASSIFICATION_FILE):
-        return
-    try:
-        with open(CLASSIFICATION_FILE, "r", encoding="utf-8") as f:
-            stored = json.load(f)
-        if isinstance(stored, list):
-            PRODUCT_CLASSIFICATION_TREE = stored
-            refresh_product_type_values()
-    except Exception as e:
-        logger.warning(f"[分类树] 读取持久化分类失败，使用默认方案 | error={e}")
-
-
-def save_classification_tree():
-    with open(CLASSIFICATION_FILE, "w", encoding="utf-8") as f:
-        json.dump(PRODUCT_CLASSIFICATION_TREE, f, ensure_ascii=False, indent=2)
-
-
-load_classification_tree()
-
-
-def get_db():
-    conn = pymysql.connect(**DB_CONFIG)
-    ensure_technical_params_column(conn)
-    # 规格组合表采用惰性初始化，确保现有数据库升级时无需手工执行脚本。
-    ensure_product_variant_tables(conn)
-    ensure_product_spec_required_rules(conn)
-    return conn
+from ..config import logger
 
 
 def ensure_employee_operation_logs_table(conn):
-    """Create the employee operation log table used by the audit page."""
+    """创建员工操作日志表，并修复历史数据快照。"""
     cursor = conn.cursor()
     cursor.execute(
         """
@@ -249,8 +26,6 @@ def ensure_employee_operation_logs_table(conn):
           COMMENT='员工新增、修改、删除配件的操作日志'
         """
     )
-
-    # 兼容已经存在的日志表：产品被修改或删除后，仍可按名称和型号聚合历史。
     cursor.execute("SHOW COLUMNS FROM employee_operation_logs")
     existing_columns = {row["Field"] for row in cursor.fetchall()}
     if "product_name_snapshot" not in existing_columns:
@@ -265,8 +40,6 @@ def ensure_employee_operation_logs_table(conn):
                ADD COLUMN model_snapshot VARCHAR(255) DEFAULT NULL
                COMMENT '操作时的产品型号快照' AFTER product_name_snapshot"""
         )
-
-    # 为升级前的现有日志补齐当前产品快照；已被删除且无法还原的记录保留原part_id。
     cursor.execute(
         """UPDATE employee_operation_logs l
            JOIN parts p ON p.id=l.part_id
@@ -274,8 +47,6 @@ def ensure_employee_operation_logs_table(conn):
                l.model_snapshot=COALESCE(l.model_snapshot,p.model)
            WHERE l.product_name_snapshot IS NULL OR l.model_snapshot IS NULL"""
     )
-
-    # 旧删除日志无法再关联 parts，从既有摘要“产品名称：…；型号：…”中恢复快照。
     cursor.execute(
         """SELECT id, part_id, detail
            FROM employee_operation_logs
@@ -302,8 +73,6 @@ def ensure_employee_operation_logs_table(conn):
                WHERE id=%s""",
             recovered_snapshots,
         )
-
-    # 将同一part_id已经恢复出的名称、型号传播给该产品的其他旧日志。
     cursor.execute(
         """SELECT DISTINCT part_id
            FROM employee_operation_logs
@@ -348,17 +117,16 @@ def ensure_technical_params_column(conn):
     cursor = conn.cursor()
     cursor.execute("SHOW COLUMNS FROM parts LIKE 'technical_params'")
     column = cursor.fetchone()
-    if column and str(column.get('Type', '')).lower() != 'text':
+    if column and str(column.get("Type", "")).lower() != "text":
         logger.info("[数据库迁移] parts.technical_params -> TEXT")
         cursor.execute("ALTER TABLE parts MODIFY COLUMN technical_params TEXT NULL COMMENT '技术参数（多行文本）'")
-    # parts 新增展示价格区间（所有规格组合对外展示价的最低/最高）
     for col_name, col_def in [
         ("display_price_min", "DECIMAL(14,2) NULL COMMENT '所有规格组合对外展示价中的最低价'"),
         ("display_price_max", "DECIMAL(14,2) NULL COMMENT '所有规格组合对外展示价中的最高价'"),
     ]:
         try:
             cursor.execute(f"ALTER TABLE parts ADD COLUMN {col_name} {col_def}")
-        except:
+        except Exception:
             pass  # 列已存在
 
 
@@ -416,10 +184,8 @@ def ensure_product_spec_required_rules(conn):
              AND TABLE_NAME='product_spec_required_rules'"""
     )
     rule_table = cursor.fetchone()
-    if rule_table and rule_table.get('table_collation') != 'utf8mb4_unicode_ci':
-        logger.info(
-            "[数据库迁移] product_spec_required_rules -> utf8mb4_unicode_ci"
-        )
+    if rule_table and rule_table.get("table_collation") != "utf8mb4_unicode_ci":
+        logger.info("[数据库迁移] product_spec_required_rules -> utf8mb4_unicode_ci")
         cursor.execute(
             """ALTER TABLE product_spec_required_rules
                CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"""
@@ -436,13 +202,11 @@ def ensure_product_spec_required_rules(conn):
     if (
         product_name_column
         and (
-            product_name_column.get('column_default') != ''
-            or product_name_column.get('column_comment') != expected_comment
+            product_name_column.get("column_default") != ""
+            or product_name_column.get("column_comment") != expected_comment
         )
     ):
-        logger.info(
-            "[数据库迁移] product_spec_required_rules.product_name 支持分类级规则"
-        )
+        logger.info("[数据库迁移] product_spec_required_rules.product_name 支持分类级规则")
         cursor.execute(
             """ALTER TABLE product_spec_required_rules
                MODIFY COLUMN product_name VARCHAR(255) NOT NULL DEFAULT ''
@@ -456,9 +220,7 @@ def ensure_product_spec_required_rules(conn):
              AND COLUMN_NAME='product_name_match_mode'"""
     )
     if not cursor.fetchone():
-        logger.info(
-            "[数据库迁移] product_spec_required_rules 新增产品名称匹配方式"
-        )
+        logger.info("[数据库迁移] product_spec_required_rules 新增产品名称匹配方式")
         cursor.execute(
             """ALTER TABLE product_spec_required_rules
                ADD COLUMN product_name_match_mode VARCHAR(20) NOT NULL
@@ -471,20 +233,13 @@ def ensure_product_spec_required_rules(conn):
            FROM information_schema.STATISTICS
            WHERE TABLE_SCHEMA=DATABASE()
              AND TABLE_NAME='product_spec_required_rules'
-             AND INDEX_NAME='uq_product_required_spec'
+           AND INDEX_NAME='uq_product_required_spec'
            GROUP BY INDEX_NAME"""
     )
     unique_index = cursor.fetchone()
-    expected_index_columns = (
-        "product_type,product_name,product_name_match_mode,spec_name"
-    )
-    if (
-        unique_index
-        and unique_index.get("index_columns") != expected_index_columns
-    ):
-        logger.info(
-            "[数据库迁移] product_spec_required_rules 更新规则唯一索引"
-        )
+    expected_index_columns = "product_type,product_name,product_name_match_mode,spec_name"
+    if unique_index and unique_index.get("index_columns") != expected_index_columns:
+        logger.info("[数据库迁移] product_spec_required_rules 更新规则唯一索引")
         cursor.execute(
             """ALTER TABLE product_spec_required_rules
                DROP INDEX uq_product_required_spec,
@@ -503,13 +258,11 @@ def ensure_product_spec_required_rules(conn):
     if (
         product_type_column
         and (
-            product_type_column.get('column_default') != ''
-            or product_type_column.get('column_comment') != expected_type_comment
+            product_type_column.get("column_default") != ""
+            or product_type_column.get("column_comment") != expected_type_comment
         )
     ):
-        logger.info(
-            "[数据库迁移] product_spec_required_rules.product_type 支持名称级规则"
-        )
+        logger.info("[数据库迁移] product_spec_required_rules.product_type 支持名称级规则")
         cursor.execute(
             """ALTER TABLE product_spec_required_rules
                MODIFY COLUMN product_type VARCHAR(100) NOT NULL DEFAULT ''
@@ -560,7 +313,6 @@ def ensure_product_variant_tables(conn):
             part_id INT NOT NULL COMMENT '产品主表ID，对应parts.id',
             variant_group_id VARCHAR(64) NOT NULL COMMENT '完整规格组合ID',
             supplier VARCHAR(255) NOT NULL COMMENT '供应商名称',
-            purchase_cost DECIMAL(14,2) NULL COMMENT '采购成本价/买价',
             no_tax_price DECIMAL(14,2) NULL COMMENT '不含票单价',
             purchase_special_invoice DECIMAL(14,2) NULL COMMENT '采购专票价/含专票价',
             purchase_general_invoice DECIMAL(14,2) NULL COMMENT '采购普票价/含普票价',
@@ -586,7 +338,6 @@ def ensure_product_variant_tables(conn):
             CONSTRAINT fk_variant_prices_part FOREIGN KEY (part_id) REFERENCES parts(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='产品规格组合价格表：保存供应商和对应的全部价格'"""
     )
-    # 添加新字段（如果不存在）
     new_columns = [
         ("no_tax_price", "DECIMAL(14,2) NULL COMMENT '不含票单价'"),
         ("freight_remark", "VARCHAR(255) NULL COMMENT '运费备注'"),
@@ -601,11 +352,13 @@ def ensure_product_variant_tables(conn):
     for col_name, col_def in new_columns:
         try:
             cursor.execute(f"ALTER TABLE product_variant_prices ADD COLUMN {col_name} {col_def}")
-        except:
+        except Exception:
             pass  # 列已存在
-
-    # 旧数据库中这两个字段曾使用 DATE/DATETIME，但页面允许输入“30天”“现货”等业务文本。
-    # 只在字段类型不一致时迁移，避免每次请求重复执行 ALTER TABLE。
+    # 删除统一价字段 purchase_cost（已废弃）
+    cursor.execute("SHOW COLUMNS FROM product_variant_prices LIKE 'purchase_cost'")
+    if cursor.fetchone():
+        logger.info("[数据库迁移] product_variant_prices 删除 purchase_cost 字段")
+        cursor.execute("ALTER TABLE product_variant_prices DROP COLUMN purchase_cost")
     text_business_columns = [
         ("shipping_time", "VARCHAR(100) NULL COMMENT '发货时间（手动输入）'"),
         ("expire_date", "VARCHAR(100) NULL COMMENT '报价有效期（日期或文字说明）'"),
@@ -613,7 +366,7 @@ def ensure_product_variant_tables(conn):
     for col_name, col_def in text_business_columns:
         cursor.execute("SHOW COLUMNS FROM product_variant_prices LIKE %s", (col_name,))
         column = cursor.fetchone()
-        if column and str(column.get('Type', '')).lower() != 'varchar(100)':
+        if column and str(column.get("Type", "")).lower() != "varchar(100)":
             logger.info(f"[数据库迁移] product_variant_prices.{col_name} -> VARCHAR(100)")
             cursor.execute(f"ALTER TABLE product_variant_prices MODIFY COLUMN {col_name} {col_def}")
     cursor.execute(
@@ -632,8 +385,6 @@ def ensure_product_variant_tables(conn):
             CONSTRAINT fk_variant_group_specs_spec FOREIGN KEY (spec_id) REFERENCES product_variant_specs(id) ON DELETE RESTRICT
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='规格组合关联表：关联完整组合与规格字典值'"""
     )
-
-    # 兼容旧的两表结构：旧表将规格字典与组合关系混在一起，会产生重复规格值。
     cursor.execute("SHOW COLUMNS FROM product_variant_specs LIKE 'variant_group_id'")
     if cursor.fetchone():
         cursor.execute(
@@ -666,137 +417,3 @@ def ensure_product_variant_tables(conn):
         cursor.execute("ALTER TABLE product_variant_specs ADD KEY idx_variant_specs_name (part_id, spec_name)")
         cursor.execute("ALTER TABLE product_variant_specs COMMENT='产品规格字典表：每个规格名和规格值只保存一次'")
         conn.commit()
-
-
-# 字段中文名映射
-FIELD_LABELS = {
-    'id': 'ID',
-    'sku_code': 'SKU编码',
-    'product_name': '产品名称',
-    'product_type': '产品分类',
-    'product_brand': '产品品牌',
-    'model': '型号',
-    'supplier': '供应商',
-    'warranty': '质保',
-    'applicable_elevator_brand': '适用电梯品牌',
-    'nature': '性质',
-    'substitute_model': '替代型号',
-    'precautions': '注意事项',
-    'category': '品类归属',
-    'technical_params': '技术参数',
-    'purchase_cost': '采购成本价',
-    'purchase_special_invoice': '进项专票',
-    'purchase_general_invoice': '进项普票',
-    'purchase_shipping': '采购运费',
-    'retail_price': '零售价格',
-    'retail_ladder_price': '零售阶梯价',
-    'retail_tax': '零售税费',
-    'retail_shipping': '零售运费',
-    'remark': '备注',
-    'daily_cutoff_time': '每日截单时间',
-    'quote_validity': '报价有效期',
-    'shipping_origin': '发货地',
-    'shipping_time': '发货时间',
-    'remark_2': '备注(2)',
-    'updater': '更新人',
-    'key_part_images': '关键部位图片',
-    'actual_photos': '实物图照片',
-    'product_image_3': '商品图片3',
-    'product_image_4': '商品图片4',
-    'product_image_5': '商品图片5',
-    'product_image_6': '商品图片6',
-    'product_image_7': '商品图片7',
-    'product_image_8': '商品图片8',
-    'product_image_9': '商品图片9',
-    'product_image_10': '商品图片10',
-    'product_detail_images': '商品详情图片',
-    'filler': '填报人',
-    'update_time': '更新时间',
-    'filler_2': '填报人(2)',
-    'update_time_2': '更新时间(2)',
-    'filler_ip': '填报IP',
-}
-
-# 图片字段列表
-IMAGE_FIELDS = [
-    'key_part_images', 'actual_photos',
-    'product_image_3', 'product_image_4', 'product_image_5',
-    'product_image_6', 'product_image_7', 'product_image_8',
-    'product_image_9', 'product_image_10', 'product_detail_images',
-]
-
-CREATE_PRODUCT_FIELDS = [
-    'product_name', 'product_brand', 'model',
-    'supplier', 'warranty', 'applicable_elevator_brand', 'nature',
-    'substitute_model', 'precautions', 'product_type',
-    'technical_params', 'remark', 'remark_2',
-    'purchase_cost', 'purchase_special_invoice',
-    'purchase_general_invoice', 'purchase_shipping',
-] + IMAGE_FIELDS
-
-
-def clean_image_urls(value):
-    """清洗图片 URL：替换转义反斜杠、修复双斜杠"""
-    if not value:
-        return value
-    # 替换 \/ 为 /
-    cleaned = value.replace('\\/', '/')
-    # 修复域名后的双斜杠（保留 :// 协议部分）
-    import re
-    cleaned = re.sub(r'(?<!:)//', '/', cleaned)
-    return cleaned
-
-
-def parse_image_urls(value):
-    """兼容 JSON 数组、单个 URL 和历史逗号/换行分隔格式。"""
-    if not value:
-        return []
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value).strip()
-    try:
-        parsed = json.loads(text)
-        if isinstance(parsed, list):
-            return [str(item).strip() for item in parsed if str(item).strip()]
-        if isinstance(parsed, str) and parsed.strip():
-            return [parsed.strip()]
-    except (json.JSONDecodeError, TypeError):
-        pass
-    import re
-    return [item.strip() for item in re.split(r'[\r\n,]+', text) if item.strip()]
-
-
-def qiniu_public_url(key):
-    domain = QINIU_CONFIG['domain']
-    if not domain.startswith(('http://', 'https://')):
-        domain = 'https://' + domain
-    return f"{domain}/{quote(key, safe='/')}"
-
-
-def validate_qiniu_config():
-    missing = [
-        env_name for key, env_name in (
-            ('access_key', 'QINIU_ACCESS_KEY'),
-            ('secret_key', 'QINIU_SECRET_KEY'),
-            ('bucket', 'QINIU_BUCKET'),
-            ('domain', 'QINIU_DOMAIN'),
-        )
-        if not QINIU_CONFIG[key]
-    ]
-    if missing:
-        raise HTTPException(
-            status_code=503,
-            detail='七牛云尚未配置，请先设置：' + '、'.join(missing),
-        )
-
-# 主要展示字段（中间区域优先显示的）
-MAIN_FIELDS = [
-    'sku_code', 'product_name', 'product_brand', 'model',
-    'supplier', 'warranty', 'applicable_elevator_brand', 'nature',
-    'substitute_model', 'precautions', 'category', 'technical_params',
-    'purchase_cost', 'purchase_special_invoice', 'purchase_general_invoice',
-    'purchase_shipping', 'retail_price', 'retail_ladder_price',
-    'retail_tax', 'retail_shipping', 'remark', 'daily_cutoff_time',
-    'quote_validity', 'shipping_origin', 'shipping_time', 'remark_2',
-    'updater', 'filler', 'update_time', 'filler_2', 'update_time_2', 'filler_ip',
-]

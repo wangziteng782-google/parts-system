@@ -1,5 +1,11 @@
+from typing import Optional
+
+from pydantic import BaseModel
+
 from ..bootstrap import app, templates
-from ..shared import *
+from ..config import *
+from ..model import *
+from ..util import *
 
 # ========== 图片库（parts_new）API ==========
 

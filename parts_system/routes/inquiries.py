@@ -11,7 +11,8 @@ from pydantic import BaseModel
 from ..auth import get_current_user_id
 from ..bootstrap import app, templates
 from ..feedback import FEEDBACK_TYPE_LABELS
-from ..shared import get_db, get_oa_db, logger
+from ..model import get_db, get_oa_db
+from ..config import logger
 from .sales import _oa_image
 
 

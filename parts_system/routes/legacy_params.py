@@ -1,5 +1,12 @@
+from typing import Optional
+
+from fastapi import HTTPException
+from pydantic import BaseModel
+
 from ..bootstrap import app, templates
-from ..shared import *
+from ..config import *
+from ..model import *
+from ..util import *
 
 # ========== 技术参数表 CRUD ==========
 

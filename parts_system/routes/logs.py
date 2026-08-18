@@ -6,12 +6,9 @@ from fastapi.responses import HTMLResponse
 
 from ..auth import get_current_user_id
 from ..bootstrap import app, templates
-from ..shared import (
-    IMAGE_FIELDS,
-    ensure_employee_operation_logs_table,
-    get_db,
-    parse_image_urls,
-)
+from ..config import IMAGE_FIELDS
+from ..model import ensure_employee_operation_logs_table, get_db
+from ..util import parse_image_urls
 
 
 OPERATION_LABELS = {
