@@ -8,7 +8,7 @@
     <link rel="apple-touch-icon" href="/static/img/site-logo.png">
     <link rel="stylesheet" href="/static/css/base.css">
 <link rel="stylesheet" href="/static/css/sidebar.css?v=20260810-1">
-<link rel="stylesheet" href="/static/css/product-detail.css?v=20260810-4">
+<link rel="stylesheet" href="/static/css/product-detail.css?v=20260818-1">
 <link rel="stylesheet" href="/static/css/dialogs.css?v=20260731-2">
 </head>
 <body>
@@ -54,6 +54,7 @@
     </div>
 
     <div class="modal-overlay" id="imageModal" onclick="closeModal()">
+        <button class="imglib-modal-rotate" onclick="event.stopPropagation(); rotateImageModal()">&#8635; 旋转 90°</button>
         <img id="modalImage" src="" alt="大图预览">
     </div>
     <div class="toast" id="toast"></div>

@@ -623,17 +623,27 @@
 
         function isImageField(field) { return IMAGE_FIELDS.includes(field); }
 
-        function showModal(url) {
-            document.getElementById('modalImage').src = url;
-            document.getElementById('imageModal').classList.add('show');
+        let modalRotation = 0;
 
-            // 添加 ESC 键监听
+        function showModal(url) {
+            const img = document.getElementById('modalImage');
+            modalRotation = 0;
+            img.style.transform = 'rotate(0deg)';
+            img.src = url;
+            document.getElementById('imageModal').classList.add('show');
             document.addEventListener('keydown', handleEscapeKey);
         }
 
+        function rotateImageModal() {
+            modalRotation = (modalRotation + 90) % 360;
+            document.getElementById('modalImage').style.transform = `rotate(${modalRotation}deg)`;
+        }
+
         function closeModal() {
+            const img = document.getElementById('modalImage');
+            img.removeAttribute('style');
+            modalRotation = 0;
             document.getElementById('imageModal').classList.remove('show');
-            // 移除 ESC 键监听
             document.removeEventListener('keydown', handleEscapeKey);
         }
 
@@ -825,7 +835,7 @@
 
             const label = fieldLabels[field] || field;
             document.getElementById('imglibTitle').textContent = `图片库 - 选择到「${label}」`;
-            document.getElementById('imglibSearch').value = '';
+            document.getElementById('imglibSearch').value = currentData?.model || '';
             updateImgLibSelCount();
 
             // 显示弹窗
@@ -833,7 +843,7 @@
 
             // 加载分类
             await loadImgLibCategories();
-            // 加载全部产品
+            // 加载全部产品（自动按型号搜索）
             await loadImgLibProducts();
         }
 
