@@ -623,16 +623,19 @@
 
         let supplierSaveInProgress = false;
 
-        // 整个规格组合下所有供应商加起来最多对外展示 3 个价格
+        // 对外展示限制：1) 每个价格类型只能被一个供应商展示；2) 同规格组合下最多展示 3 个价格
         function _limitExtFields() {
             const ids = ['spExtNoTax', 'spExtSpecial', 'spExtNormal'];
-            // 统计同规格组合下其他供应商已对外展示的价格数量
+            const fieldMap = { spExtNoTax: 'no_tax', spExtSpecial: 'special', spExtNormal: 'general' };
+            // 统计同规格组合下其他供应商已对外展示的价格
             const matchingPrices = JSON.parse(document.getElementById('spDetailArea')?.dataset.matchingPrices || '[]');
             const currentPriceId = document.getElementById('spDetailArea')?.dataset.currentPriceId || null;
+            const otherExtTypes = new Set();
             let savedExtCount = 0;
             for (const p of matchingPrices) {
                 if (currentPriceId && String(p.id) === String(currentPriceId)) continue;
                 const fields = (p.external_price_fields || '').split(',').filter(Boolean);
+                fields.forEach(f => otherExtTypes.add(f));
                 savedExtCount += fields.length;
             }
             // 当前表单勾选的开关
@@ -650,12 +653,16 @@
                     checked = ids.filter(id => document.getElementById(id)?.checked); // 回滚后重新统计
                 }
             }
-            // 根据剩余额度禁用/启用未勾选的开关
+            // 根据剩余额度禁用/启用未勾选的开关 + 其他供应商已展示的类型禁用
             const remaining = Math.max(0, 3 - savedExtCount);
             ids.forEach(id => {
                 const el = document.getElementById(id);
                 if (!el || el.dataset.oaDisabled === '1') return;
-                if (!el.checked && checked.length >= remaining) {
+                // 该价格类型已被其他供应商对外展示 → 禁用并取消勾选
+                if (otherExtTypes.has(fieldMap[id])) {
+                    el.disabled = true;
+                    el.checked = false;
+                } else if (!el.checked && checked.length >= remaining) {
                     el.disabled = true;
                 } else {
                     el.disabled = false;

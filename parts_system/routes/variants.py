@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional, List
 
 from fastapi import HTTPException

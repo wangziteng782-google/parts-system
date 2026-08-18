@@ -1,6 +1,11 @@
+import json
+import mimetypes
+import uuid
+from datetime import datetime
 from typing import Dict, Optional, List
 
 from fastapi import File, Form, HTTPException, Request, UploadFile
+from qiniu import Auth, put_data
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
