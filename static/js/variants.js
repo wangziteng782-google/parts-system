@@ -348,14 +348,18 @@
                 const res = await fetch(`/api/oa/suppliers/${oaId}`);
                 if (res.ok) {
                     const data = await res.json();
-                    const parseTaxPoint = (v) => { const n = parseFloat(String(v).replace('%', '')); return isNaN(n) ? 0 : n; };
+                    const parseTaxPoint = (v) => {
+                        if (v == null || v === '') return null;
+                        const n = parseFloat(String(v).replace('%', ''));
+                        return isNaN(n) ? null : n;
+                    };
                     _oaSupplierCapability[oaId] = {
                         is_special: !!data.is_special_invoice,
                         is_normal: !!data.is_normal_invoice,
                         is_no_tax: !!data.is_no_invoice,
-                        special_tax: parseTaxPoint(data.special_tax_point),
-                        normal_tax: parseTaxPoint(data.normal_tax_point),
-                        no_tax_point: parseTaxPoint(data.no_tax_point),
+                        special_tax: data.is_special_invoice ? parseTaxPoint(data.special_tax_point) : null,
+                        normal_tax: data.is_normal_invoice ? parseTaxPoint(data.normal_tax_point) : null,
+                        no_tax_point: data.is_no_invoice ? parseTaxPoint(data.no_tax_point) : null,
                     };
                 }
             } catch (e) { /* 忽略 */ }
@@ -390,10 +394,10 @@
             const taxSpecialEl = document.getElementById('spTaxSpecial');
             const taxNormalEl = document.getElementById('spTaxNormal');
             if (cap) {
-                document.getElementById('spDetailArea').dataset.taxSpecial = cap.special_tax;
-                document.getElementById('spDetailArea').dataset.taxNormal = cap.normal_tax;
-                if (taxSpecialEl) taxSpecialEl.textContent = cap.special_tax || '—';
-                if (taxNormalEl) taxNormalEl.textContent = cap.normal_tax || '—';
+                document.getElementById('spDetailArea').dataset.taxSpecial = cap.special_tax ?? 0;
+                document.getElementById('spDetailArea').dataset.taxNormal = cap.normal_tax ?? 0;
+                if (taxSpecialEl) taxSpecialEl.textContent = cap.special_tax ?? '—';
+                if (taxNormalEl) taxNormalEl.textContent = cap.normal_tax ?? '—';
                 if (taxRow) taxRow.classList.remove('hide');
             } else {
                 document.getElementById('spDetailArea').dataset.taxSpecial = 0;
