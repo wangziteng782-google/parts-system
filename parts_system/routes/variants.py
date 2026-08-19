@@ -1117,22 +1117,29 @@ async def list_oa_suppliers():
 
 @app.get("/api/oa/suppliers/{supplier_id}")
 async def get_oa_supplier(supplier_id: int):
-    """返回OA供应商详情：名称+开票能力+税点。"""
+    """返回OA供应商详情：名称+开票能力+税点。从 yh_supplier_detail 聚合。"""
     conn = _get_oa_db()
     try:
         cur = conn.cursor()
         cur.execute(
-            """SELECT id, supplier_name, is_special_invoice, is_normal_invoice,
-                      is_no_invoice, special_tax_point, normal_tax_point, no_tax_point
-               FROM yh_supplier
-               WHERE id=%s AND delete_time IS NULL""",
+            """SELECT s.id as oa_supplier_id, s.supplier_name,
+                      MAX(d.is_special_invoice) as is_special_invoice,
+                      MAX(d.is_normal_invoice) as is_normal_invoice,
+                      MAX(d.is_no_invoice) as is_no_invoice,
+                      GROUP_CONCAT(DISTINCT CASE WHEN d.special_tax_point > '' THEN d.special_tax_point END) as special_tax_point,
+                      GROUP_CONCAT(DISTINCT CASE WHEN d.normal_tax_point > '' THEN d.normal_tax_point END) as normal_tax_point,
+                      GROUP_CONCAT(DISTINCT CASE WHEN d.no_tax_point > '' THEN d.no_tax_point END) as no_tax_point
+               FROM yh_supplier s
+               LEFT JOIN yh_supplier_detail d ON s.id = d.supplier_id AND d.delete_time IS NULL
+               WHERE s.id=%s AND s.delete_time IS NULL
+               GROUP BY s.id, s.supplier_name""",
             (supplier_id,),
         )
         row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="供应商不存在")
         return {
-            "oa_supplier_id": row["id"],
+            "oa_supplier_id": row["oa_supplier_id"],
             "supplier_name": row["supplier_name"],
             "is_special_invoice": bool(row["is_special_invoice"]),
             "is_normal_invoice": bool(row["is_normal_invoice"]),
