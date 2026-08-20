@@ -113,7 +113,7 @@ PRODUCT_CLASSIFICATION_TREE = [
             {"name": "操纵盘类", "children": ["轿厢显示板", "指令板", "轿厢通讯板", "按钮"]},
             {"name": "轿顶检修箱类", "children": ["轿顶板", "应急电池", "检修按钮"]},
             {"name": "平层感应器类", "children": ["平层感应器", "平层开关"]},
-            {"name": "导向轮类", "children": ["导向轮"]},
+            {"name": "反绳轮类", "children": ["反绳轮"]},
             {"name": "光幕类", "children": ["光幕"]},
         ],
     },

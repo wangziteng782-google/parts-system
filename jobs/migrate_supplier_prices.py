@@ -113,16 +113,19 @@ def match_supplier(cursor, supplier_name: str) -> dict | None:
     }
 
 
+def to_price(value) -> float | None:
+    """转为价格：None、空字符串、0 都视为未设置"""
+    if value is None or value == "":
+        return None
+    n = float(value)
+    return None if n == 0 else n
+
+
 def calculate_prices(record: dict, supplier: dict) -> dict:
     """根据税率计算缺失价格"""
-    no_tax = record.get("no_tax_price")
-    special = record.get("purchase_special_invoice")
-    normal = record.get("purchase_general_invoice")
-
-    # 转为数值
-    no_tax_val = float(no_tax) if no_tax is not None and no_tax != "" else None
-    special_val = float(special) if special is not None and special != "" else None
-    normal_val = float(normal) if normal is not None and normal != "" else None
+    no_tax_val = to_price(record.get("no_tax_price"))
+    special_val = to_price(record.get("purchase_special_invoice"))
+    normal_val = to_price(record.get("purchase_general_invoice"))
 
     tax_special = supplier.get("special_tax") or 0
     tax_normal = supplier.get("normal_tax") or 0

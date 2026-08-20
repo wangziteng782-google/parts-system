@@ -239,15 +239,13 @@
                 detailEl.dataset.currentPriceId = currentPanelPriceId || '';
                 if (isNewSupplierMode) {
                     detailEl.innerHTML = renderSupplierDetailForm({ isNew: true });
-                    loadSupplierDropdown(''); // 加载供应商列表（旧，兼容）
-                    _initSupplierSelect(null, ''); // 初始化 OA 供应商下拉
                     _limitExtFields(); // 应用对外展示数量限制
                 } else if (currentPanelPriceId) {
                     const p = matchingPrices.find(x => x.id === currentPanelPriceId);
                     if (p) {
                         detailEl.innerHTML = renderSupplierDetailForm(p);
-                        loadSupplierDropdown(p.supplier); // 加载并选中当前供应商（旧，兼容）
-                        _initSupplierSelect(p.oa_supplier_id, p.supplier); // 初始化 OA 供应商下拉
+                        // 编辑模式：如果有OA供应商，自动触发能力校验
+                        if (p.oa_supplier_id) _onSupplierChanged();
                         _limitExtFields(); // 应用对外展示数量限制
                     }
                 } else {
@@ -283,29 +281,42 @@
             return Number(raw);
         }
 
-        // 加载供应商名称候选项；输入框既可搜索选择，也可直接填写新名称
-        async function loadSupplierDropdown(selectedValue) {
-            const inputEl = document.getElementById('spSupplierName');
-            const listEl = document.getElementById('spSupplierNameList');
-            if (!inputEl || !listEl) return;
-            inputEl.value = selectedValue || '';
-            
+        // 搜索OA供应商（带防抖），空关键词返回全部
+        let _supplierSearchTimer = null;
+        function _renderDrop(dropEl, list) {
+            dropEl.innerHTML = list.length
+                ? list.map(s => `<div class="sp-drop-item" data-oa-id="${s.oa_supplier_id}" data-name="${escapeHtml(s.supplier_name)}" onclick="_selectOaSupplier(this)">${escapeHtml(s.supplier_name)}</div>`).join('')
+                : '<div class="sp-drop-empty">无匹配供应商</div>';
+        }
+
+        async function _searchOaSuppliers(keyword) {
+            const dropEl = document.getElementById('spSupplierDrop');
+            if (!dropEl) return;
+            dropEl.innerHTML = '<div class="sp-drop-empty">加载中...</div>';
+            dropEl.classList.add('show');
             try {
-                const res = await fetch('/api/suppliers');
-                if (!res.ok) return;
-                const suppliers = await res.json();
-
-                // 兜底：若当前供应商不在列表中（如来自价格表的供应商未收录进 parts 表），强制加入并选中
-                const supplierList = Array.isArray(suppliers) ? suppliers.slice() : [];
-                if (selectedValue && !supplierList.includes(selectedValue)) {
-                    supplierList.unshift(selectedValue);
-                }
-
-                listEl.innerHTML = supplierList.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
+                const url = keyword ? `/api/oa/suppliers?keyword=${encodeURIComponent(keyword)}` : '/api/oa/suppliers';
+                const res = await fetch(url);
+                if (!res.ok) { dropEl.classList.remove('show'); return; }
+                _renderDrop(dropEl, await res.json());
             } catch (e) {
-                console.error('加载供应商列表失败:', e);
+                console.error('搜索供应商失败:', e);
+                dropEl.classList.remove('show');
             }
         }
+
+        function _selectOaSupplier(el) {
+            const oaId = el.dataset.oaId;
+            const name = el.dataset.name;
+            const inputEl = document.getElementById('spSupplierSearch');
+            const hiddenEl = document.getElementById('spOaSupplierId');
+            const dropEl = document.getElementById('spSupplierDrop');
+            if (inputEl) inputEl.value = name;
+            if (hiddenEl) hiddenEl.value = oaId;
+            if (dropEl) { dropEl.innerHTML = ''; dropEl.classList.remove('show'); }
+            _onSupplierChanged();
+        }
+
 
         function closeSupplierPanel() {
             const panel = document.getElementById('supplierPanel');
@@ -329,18 +340,8 @@
             }
         }
 
-        // OA 供应商缓存（避免重复请求）
-        let _oaSupplierCache = null;
+        // OA 供应商开票能力缓存
         let _oaSupplierCapability = {}; // { oa_supplier_id: { is_special_invoice, is_normal_invoice, is_no_invoice, tax_points } }
-
-        async function _loadOaSuppliers() {
-            if (_oaSupplierCache) return _oaSupplierCache;
-            try {
-                const res = await fetch('/api/suppliers');
-                if (res.ok) _oaSupplierCache = await res.json();
-            } catch (e) { /* 忽略，使用手动输入兜底 */ }
-            return _oaSupplierCache || [];
-        }
 
         async function _loadOaSupplierCapability(oaId) {
             if (!oaId || _oaSupplierCapability[oaId]) return _oaSupplierCapability[oaId];
@@ -368,8 +369,8 @@
 
         // 根据供应商选择更新开票能力 → 禁用不支持的票种输入框和对外展示开关
         async function _onSupplierChanged() {
-            const oaSel = document.getElementById('spOaSupplierSelect');
-            const oaId = oaSel ? Number(oaSel.value) : null;
+            const hiddenEl = document.getElementById('spOaSupplierId');
+            const oaId = hiddenEl && hiddenEl.value ? Number(hiddenEl.value) : null;
             const cap = oaId ? await _loadOaSupplierCapability(oaId) : null;
             const fields = [
                 { key: 'noTax', input: 'spInputNoTax', extSwitch: 'spExtNoTax', supported: cap ? cap.is_no_tax : true },
@@ -421,16 +422,16 @@
 
             if (sourceKey === 'noTax' && noTaxVal !== '' && !isNaN(Number(noTaxVal))) {
                 const base = Number(noTaxVal);
-                if (taxSpecial) specialEl.value = (base * (1 + taxSpecial / 100)).toFixed(2);
-                if (taxNormal) normalEl.value = (base * (1 + taxNormal / 100)).toFixed(2);
-            } else if (sourceKey === 'special' && specialVal !== '' && !isNaN(Number(specialVal)) && taxSpecial) {
-                const base = Number(specialVal) / (1 + taxSpecial / 100);
+                if (!specialEl.disabled) specialEl.value = Math.round(base * (1 + taxSpecial / 100));
+                if (!normalEl.disabled) normalEl.value = Math.round(base * (1 + taxNormal / 100));
+            } else if (sourceKey === 'special' && specialVal !== '' && !isNaN(Number(specialVal)) && taxSpecial != null) {
+                const base = taxSpecial ? Number(specialVal) / (1 + taxSpecial / 100) : Number(specialVal);
                 noTaxEl.value = base.toFixed(2);
-                if (taxNormal) normalEl.value = (base * (1 + taxNormal / 100)).toFixed(2);
-            } else if (sourceKey === 'normal' && normalVal !== '' && !isNaN(Number(normalVal)) && taxNormal) {
-                const base = Number(normalVal) / (1 + taxNormal / 100);
+                if (!normalEl.disabled) normalEl.value = Math.round(base * (1 + taxNormal / 100));
+            } else if (sourceKey === 'normal' && normalVal !== '' && !isNaN(Number(normalVal)) && taxNormal != null) {
+                const base = taxNormal ? Number(normalVal) / (1 + taxNormal / 100) : Number(normalVal);
                 noTaxEl.value = base.toFixed(2);
-                if (taxSpecial) specialEl.value = (base * (1 + taxSpecial / 100)).toFixed(2);
+                if (!specialEl.disabled) specialEl.value = Math.round(base * (1 + taxSpecial / 100));
             }
         }
 
@@ -452,10 +453,11 @@
                     <div class="sp-row-main" style="margin-top:12px;">
                         <div class="sp-col-item" style="flex:2">
                             <label>供应商名称<span class="sp-required-mark">*</span></label>
-                            <select id="spOaSupplierSelect" class="sp-input-text" style="width:100%" onchange="_onSupplierChanged()">
-                                <option value="">-- 选择或手动输入 --</option>
-                            </select>
-                            <input id="spSupplierName" class="sp-input-text" style="margin-top:6px" placeholder="手动输入供应商名称（非OA供应商）" value="${escapeHtml(p.supplier || '')}">
+                            <div id="spSupplierWrap" class="sp-supplier-search-wrap">
+                                <input id="spSupplierSearch" class="sp-input-text" type="text" placeholder="输入供应商名称搜索..." value="${escapeHtml(p.supplier || '')}" autocomplete="off" oninput="clearTimeout(_supplierSearchTimer); _supplierSearchTimer=setTimeout(()=>_searchOaSuppliers(this.value.trim()),300)" onfocus="_searchOaSuppliers(this.value.trim())">
+                                <input id="spOaSupplierId" type="hidden" value="${p.oa_supplier_id || ''}">
+                                <div id="spSupplierDrop" class="sp-supplier-drop"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -688,28 +690,13 @@
             return fields.join(',') || null;
         }
 
-        // 初始化供应商下拉（OA供应商 + 本地兜底）
-        async function _initSupplierSelect(currentOaId, currentName) {
-            const sel = document.getElementById('spOaSupplierSelect');
-            if (!sel) return;
-            sel.innerHTML = '<option value="">-- 选择或手动输入 --</option>';
-            const list = await _loadOaSuppliers();
-            for (const s of list) {
-                const opt = document.createElement('option');
-                opt.value = s.oa_supplier_id ?? '';
-                opt.text = s.supplier_name;
-                if (s.oa_supplier_id && s.oa_supplier_id === currentOaId) opt.selected = true;
-                sel.appendChild(opt);
-            }
-            // 选中 OA 供应商后自动触发能力校验
-            if (currentOaId) _onSupplierChanged();
-        }
-
         async function savePanelSupplier(priceId) {
-            // 获取供应商名称
-            const supplierInput = document.getElementById('spSupplierName');
-            const supplierName = supplierInput?.value.trim() || '';
-            if (!supplierName) { showSupplierRequiredError(supplierInput, '请填写供应商名称'); return; }
+            // 获取供应商：必须从OA选择
+            const searchInput = document.getElementById('spSupplierSearch');
+            const hiddenEl = document.getElementById('spOaSupplierId');
+            const oaId = hiddenEl && hiddenEl.value ? Number(hiddenEl.value) : null;
+            const supplierName = searchInput?.value.trim() || '';
+            if (!oaId || !supplierName) { showSupplierRequiredError(searchInput, '请从下拉选择OA供应商'); return; }
 
             // 报价设置：至少填写一项
             let noTaxPrice = null;
@@ -747,17 +734,11 @@
             const warrantyTime = warrantyInput?.value.trim() || '';
             if (!warrantyTime) { showSupplierRequiredError(warrantyInput, '请填写质保时间，若无质保请选择“无质保”'); return; }
 
-            // OA 供应商：从下拉取值，同时写入 supplier 字段（用OA名称）
-            const oaSel = document.getElementById('spOaSupplierSelect');
-            const oaId = oaSel ? Number(oaSel.value) : null;
-            const oaName = oaId ? oaSel.options[oaSel.selectedIndex].text : '';
-            const finalSupplier = oaId ? oaName : supplierName;
-
             // external_price_fields：收集勾选的对外展示开关
             const extFields = _collectExtPriceFields();
 
             const payload = {
-                supplier: finalSupplier,
+                supplier: supplierName,
                 no_tax_price: noTaxPrice,
                 purchase_special_invoice: specialPrice,
                 purchase_general_invoice: normalPrice,
@@ -1435,3 +1416,10 @@
             if (!lines.length) return '<span style="color:#ccc;font-style:italic">空，点击填写技术参数</span>';
             return `<div class="technical-param-list">${lines.map((line, index) => `<div class="technical-param-line"><span class="technical-param-index">${index + 1}</span><span class="technical-param-text">${escapeHtml(line)}</span></div>`).join('')}</div>`;
         }
+
+        // 点击外部关闭供应商搜索下拉
+        document.addEventListener('click', (e) => {
+            const wrap = document.getElementById('spSupplierWrap');
+            const dropEl = document.getElementById('spSupplierDrop');
+            if (wrap && dropEl && !wrap.contains(e.target)) dropEl.classList.remove('show');
+        });

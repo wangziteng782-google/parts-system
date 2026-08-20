@@ -24,7 +24,7 @@ class VariantSpecNameUpdateRequest(BaseModel):
 
 class VariantPriceRequest(BaseModel):
     variant_group_id: str
-    supplier: str
+    supplier: str = ""  # 后端从OA自动填充
     no_tax_price: Optional[float] = None
     purchase_special_invoice: Optional[float] = None
     purchase_general_invoice: Optional[float] = None
@@ -41,7 +41,7 @@ class VariantPriceRequest(BaseModel):
     quote_time: Optional[str] = None
     expire_date: Optional[str] = None
     is_external_visible: bool = False
-    oa_supplier_id: Optional[int] = None
+    oa_supplier_id: int  # 必填，从OA选择
     external_price_fields: Optional[str] = None
     remark: Optional[str] = None
 
@@ -53,6 +53,20 @@ class VariantSelection(BaseModel):
 
 class VariantGroupRequest(BaseModel):
     specs: List[VariantSelection]
+
+
+def _get_oa_supplier_name(oa_id: int) -> str:
+    """从OA获取供应商名称，不存在则抛异常"""
+    oa_conn = _get_oa_db()
+    try:
+        oa_cur = oa_conn.cursor()
+        oa_cur.execute("SELECT supplier_name FROM yh_supplier WHERE id=%s AND delete_time IS NULL", (oa_id,))
+        row = oa_cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=400, detail="OA供应商不存在")
+        return row["supplier_name"]
+    finally:
+        oa_conn.close()
 
 
 def _variant_spec_catalog(cur, product_id: int):
@@ -803,8 +817,11 @@ async def delete_variant_group(product_id: int, group_id: str):
 
 @app.post("/api/products/{product_id}/variant-prices")
 async def save_variant_price(product_id: int, req: VariantPriceRequest):
-    if not req.supplier.strip() or not req.variant_group_id.strip():
-        raise HTTPException(status_code=400, detail="供应商和规格组合不能为空")
+    if not req.variant_group_id.strip():
+        raise HTTPException(status_code=400, detail="规格组合不能为空")
+    if not req.oa_supplier_id:
+        raise HTTPException(status_code=400, detail="请选择OA供应商")
+    req.supplier = _get_oa_supplier_name(req.oa_supplier_id)
     fields = ['supplier','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','oa_supplier_id','external_price_fields','remark']
     values = [getattr(req, f) for f in fields]
     conn = get_db()
@@ -960,7 +977,7 @@ async def delete_variant_price(product_id: int, price_id: int):
 
 
 class VariantPriceUpdateRequest(BaseModel):
-    supplier: str
+    supplier: str = ""  # 后端从OA自动填充
     no_tax_price: Optional[float] = None
     purchase_special_invoice: Optional[float] = None
     purchase_general_invoice: Optional[float] = None
@@ -977,7 +994,7 @@ class VariantPriceUpdateRequest(BaseModel):
     quote_time: Optional[str] = None
     expire_date: Optional[str] = None
     is_external_visible: bool = False
-    oa_supplier_id: Optional[int] = None
+    oa_supplier_id: int  # 必填，从OA选择
     external_price_fields: Optional[str] = None
     remark: Optional[str] = None
 
@@ -1050,8 +1067,19 @@ async def update_variant_external_visibility(
 
 @app.put("/api/products/{product_id}/variant-prices/{price_id}")
 async def update_variant_price(product_id: int, price_id: int, req: VariantPriceUpdateRequest):
-    if not req.supplier.strip():
-        raise HTTPException(status_code=400, detail="供应商名称不能为空")
+    if not req.oa_supplier_id:
+        raise HTTPException(status_code=400, detail="请选择OA供应商")
+    # 从OA获取供应商名称
+    oa_conn = _get_oa_db()
+    try:
+        oa_cur = oa_conn.cursor()
+        oa_cur.execute("SELECT supplier_name FROM yh_supplier WHERE id=%s AND delete_time IS NULL", (req.oa_supplier_id,))
+        oa_row = oa_cur.fetchone()
+        if not oa_row:
+            raise HTTPException(status_code=400, detail="OA供应商不存在")
+        req.supplier = oa_row["supplier_name"]
+    finally:
+        oa_conn.close()
     fields = ['supplier','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','oa_supplier_id','external_price_fields','remark']
     values = [getattr(req, f) for f in fields]
     conn = get_db()
@@ -1096,17 +1124,27 @@ async def update_variant_price(product_id: int, price_id: int, req: VariantPrice
 
 # ========== OA 供应商查询 ==========
 @app.get("/api/oa/suppliers")
-async def list_oa_suppliers():
-    """返回OA供应商列表，供前端下拉选择。"""
+async def list_oa_suppliers(keyword: str = ""):
+    """返回OA供应商列表，供前端下拉选择。支持keyword模糊搜索。"""
     conn = _get_oa_db()
     try:
         cur = conn.cursor()
-        cur.execute(
-            """SELECT id, supplier_name
-               FROM yh_supplier
-               WHERE delete_time IS NULL
-               ORDER BY id""",
-        )
+        if keyword:
+            cur.execute(
+                """SELECT id, supplier_name
+                   FROM yh_supplier
+                   WHERE delete_time IS NULL AND supplier_name LIKE %s
+                   ORDER BY id
+                   LIMIT 50""",
+                (f"%{keyword}%",),
+            )
+        else:
+            cur.execute(
+                """SELECT id, supplier_name
+                   FROM yh_supplier
+                   WHERE delete_time IS NULL
+                   ORDER BY id""",
+            )
         return [
             {"oa_supplier_id": row["id"], "supplier_name": row["supplier_name"]}
             for row in cur.fetchall()
