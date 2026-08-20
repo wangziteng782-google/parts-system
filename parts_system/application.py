@@ -12,5 +12,6 @@ from .routes import health as _health
 from .routes import sales as _sales
 from .routes import feedback as _feedback
 from .routes import inquiries as _inquiries
+from .routes import product_relations as _product_relations
 
 __all__ = ["app"]

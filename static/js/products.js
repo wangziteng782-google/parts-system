@@ -649,6 +649,7 @@ async function init() {
                 selectedVariantValues = [];
                 currentSelectedVariantPrice = null;
                 renderDetail(currentData);
+                loadRelations(currentData.id);
             } catch (e) {
                 main.innerHTML = `<div class="empty-state"><p>加载失败: ${e.message}</p></div>`;
             }
@@ -793,8 +794,7 @@ async function init() {
                 <span>配件管理</span><span>/</span>
                 <span>${escapeHtml(data.product_type || '待重新分类')}</span><span>/</span>
                 <span class="bc-current">${escapeHtml(data.product_name || '未命名产品')}</span>
-                <div class="breadcrumb-actions" style="display: none">
-                    <span class="product-id-badge">ID：${data.id}</span>
+                <div class="breadcrumb-actions">
                 </div>
             </div>`;
 
@@ -849,6 +849,13 @@ async function init() {
                     <tr><td>${fieldLabels['remark']}</td><td><span class="field-value" id="fv-remark" onclick="editField('remark')">${renderVal(data.remark)}</span></td></tr>
                     <tr><td>${fieldLabels['remark_2']}</td><td><span class="field-value" id="fv-remark_2" onclick="editField('remark_2')">${renderVal(data.remark_2)}</span></td></tr>
                 </table>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                        <span style="font-size:14px;font-weight:600;color:#111827">关联产品</span>
+                        <button class="product-completion-button" style="margin-left:0;padding:0 10px" onclick="openRelationModal(${data.id}, '${escapeHtml(data.product_name || '').replace(/'/g, "\\'")}')">+ 关联</button>
+                    </div>
+                    <div id="relationList" class="relation-list"></div>
+                </div>
             </div>`;
 
             html += `</div>`; // 关闭 detail-left-col
@@ -865,6 +872,7 @@ async function init() {
                         <span style="color:#92400e;font-weight:500;margin-right:4px;font-size:12px">注意事项：</span>
                         <span class="field-value" id="fv-precautions" onclick="editField('precautions')" style="font-size:12px;color:#92400e">${escapeHtml(data.precautions || '暂无，点击添加')}</span>
                     </span>
+                    <button class="product-completion-button" style="margin-left:0" onclick="copyProduct()">一键复制</button>
                     <button type="button" id="productCompletionButton"
                         class="product-completion-button ${data.modification_completed ? 'completed' : ''}"
                         onclick="markProductModificationComplete()">
@@ -1083,5 +1091,171 @@ async function init() {
                 renderParams();
                 await loadProducts();
                 showToast('参数已删除', 'success');
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        // ========== 关联产品 ==========
+
+        async function loadRelations(productId) {
+            const listEl = document.getElementById('relationList');
+            if (!listEl) return;
+            try {
+                const res = await fetch(`/api/products/${productId}/relations`);
+                const data = await res.json();
+                if (!data.relations?.length) {
+                    listEl.innerHTML = '<div class="relation-list-empty">暂无关联产品</div>';
+                    return;
+                }
+                listEl.innerHTML = data.relations.map(p => `
+                    <div class="relation-list-item">
+                        <span>${escapeHtml(p.product_name || '')} ${escapeHtml(p.model ? '(' + p.model + ')' : '')}</span>
+                        <span class="relation-item-del" onclick="deleteRelation(${productId}, ${p.id})">删除</span>
+                    </div>
+                `).join('');
+            } catch (e) {
+                listEl.innerHTML = '<div class="relation-list-empty relation-error">加载失败</div>';
+            }
+        }
+
+        let relationSelectedIds = new Set();
+        let currentRelationProductId = null;
+
+        function openRelationModal(productId, productName) {
+            relationSelectedIds = new Set();
+            currentRelationProductId = productId;
+            const modal = document.createElement('div');
+            modal.className = 'imglib-overlay';
+            modal.id = 'relationModal';
+            modal.innerHTML = `
+                <div class="imglib-modal relation-modal" onclick="event.stopPropagation()">
+                    <div class="imglib-header">
+                        <h3>选择关联产品</h3>
+                        <button class="close-btn" onclick="closeRelationModal()">&#10005;</button>
+                    </div>
+                    <div class="imglib-body">
+                        <div class="imglib-content">
+                            <div class="imglib-toolbar">
+                                <input id="relationSearch" type="text" placeholder="搜索产品名称/型号..." oninput="searchRelationProduct()">
+                            </div>
+                            <div class="imglib-grid-wrap" id="relationSearchResults"></div>
+                            <div class="imglib-pagination" id="relationPagination"></div>
+                        </div>
+                    </div>
+                    <div class="imglib-footer">
+                        <button class="lib-btn lib-btn-secondary" onclick="closeRelationModal()">取消</button>
+                        <button class="lib-btn lib-btn-primary" id="relationConfirmBtn" onclick="confirmAddRelations()" disabled>确认添加</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.classList.add('show');
+            const searchInput = document.getElementById('relationSearch');
+            searchInput.focus();
+            if (productName) {
+                searchInput.value = productName;
+                doSearchRelation(productName);
+            }
+        }
+
+        function closeRelationModal() {
+            document.getElementById('relationModal')?.remove();
+            relationSelectedIds = new Set();
+            currentRelationProductId = null;
+        }
+
+        function toggleRelationSelect(id, element) {
+            relationSelectedIds.has(id) ? relationSelectedIds.delete(id) : relationSelectedIds.add(id);
+            element.classList.toggle('selected', relationSelectedIds.has(id));
+            element.querySelector('.relation-item-check').textContent = relationSelectedIds.has(id) ? '✓' : '';
+            const n = relationSelectedIds.size;
+            const btn = document.getElementById('relationConfirmBtn');
+            btn.disabled = n === 0;
+            btn.textContent = n > 0 ? `确认添加 (${n})` : '确认添加';
+        }
+
+        async function confirmAddRelations() {
+            const productId = currentRelationProductId;
+            const results = await Promise.all([...relationSelectedIds].map(id =>
+                fetch(`/api/products/${productId}/relations`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ related_product_id: id }),
+                }).then(r => r.ok).catch(() => false)
+            ));
+            const success = results.filter(Boolean).length;
+            const fail = results.length - success;
+            closeRelationModal();
+            loadRelations(productId);
+            if (success > 0) showToast(`成功关联 ${success} 个产品${fail > 0 ? `，${fail} 个失败` : ''}`, fail > 0 ? 'warning' : 'success');
+            else showToast('关联失败', 'error');
+        }
+
+        let relationSearchTimer;
+        let relationCurrentPage = 1;
+        const relationPageSize = 20;
+
+        function searchRelationProduct() {
+            clearTimeout(relationSearchTimer);
+            relationSearchTimer = setTimeout(() => {
+                relationCurrentPage = 1;
+                doSearchRelation();
+            }, 300);
+        }
+
+        async function doSearchRelation(keywordOverride) {
+            const keyword = keywordOverride || document.getElementById('relationSearch').value.trim();
+            const resultEl = document.getElementById('relationSearchResults');
+            if (!keyword) { resultEl.innerHTML = ''; return; }
+            try {
+                const res = await fetch(`/api/products?keyword=${encodeURIComponent(keyword)}&page=${relationCurrentPage}&page_size=${relationPageSize}`);
+                const data = await res.json();
+                const products = (data.items || []).filter(p => p.id !== currentRelationProductId);
+                if (!products.length) {
+                    resultEl.innerHTML = '<div class="relation-empty">无匹配产品</div>';
+                    document.getElementById('relationPagination').innerHTML = '';
+                    return;
+                }
+                const totalPages = Math.ceil(data.total / relationPageSize);
+                const countHtml = `<div class="relation-result-count">共 ${data.total} 个产品${totalPages > 1 ? `，第 ${relationCurrentPage}/${totalPages} 页` : ''}</div>`;
+                const listHtml = products.map(p => {
+                    const isSelected = relationSelectedIds.has(p.id);
+                    return `
+                    <div class="relation-search-item${isSelected ? ' selected' : ''}" onclick="toggleRelationSelect(${p.id}, this)">
+                        <div class="relation-item-check">${isSelected ? '✓' : ''}</div>
+                        <div class="relation-item-info">
+                            <div class="relation-item-title">${escapeHtml(p.product_name || '')}${p.model ? ' <span class="relation-item-model">' + escapeHtml(p.model) + '</span>' : ''}</div>
+                            <div class="relation-item-meta">
+                                ${p.product_brand ? '<span>' + escapeHtml(p.product_brand) + '</span>' : ''}
+                                ${p.category ? '<span>' + escapeHtml(p.category) + '</span>' : ''}
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
+                resultEl.innerHTML = countHtml + listHtml;
+                document.getElementById('relationPagination').innerHTML = totalPages > 1 ? `
+                    <button class="relation-page-btn" ${relationCurrentPage <= 1 ? 'disabled' : ''} onclick="relationGoPage(${relationCurrentPage - 1})">上一页</button>
+                    <span class="relation-page-info">${relationCurrentPage} / ${totalPages}</span>
+                    <button class="relation-page-btn" ${relationCurrentPage >= totalPages ? 'disabled' : ''} onclick="relationGoPage(${relationCurrentPage + 1})">下一页</button>
+                ` : '';
+            } catch (e) {
+                resultEl.innerHTML = '<div class="relation-empty relation-error">搜索失败</div>';
+            }
+        }
+
+        function relationGoPage(page) {
+            relationCurrentPage = page;
+            doSearchRelation();
+            document.getElementById('relationSearchResults').scrollTop = 0;
+        }
+
+        async function deleteRelation(productId, relatedId) {
+            if (!confirm('确定删除此关联？')) return;
+            try {
+                const res = await fetch(`/api/products/${productId}/relations/${relatedId}`, {
+                    method: 'DELETE',
+                });
+                if (!res.ok) throw new Error('删除失败');
+                loadRelations(productId);
+                showToast('删除成功', 'success');
             } catch (e) { showToast(e.message, 'error'); }
         }

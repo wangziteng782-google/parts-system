@@ -41,14 +41,7 @@
             align-items: center;
             gap: 8px;
         }
-        .breadcrumb .product-id-badge {
-            padding: 4px 8px;
-            border: 1px solid #dbe3ec;
-            border-radius: 5px;
-            background: #fff;
-            color: #64748b;
-            font-size: 12px;
-            font-variant-numeric: tabular-nums;
+        .breadcrumb .product-id-badge { display: none;
         }
         .product-feedback-list { display:flex; flex-direction:column; gap:8px; margin:0 0 16px; }
         .product-feedback-card { display:flex; align-items:center; justify-content:space-between; gap:18px; min-height:48px; padding:10px 16px; border:1px solid #fed7aa; border-left:4px solid #f59e0b; border-radius:7px; background:#fff7e6; box-shadow:0 2px 6px rgba(146,64,14,.05); }
