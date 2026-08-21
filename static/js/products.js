@@ -852,7 +852,7 @@ async function init() {
                 <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
                         <span style="font-size:14px;font-weight:600;color:#111827">关联产品</span>
-                        <button class="product-completion-button" style="margin-left:0;padding:0 10px" onclick="openRelationModal(${data.id}, '${escapeHtml(data.product_name || '').replace(/'/g, "\\'")}')">+ 关联</button>
+                        <button class="product-completion-button" style="margin-left:0;padding:0 10px" onclick="openRelationModal(${data.id}, '${escapeHtml(data.substitute_model || '').replace(/'/g, "\\'").replace(/\n/g, '\\n')}')">+ 关联</button>
                     </div>
                     <div id="relationList" class="relation-list"></div>
                 </div>
@@ -1120,7 +1120,7 @@ async function init() {
         let relationSelectedIds = new Set();
         let currentRelationProductId = null;
 
-        function openRelationModal(productId, productName) {
+        function openRelationModal(productId, substituteModel) {
             relationSelectedIds = new Set();
             currentRelationProductId = productId;
             const modal = document.createElement('div');
@@ -1151,9 +1151,13 @@ async function init() {
             modal.classList.add('show');
             const searchInput = document.getElementById('relationSearch');
             searchInput.focus();
-            if (productName) {
-                searchInput.value = productName;
-                doSearchRelation(productName);
+            // 有替代型号 → 用替代型号搜索；无替代型号 → 展示全部
+            const keyword = (substituteModel || '').split('\n').map(s => s.trim()).filter(Boolean).join(' ');
+            if (keyword) {
+                searchInput.value = keyword;
+                doSearchRelation(keyword);
+            } else {
+                doSearchRelation('');
             }
         }
 
@@ -1203,9 +1207,8 @@ async function init() {
         }
 
         async function doSearchRelation(keywordOverride) {
-            const keyword = keywordOverride || document.getElementById('relationSearch').value.trim();
+            const keyword = keywordOverride !== undefined ? keywordOverride : document.getElementById('relationSearch').value.trim();
             const resultEl = document.getElementById('relationSearchResults');
-            if (!keyword) { resultEl.innerHTML = ''; return; }
             try {
                 const res = await fetch(`/api/products?keyword=${encodeURIComponent(keyword)}&page=${relationCurrentPage}&page_size=${relationPageSize}`);
                 const data = await res.json();

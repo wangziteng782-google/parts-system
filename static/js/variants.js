@@ -408,7 +408,17 @@
         }
 
         // 价格自动计算：填写一个价格 → 根据税点算另外两个
+        let _programmaticFields = new Set(); // 程序赋值的字段，blur 时跳过计算
+
+        function _onUserPriceInput(field) {
+            _programmaticFields.delete(field);
+        }
+
         function _autoCalcPrices(sourceKey) {
+            if (_programmaticFields.has(sourceKey)) {
+                _programmaticFields.delete(sourceKey);
+                return;
+            }
             const taxSpecial = Number(document.getElementById('spDetailArea')?.dataset.taxSpecial) || 0;
             const taxNormal = Number(document.getElementById('spDetailArea')?.dataset.taxNormal) || 0;
             const noTaxEl = document.getElementById('spInputNoTax');
@@ -422,16 +432,16 @@
 
             if (sourceKey === 'noTax' && noTaxVal !== '' && !isNaN(Number(noTaxVal))) {
                 const base = Number(noTaxVal);
-                if (!specialEl.disabled) specialEl.value = Math.round(base * (1 + taxSpecial / 100));
-                if (!normalEl.disabled) normalEl.value = Math.round(base * (1 + taxNormal / 100));
+                if (!specialEl.disabled) { _programmaticFields.add('special'); specialEl.value = Math.round(base * (1 + taxSpecial / 100)); }
+                if (!normalEl.disabled) { _programmaticFields.add('normal'); normalEl.value = Math.round(base * (1 + taxNormal / 100)); }
             } else if (sourceKey === 'special' && specialVal !== '' && !isNaN(Number(specialVal)) && taxSpecial != null) {
                 const base = taxSpecial ? Number(specialVal) / (1 + taxSpecial / 100) : Number(specialVal);
-                noTaxEl.value = base.toFixed(2);
-                if (!normalEl.disabled) normalEl.value = Math.round(base * (1 + taxNormal / 100));
+                _programmaticFields.add('noTax'); noTaxEl.value = Math.round(base);
+                if (!normalEl.disabled) { _programmaticFields.add('normal'); normalEl.value = Math.round(base * (1 + taxNormal / 100)); }
             } else if (sourceKey === 'normal' && normalVal !== '' && !isNaN(Number(normalVal)) && taxNormal != null) {
                 const base = taxNormal ? Number(normalVal) / (1 + taxNormal / 100) : Number(normalVal);
-                noTaxEl.value = base.toFixed(2);
-                if (!specialEl.disabled) specialEl.value = Math.round(base * (1 + taxSpecial / 100));
+                _programmaticFields.add('noTax'); noTaxEl.value = Math.round(base);
+                if (!specialEl.disabled) { _programmaticFields.add('special'); specialEl.value = Math.round(base * (1 + taxSpecial / 100)); }
             }
         }
 
@@ -487,7 +497,7 @@
                                     <small>展示</small>
                                 </label>
                             </div>
-                            <input id="spInputNoTax" class="sp-input-money" type="text" value="${p.no_tax_price ?? ''}" placeholder="0.00" onblur="_autoCalcPrices('noTax')">
+                            <input id="spInputNoTax" class="sp-input-money" type="text" value="${p.no_tax_price ?? ''}" placeholder="0.00" onblur="_autoCalcPrices('noTax')" oninput="_onUserPriceInput('noTax')">
                         </div>
 
                         <!-- 含专票 -->
@@ -502,7 +512,7 @@
                                     <small>展示</small>
                                 </label>
                             </div>
-                            <input id="spSpecialVal" class="sp-input-money" type="text" value="${p.purchase_special_invoice ?? ''}" placeholder="0.00" onblur="_autoCalcPrices('special')">
+                            <input id="spSpecialVal" class="sp-input-money" type="text" value="${p.purchase_special_invoice ?? ''}" placeholder="0.00" onblur="_autoCalcPrices('special')" oninput="_onUserPriceInput('special')">
                         </div>
 
                         <!-- 含普票 -->
@@ -517,7 +527,7 @@
                                     <small>展示</small>
                                 </label>
                             </div>
-                            <input id="spNormalVal" class="sp-input-money" type="text" value="${p.purchase_general_invoice ?? ''}" placeholder="0.00" onblur="_autoCalcPrices('normal')">
+                            <input id="spNormalVal" class="sp-input-money" type="text" value="${p.purchase_general_invoice ?? ''}" placeholder="0.00" onblur="_autoCalcPrices('normal')" oninput="_onUserPriceInput('normal')">
                         </div>
                     </div>
                     </div>

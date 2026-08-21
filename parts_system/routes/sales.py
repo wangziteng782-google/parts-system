@@ -223,113 +223,14 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         )
         params.extend([like_keyword] * 6)
     where_sql = " WHERE " + " AND ".join(where)
-    # 列表销售参考价与详情价格表保持同一口径：
-    # 有效规格组合时，每个组合取标记为对外展示的供应商；
-    # 未标记时回退到该组合最早保存的供应商，并汇总价格区间；
-    # 不含票价 -> 含专票价 -> 含普票价选择第一个正数价格；
-    # 没有有效规格组合时，才使用 parts.purchase_cost。
 
-    # where条件 用来筛选是否有规格报价
-    valid_variant_filter = (
-        "candidate.part_id=p.id "
-        "AND EXISTS ("
-        "SELECT 1 FROM product_variant_group_specs candidate_link "
-        "JOIN product_variant_specs candidate_spec ON candidate_spec.id=candidate_link.spec_id "
-        "WHERE candidate_link.part_id=candidate.part_id "
-        "AND candidate_link.variant_group_id=candidate.variant_group_id"
-        ") "
-        "AND NOT EXISTS ("
-        "SELECT 1 FROM product_variant_group_specs inactive_link "
-        "JOIN product_variant_specs inactive_spec ON inactive_spec.id=inactive_link.spec_id "
-        "WHERE inactive_link.part_id=candidate.part_id "
-        "AND inactive_link.variant_group_id=candidate.variant_group_id "
-        "AND COALESCE(inactive_spec.is_active,0)<>1"
-        ")"
-    )
-    # 当前商品p 有没有至少一个有效规格价格 返回结果是否存在 true 和 false
-    has_valid_variant_sql = (
-        f"EXISTS (SELECT 1 FROM product_variant_prices candidate "
-        f"WHERE {valid_variant_filter})"
-    )
-    # 在valid_variant_filter的基础上，筛选出最佳的价格记录
-    preferred_variant_filter = (
-        f"{valid_variant_filter} AND NOT EXISTS ("
-        "SELECT 1 FROM product_variant_prices preferred "
-        "WHERE preferred.part_id=candidate.part_id "
-        "AND preferred.variant_group_id=candidate.variant_group_id "
-        "AND (COALESCE(preferred.is_external_visible,0) "
-        "> COALESCE(candidate.is_external_visible,0) "
-        "OR (COALESCE(preferred.is_external_visible,0) "
-        "= COALESCE(candidate.is_external_visible,0) "
-        "AND preferred.id<candidate.id)))"
-    )
-    # 规格报价优先使用不含税价，没有不含税价就使用专票价，再没有就使用普票价。
-    variant_price_sql = (
-        "COALESCE(NULLIF(candidate.no_tax_price,0), "
-        "NULLIF(candidate.purchase_special_invoice,0), "
-        "NULLIF(candidate.purchase_general_invoice,0))"
-    )
-    # 找最低报价
-    min_variant_quote_sql = (
-        f"(SELECT MIN({variant_price_sql}) FROM product_variant_prices candidate "
-        f"WHERE {preferred_variant_filter})"
-    )
-    # 找最低报价
-    max_variant_quote_sql = (
-        f"(SELECT MAX({variant_price_sql}) FROM product_variant_prices candidate "
-        f"WHERE {preferred_variant_filter})"
-    )
-    def variant_invoice_bound(field: str, aggregate: str) -> str:
-        return (
-            f"(SELECT {aggregate}(NULLIF(candidate.{field},0)) "
-            "FROM product_variant_prices candidate "
-            f"WHERE {preferred_variant_filter})"
-        )
-
-    def parts_invoice_value(field: str) -> str:
-        return (
-            f"CASE WHEN TRIM(p.{field}) REGEXP '^[0-9]+([.][0-9]+)?$' "
-            f"THEN CAST(TRIM(p.{field}) AS DECIMAL(14,2)) ELSE NULL END"
-        )
-
-    invoice_bounds = {}
-    for field in ("purchase_special_invoice", "purchase_general_invoice"):
-        parts_value = parts_invoice_value(field)
-        invoice_bounds[field] = {
-            "min": (
-                f"CASE WHEN {has_valid_variant_sql} "
-                f"THEN {variant_invoice_bound(field, 'MIN')} ELSE NULLIF({parts_value},0) END"
-            ),
-            "max": (
-                f"CASE WHEN {has_valid_variant_sql} "
-                f"THEN {variant_invoice_bound(field, 'MAX')} ELSE NULLIF({parts_value},0) END"
-            ),
-            "available": (
-                f"CASE WHEN {has_valid_variant_sql} THEN EXISTS ("
-                "SELECT 1 FROM product_variant_prices candidate "
-                f"WHERE {preferred_variant_filter} AND candidate.{field}=0) "
-                f"ELSE COALESCE({parts_value}=0,0) END"
-            ),
-        }
-    parts_purchase_cost_sql = (
-        "CASE WHEN TRIM(p.purchase_cost) REGEXP '^[0-9]+([.][0-9]+)?' "
-        "THEN CAST(TRIM(p.purchase_cost) AS DECIMAL(14,2)) ELSE NULL END"
-    )
-    # 有规格报价时使用规格报价 否则就用 parts.purchase_cost
-    base_cost_min_sql = (
-        f"(CASE WHEN {has_valid_variant_sql} THEN {min_variant_quote_sql} "
-        f"ELSE {parts_purchase_cost_sql} END)"
-    )
-    base_cost_max_sql = (
-        f"(CASE WHEN {has_valid_variant_sql} THEN {max_variant_quote_sql} "
-        f"ELSE {parts_purchase_cost_sql} END)"
-    )
     order_sql = {
-        "default": "COALESCE(MAX(v.update_time), p.update_time_2, p.update_time) DESC, p.id DESC",
-        "updated_desc": "COALESCE(MAX(v.update_time), p.update_time_2, p.update_time) DESC, p.id DESC",
-        "price_asc": f"({base_cost_min_sql} IS NULL), {base_cost_min_sql} ASC, p.id DESC",
-        "price_desc": f"({base_cost_max_sql} IS NULL), {base_cost_max_sql} DESC, p.id DESC",
+        "default": "p.update_time_2 DESC, p.id DESC",
+        "updated_desc": "p.update_time_2 DESC, p.id DESC",
+        "price_asc": "(p.display_price_min IS NULL), p.display_price_min ASC, p.id DESC",
+        "price_desc": "(p.display_price_max IS NULL), p.display_price_max DESC, p.id DESC",
     }[sort]
+
     image_columns = ", ".join(f"p.{field}" for field in IMAGE_FIELDS)
     detail_columns = [
         "sku_code", "supplier", "warranty", "applicable_elevator_brand",
@@ -341,36 +242,23 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         "purchase_special_invoice", "purchase_general_invoice",
         "purchase_shipping",
     ]
-    group_columns = ", ".join(
-        [
-            "p.id", "p.product_name", "p.model", "p.product_brand", "p.product_type",
-            "p.nature", "p.purchase_cost", "p.update_time", "p.update_time_2",
-            *[f"p.{field}" for field in detail_columns],
-            *[f"p.{field}" for field in part_price_columns],
-            *[f"p.{field}" for field in IMAGE_FIELDS],
-            "completion.complete_id", "completion.change_id",
-        ]
+    all_select_columns = ", ".join(
+        [f"p.{field}" for field in detail_columns + part_price_columns + IMAGE_FIELDS]
     )
     conn = get_db()
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) AS total FROM parts p" + where_sql, params)
         total = int(cursor.fetchone()["total"])
+
         cursor.execute(
             f"""SELECT p.id, p.product_name, p.model, p.product_brand, p.product_type,
-                       p.nature, {", ".join(f"p.{field}" for field in detail_columns)},
-                       {", ".join(f"p.{field}" for field in part_price_columns)},
-                       {image_columns}, {base_cost_min_sql} AS base_cost_min,
-                       {base_cost_max_sql} AS base_cost_max,
-                       {invoice_bounds['purchase_special_invoice']['min']} AS special_invoice_min,
-                       {invoice_bounds['purchase_special_invoice']['max']} AS special_invoice_max,
-                       {invoice_bounds['purchase_special_invoice']['available']} AS special_invoice_available,
-                       {invoice_bounds['purchase_general_invoice']['min']} AS general_invoice_min,
-                       {invoice_bounds['purchase_general_invoice']['max']} AS general_invoice_max,
-                       {invoice_bounds['purchase_general_invoice']['available']} AS general_invoice_available,
-                       {has_valid_variant_sql} AS has_variant_quotes,
-                       CASE WHEN COALESCE(completion.complete_id,0)
-                                      > COALESCE(completion.change_id,0)
+                       p.nature, p.purchase_cost, p.update_time, p.update_time_2,
+                       {all_select_columns},
+                       p.display_price_min, p.display_price_max,
+                       COALESCE(vc.variant_count, 0) AS variant_count,
+                       CASE WHEN COALESCE(MAX(completion.complete_id),0)
+                                      > COALESCE(MAX(completion.change_id),0)
                             THEN 1 ELSE 0 END AS modification_completed,
                        COALESCE(
                            NULLIF(
@@ -398,6 +286,11 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
                 FROM parts p
                 LEFT JOIN product_variant_prices v ON v.part_id=p.id
                 LEFT JOIN (
+                    SELECT part_id, COUNT(DISTINCT variant_group_id) AS variant_count
+                    FROM product_variant_prices
+                    GROUP BY part_id
+                ) vc ON vc.part_id=p.id
+                LEFT JOIN (
                     SELECT part_id,
                            MAX(CASE WHEN operation_type='COMPLETE' THEN id END) AS complete_id,
                            MAX(CASE WHEN operation_type IN ('CREATE','UPDATE') THEN id END) AS change_id
@@ -405,13 +298,86 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
                     GROUP BY part_id
                 ) completion ON completion.part_id=p.id
                 {where_sql}
-                GROUP BY {group_columns}
+                GROUP BY p.id
                 ORDER BY {order_sql}
                 LIMIT %s""",
             [*params, limit],
         )
+        rows = cursor.fetchall()
+
+        # 收集单规格产品的对外价格（按类型存储）
+        single_variant_ids = [r["id"] for r in rows if r["variant_count"] == 1]
+        single_prices: dict[int, dict[str, float]] = {}
+        if single_variant_ids:
+            placeholders = ",".join(["%s"] * len(single_variant_ids))
+            cursor.execute(
+                f"""SELECT part_id, no_tax_price, purchase_special_invoice,
+                           purchase_general_invoice, external_price_fields
+                    FROM product_variant_prices
+                    WHERE part_id IN ({placeholders})
+                    ORDER BY part_id, id""",
+                single_variant_ids,
+            )
+            for row in cursor.fetchall(): # 判断有对外展示标记的价格
+                fields = (row.get('external_price_fields') or '').split(',')
+                prices = single_prices.setdefault(row["part_id"], {})
+                if 'no_tax' in fields and row.get('no_tax_price') is not None:
+                    prices['no_tax'] = float(row['no_tax_price'])
+                if 'special' in fields and row.get('purchase_special_invoice') is not None:
+                    prices['special'] = float(row['purchase_special_invoice'])
+                if 'general' in fields and row.get('purchase_general_invoice') is not None:
+                    prices['general'] = float(row['purchase_general_invoice'])
+
         items = []
-        for row in cursor.fetchall():
+        for row in rows:
+            variant_count = row["variant_count"]
+            if variant_count == 0: # 针对没有规格的，价格是parts中的老数据
+                display_type = "no_variant"
+                display_price = _display_price(
+                    row.get("purchase_cost"),
+                    row.get("product_name"),
+                    row.get("product_type"),
+                )
+                display_price_min = None
+                display_price_max = None
+                special_price = None
+                general_price = None
+            elif variant_count == 1: # 针对单规格，只显示对外展示的价格
+                display_type = "single_variant"
+                prices = single_prices.get(row["id"], {})
+                display_price = _display_price(
+                    prices.get('no_tax'),
+                    row.get("product_name"),
+                    row.get("product_type"),
+                )
+                display_price_min = None
+                display_price_max = None
+                special_price = _display_price(
+                    prices.get('special'),
+                    row.get("product_name"),
+                    row.get("product_type"),
+                )
+                general_price = _display_price(
+                    prices.get('general'),
+                    row.get("product_name"),
+                    row.get("product_type"),
+                )
+            else:  # 针对多规格，显示价格区间（最小值~最大值）
+                display_type = "multi_variant"
+                display_price = None
+                display_price_min = _display_price(
+                    row.get("display_price_min"),
+                    row.get("product_name"),
+                    row.get("product_type"),
+                )
+                display_price_max = _display_price(
+                    row.get("display_price_max"),
+                    row.get("product_name"),
+                    row.get("product_type"),
+                )
+                special_price = None
+                general_price = None
+
             items.append({
                 "id": row["id"],
                 "product_name": row.get("product_name"),
@@ -421,69 +387,13 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
                 "product_type": row.get("product_type"),
                 "nature": row.get("nature"),
                 **{field: row.get(field) for field in detail_columns},
-                "part_price_summary": {
-                    "purchase_cost": _display_price(
-                        row.get("purchase_cost"),
-                        row.get("product_name"),
-                        row.get("product_type"),
-                    ),
-                    "purchase_special_invoice": _plain_business_value(
-                        row.get("purchase_special_invoice")
-                    ),
-                    "purchase_special_invoice_available": _is_explicit_zero(
-                        row.get("purchase_special_invoice")
-                    ),
-                    "purchase_general_invoice": _plain_business_value(
-                        row.get("purchase_general_invoice")
-                    ),
-                    "purchase_general_invoice_available": _is_explicit_zero(
-                        row.get("purchase_general_invoice")
-                    ),
-                    "purchase_shipping": _plain_business_value(
-                        row.get("purchase_shipping")
-                    ),
-                },
                 "image": _first_product_image(row),
-                "display_price": _display_price(
-                    row.get("base_cost_min"),
-                    row.get("product_name"),
-                    row.get("product_type"),
-                ),
-                "display_price_min": _display_price(
-                    row.get("base_cost_min"),
-                    row.get("product_name"),
-                    row.get("product_type"),
-                ),
-                "display_price_max": _display_price(
-                    row.get("base_cost_max"),
-                    row.get("product_name"),
-                    row.get("product_type"),
-                ),
-                "invoice_quote_summary": {
-                    "has_variant_quotes": bool(row.get("has_variant_quotes")),
-                    "special_min": _scaled_positive_price(
-                        row.get("special_invoice_min"),
-                        row.get("product_name"),
-                        row.get("product_type"),
-                    ),
-                    "special_max": _scaled_positive_price(
-                        row.get("special_invoice_max"),
-                        row.get("product_name"),
-                        row.get("product_type"),
-                    ),
-                    "special_available": bool(row.get("special_invoice_available")),
-                    "general_min": _scaled_positive_price(
-                        row.get("general_invoice_min"),
-                        row.get("product_name"),
-                        row.get("product_type"),
-                    ),
-                    "general_max": _scaled_positive_price(
-                        row.get("general_invoice_max"),
-                        row.get("product_name"),
-                        row.get("product_type"),
-                    ),
-                    "general_available": bool(row.get("general_invoice_available")),
-                },
+                "display_type": display_type,
+                "display_price": display_price,
+                "display_price_min": display_price_min,
+                "display_price_max": display_price_max,
+                "special_price": special_price,
+                "general_price": general_price,
                 "modification_completed": bool(row.get("modification_completed")),
                 "quote_updated_at": row.get("quote_updated_at"),
                 "record_source": "parts",

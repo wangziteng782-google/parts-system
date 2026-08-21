@@ -53,9 +53,14 @@ async def list_products(
         params = []
 
         if keyword:
-            where += " AND (parts.product_name LIKE %s OR parts.model LIKE %s OR parts.sku_code LIKE %s OR parts.product_brand LIKE %s)"
-            like_kw = f"%{keyword}%"
-            params.extend([like_kw, like_kw, like_kw, like_kw])
+            # 按空格拆分多个关键词，每个关键词独立匹配型号（OR 逻辑），满足任意一个即可返回
+            terms = [t for t in keyword.split() if t]
+            if terms:
+                term_conditions = []
+                for term in terms:
+                    term_conditions.append("parts.model LIKE %s")
+                    params.append(f"%{term}%")
+                where += " AND (" + " OR ".join(term_conditions) + ")"
 
         if duplicates_only:
             duplicate_group_join = (

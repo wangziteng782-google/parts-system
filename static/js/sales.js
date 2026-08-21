@@ -229,18 +229,8 @@ function salesPriceRangeText(minValue, maxValue) {
 
 function renderPartsInvoiceInfo(item) {
     if (item.record_source !== 'parts') return '';
-    const summary = item.invoice_quote_summary || {};
-    const main = item.part_price_summary || {};
-    const special = summary.has_variant_quotes
-        ? salesPriceRangeText(summary.special_min, summary.special_max)
-            || (summary.special_available ? '可开专票' : '')
-        : (main.purchase_special_invoice_available
-            ? '可开专票' : detailAmountText(main.purchase_special_invoice));
-    const general = summary.has_variant_quotes
-        ? salesPriceRangeText(summary.general_min, summary.general_max)
-            || (summary.general_available ? '可开普票' : '')
-        : (main.purchase_general_invoice_available
-            ? '可开普票' : detailAmountText(main.purchase_general_invoice));
+    const special = item.special_price;
+    const general = item.general_price;
     return [['含专票', special], ['含普票', general]]
         .filter(([, value]) => detailValue(value))
         .map(([label, value]) => `<div><label>${label}</label><span>${escapeSalesHtml(value)}</span></div>`)

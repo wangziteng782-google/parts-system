@@ -696,6 +696,16 @@
                         <button class="btn-confirm" onclick="event.stopPropagation();saveField('${field}')" title="保存技术参数">&#10003;</button>
                         <button class="btn-cancel" onclick="event.stopPropagation();cancelEdit('${field}')" title="取消">&#10005;</button>
                     </div></div>`;
+            } else if (field === 'substitute_model') {
+                fvEl.innerHTML = `<div class="field-edit" id="edit-wrapper-${field}">
+                    <div class="technical-param-editor">
+                        <textarea id="edit-input-${field}" placeholder="每行填写一个替代型号" onclick="event.stopPropagation()" onkeydown="if(event.key==='Escape'){event.stopPropagation();cancelEdit('${field}')}">${escapeHtml(String(currentValue))}</textarea>
+                        <div class="technical-param-edit-tip">每行填写一个替代型号，按 Enter 换行；填写完成后点击右侧对号保存。</div>
+                    </div>
+                    <div class="edit-actions">
+                        <button class="btn-confirm" onclick="event.stopPropagation();saveField('${field}')" title="保存替代型号">&#10003;</button>
+                        <button class="btn-cancel" onclick="event.stopPropagation();cancelEdit('${field}')" title="取消">&#10005;</button>
+                    </div></div>`;
             } else if (isLongText) {
                 fvEl.innerHTML = `<div class="field-edit" id="edit-wrapper-${field}">
                     <textarea id="edit-input-${field}">${escapeHtml(String(currentValue))}</textarea>
