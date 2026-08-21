@@ -845,7 +845,7 @@ async function init() {
             html += `<div class="spec-section">
                 <table class="spec-table">
                     <tr><td>技术参数</td><td><span class="field-value" id="fv-technical_params" onclick="editField('technical_params')">${renderTechnicalParams(data.technical_params)}</span></td></tr>
-                    <tr><td>${fieldLabels['substitute_model']}</td><td><span class="field-value" id="fv-substitute_model" onclick="editField('substitute_model')">${renderVal(data.substitute_model)}</span></td></tr>
+                    <tr><td>${fieldLabels['substitute_model']}</td><td><span class="field-value" id="fv-substitute_model" onclick="editField('substitute_model')">${renderSubstituteModel(data.substitute_model)}</span></td></tr>
                     <tr><td>${fieldLabels['remark']}</td><td><span class="field-value" id="fv-remark" onclick="editField('remark')">${renderVal(data.remark)}</span></td></tr>
                     <tr><td>${fieldLabels['remark_2']}</td><td><span class="field-value" id="fv-remark_2" onclick="editField('remark_2')">${renderVal(data.remark_2)}</span></td></tr>
                 </table>

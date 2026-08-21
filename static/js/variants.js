@@ -1427,6 +1427,15 @@
             return `<div class="technical-param-list">${lines.map((line, index) => `<div class="technical-param-line"><span class="technical-param-index">${index + 1}</span><span class="technical-param-text">${escapeHtml(line)}</span></div>`).join('')}</div>`;
         }
 
+        function renderSubstituteModel(value) {
+            if (value === null || value === '' || value === undefined) {
+                return '<span style="color:#ccc;font-style:italic">空，点击填写替代型号</span>';
+            }
+            const lines = String(value).replace(/\r\n?/g, '\n').split('\n').map(line => line.trim()).filter(Boolean);
+            if (!lines.length) return '<span style="color:#ccc;font-style:italic">空，点击填写替代型号</span>';
+            return `<div class="technical-param-list">${lines.map((line, index) => `<div class="technical-param-line"><span class="technical-param-index">${index + 1}</span><span class="technical-param-text">${escapeHtml(line)}</span></div>`).join('')}</div>`;
+        }
+
         // 点击外部关闭供应商搜索下拉
         document.addEventListener('click', (e) => {
             const wrap = document.getElementById('spSupplierWrap');
