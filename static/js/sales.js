@@ -410,18 +410,13 @@ async function loadSalesCommunications(orderGoodsId) {
     }
 }
 
-function invoicePriceText(price, available, availableText) {
-    if (detailValue(price)) return detailAmountText(price);
-    return available ? availableText : '';
-}
-
 function renderSalesVariantPrices(items) {
     const showActions = items.length > 1;
     const rows = items.map((item, index) => `<tr data-variant-index="${index}">
         <td>${escapeSalesHtml(detailValue(item.specification))}</td>
-        <td class="sales-detail-variant-price">${escapeSalesHtml(detailAmountText(item.no_tax_price))}</td>
-        <td class="sales-detail-variant-price">${escapeSalesHtml(invoicePriceText(item.special_invoice_price, item.special_invoice_available, '可开专票'))}</td>
-        <td class="sales-detail-variant-price">${escapeSalesHtml(invoicePriceText(item.general_invoice_price, item.general_invoice_available, '可开普票'))}</td>
+        <td class="sales-detail-variant-price">${escapeSalesHtml(detailAmountText(item.no_tax_price) || '—')}</td>
+        <td class="sales-detail-variant-price">${escapeSalesHtml(detailAmountText(item.special_invoice_price) || '—')}</td>
+        <td class="sales-detail-variant-price">${escapeSalesHtml(detailAmountText(item.general_invoice_price) || '—')}</td>
         ${showActions ? `<td><button type="button" class="sales-variant-select" onclick="selectSalesVariantQuote(${index})">查看</button></td>` : ''}
     </tr>`).join('');
     return `<div class="sales-detail-variant-table-wrap"><table>
@@ -445,12 +440,8 @@ function selectSalesVariantQuote(index) {
 }
 
 function renderSalesPartsMainPrices(summary = {}) {
-    const specialInvoice = summary.purchase_special_invoice_available
-        ? '可开专票'
-        : detailAmountText(summary.purchase_special_invoice);
-    const generalInvoice = summary.purchase_general_invoice_available
-        ? '可开普票'
-        : detailAmountText(summary.purchase_general_invoice);
+    const specialInvoice = detailAmountText(summary.purchase_special_invoice) || '—';
+    const generalInvoice = detailAmountText(summary.purchase_general_invoice) || '—';
     const fields = [
         ['进项专票', specialInvoice],
         ['进项普票', generalInvoice],
