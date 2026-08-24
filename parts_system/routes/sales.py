@@ -208,6 +208,136 @@ def _merge_sales_items(parts_items: list, inquiry_items: list, sort: str) -> lis
     )
 
 
+def _collect_single_prices(cursor, ids: list[int]) -> dict[int, dict[str, float]]:
+    """收集单规格产品的对外价格（按类型存储）"""
+    prices: dict[int, dict[str, float]] = {}
+    if not ids:
+        return prices
+    placeholders = ",".join(["%s"] * len(ids))
+    cursor.execute(
+        f"""SELECT part_id, no_tax_price, purchase_special_invoice,
+                   purchase_general_invoice, external_price_fields
+            FROM product_variant_prices
+            WHERE part_id IN ({placeholders})
+            ORDER BY part_id, id""",
+        ids,
+    )
+    for row in cursor.fetchall():
+        fields = (row.get('external_price_fields') or '').split(',')
+        p = prices.setdefault(row["part_id"], {})
+        if 'no_tax' in fields and row.get('no_tax_price') is not None:
+            p['no_tax'] = float(row['no_tax_price'])
+        if 'special' in fields and row.get('purchase_special_invoice') is not None:
+            p['special'] = float(row['purchase_special_invoice'])
+        if 'general' in fields and row.get('purchase_general_invoice') is not None:
+            p['general'] = float(row['purchase_general_invoice'])
+    return prices
+
+
+def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: list, order_clause: str, limit: int | None):
+    """查询产品行数据。where_clause 包含 WHERE 关键字，limit 为 None 时不限制。"""
+    limit_sql = "" if limit is None else " LIMIT %s"
+    limit_params = [] if limit is None else [limit]
+    cursor.execute(
+        f"""SELECT p.id, p.product_name, p.model, p.product_brand, p.product_type,
+                   p.nature, p.purchase_cost, p.update_time, p.update_time_2,
+                   {select_columns},
+                   p.display_price_min, p.display_price_max,
+                   COALESCE(vc.variant_count, 0) AS variant_count,
+                   CASE WHEN COALESCE(MAX(completion.complete_id),0)
+                                  > COALESCE(MAX(completion.change_id),0)
+                        THEN 1 ELSE 0 END AS modification_completed,
+                   COALESCE(
+                       NULLIF(
+                           (SELECT GROUP_CONCAT(
+                                       CONCAT(spec.spec_name, '：', spec.spec_value)
+                                       ORDER BY spec.sort_order, spec.id SEPARATOR '；'
+                                   )
+                              FROM product_variant_specs spec
+                             WHERE spec.part_id=p.id
+                               AND spec.is_active=1
+                               AND COALESCE(TRIM(spec.spec_value), '') <> ''
+                               AND EXISTS (
+                                   SELECT 1
+                                     FROM product_variant_group_specs link
+                                    WHERE link.part_id=p.id
+                                      AND link.spec_id=spec.id
+                               )
+                           ),
+                           ''
+                       ),
+                       NULLIF(TRIM(p.nature), '')
+                   ) AS specification,
+                   COALESCE(MAX(v.update_time), p.update_time_2, p.update_time)
+                       AS quote_updated_at
+            FROM parts p
+            LEFT JOIN product_variant_prices v ON v.part_id=p.id
+            LEFT JOIN (
+                SELECT part_id, COUNT(DISTINCT variant_group_id) AS variant_count
+                FROM product_variant_prices
+                GROUP BY part_id
+            ) vc ON vc.part_id=p.id
+            LEFT JOIN (
+                SELECT part_id,
+                       MAX(CASE WHEN operation_type='COMPLETE' THEN id END) AS complete_id,
+                       MAX(CASE WHEN operation_type IN ('CREATE','UPDATE') THEN id END) AS change_id
+                FROM employee_operation_logs
+                GROUP BY part_id
+            ) completion ON completion.part_id=p.id
+            {where_clause}
+            GROUP BY p.id
+            ORDER BY {order_clause}{limit_sql}""",
+        [*params, *limit_params],
+    )
+    return cursor.fetchall()
+
+
+def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dict:
+    variant_count = row["variant_count"]
+    if variant_count == 0:
+        display_type = "no_variant"
+        display_price = _display_price(row.get("purchase_cost"), row.get("product_name"), row.get("product_type"))
+        display_price_min = None
+        display_price_max = None
+        special_price = None
+        general_price = None
+    elif variant_count == 1:
+        display_type = "single_variant"
+        display_price = _display_price(prices.get('no_tax'), row.get("product_name"), row.get("product_type"))
+        display_price_min = None
+        display_price_max = None
+        special_price = _display_price(prices.get('special'), row.get("product_name"), row.get("product_type"))
+        general_price = _display_price(prices.get('general'), row.get("product_name"), row.get("product_type"))
+    else:
+        display_type = "multi_variant"
+        display_price = None
+        display_price_min = _display_price(row.get("display_price_min"), row.get("product_name"), row.get("product_type"))
+        display_price_max = _display_price(row.get("display_price_max"), row.get("product_name"), row.get("product_type"))
+        special_price = None
+        general_price = None
+    return {
+        "id": row["id"],
+        "product_name": row.get("product_name"),
+        "model": row.get("model"),
+        "specification": row.get("specification"),
+        "product_brand": row.get("product_brand"),
+        "product_type": row.get("product_type"),
+        "nature": row.get("nature"),
+        **{field: row.get(field) for field in detail_columns},
+        "image": _first_product_image(row),
+        "display_type": display_type,
+        "display_price": display_price,
+        "display_price_min": display_price_min,
+        "display_price_max": display_price_max,
+        "special_price": special_price,
+        "general_price": general_price,
+        "modification_completed": bool(row.get("modification_completed")),
+        "quote_updated_at": row.get("quote_updated_at"),
+        "record_source": "parts",
+        "record_source_label": "来自配件库",
+    }
+
+
 def _fetch_parts_products(keyword: str, sort: str, limit: int):
     where = ["COALESCE(TRIM(p.product_name), '') <> ''"]
     params = []
@@ -231,7 +361,6 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         "price_desc": "(p.display_price_max IS NULL), p.display_price_max DESC, p.id DESC",
     }[sort]
 
-    image_columns = ", ".join(f"p.{field}" for field in IMAGE_FIELDS)
     detail_columns = [
         "sku_code", "supplier", "warranty", "applicable_elevator_brand",
         "substitute_model", "precautions", "technical_params", "remark",
@@ -251,154 +380,33 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         cursor.execute("SELECT COUNT(*) AS total FROM parts p" + where_sql, params)
         total = int(cursor.fetchone()["total"])
 
-        cursor.execute(
-            f"""SELECT p.id, p.product_name, p.model, p.product_brand, p.product_type,
-                       p.nature, p.purchase_cost, p.update_time, p.update_time_2,
-                       {all_select_columns},
-                       p.display_price_min, p.display_price_max,
-                       COALESCE(vc.variant_count, 0) AS variant_count,
-                       CASE WHEN COALESCE(MAX(completion.complete_id),0)
-                                      > COALESCE(MAX(completion.change_id),0)
-                            THEN 1 ELSE 0 END AS modification_completed,
-                       COALESCE(
-                           NULLIF(
-                               (SELECT GROUP_CONCAT(
-                                           CONCAT(spec.spec_name, '：', spec.spec_value)
-                                           ORDER BY spec.sort_order, spec.id SEPARATOR '；'
-                                       )
-                                  FROM product_variant_specs spec
-                                 WHERE spec.part_id=p.id
-                                   AND spec.is_active=1
-                                   AND COALESCE(TRIM(spec.spec_value), '') <> ''
-                                   AND EXISTS (
-                                       SELECT 1
-                                         FROM product_variant_group_specs link
-                                        WHERE link.part_id=p.id
-                                          AND link.spec_id=spec.id
-                                   )
-                               ),
-                               ''
-                           ),
-                           NULLIF(TRIM(p.nature), '')
-                       ) AS specification,
-                       COALESCE(MAX(v.update_time), p.update_time_2, p.update_time)
-                           AS quote_updated_at
-                FROM parts p
-                LEFT JOIN product_variant_prices v ON v.part_id=p.id
-                LEFT JOIN (
-                    SELECT part_id, COUNT(DISTINCT variant_group_id) AS variant_count
-                    FROM product_variant_prices
-                    GROUP BY part_id
-                ) vc ON vc.part_id=p.id
-                LEFT JOIN (
-                    SELECT part_id,
-                           MAX(CASE WHEN operation_type='COMPLETE' THEN id END) AS complete_id,
-                           MAX(CASE WHEN operation_type IN ('CREATE','UPDATE') THEN id END) AS change_id
-                    FROM employee_operation_logs
-                    GROUP BY part_id
-                ) completion ON completion.part_id=p.id
-                {where_sql}
-                GROUP BY p.id
-                ORDER BY {order_sql}
-                LIMIT %s""",
-            [*params, limit],
-        )
-        rows = cursor.fetchall()
+        rows = _fetch_parts_rows(cursor, all_select_columns, where_sql, params, order_sql, limit)
+        single_prices = _collect_single_prices(cursor, [r["id"] for r in rows if r["variant_count"] == 1])
+        items = [_build_parts_item(row, single_prices.get(row["id"], {}), detail_columns) for row in rows]
 
-        # 收集单规格产品的对外价格（按类型存储）
-        single_variant_ids = [r["id"] for r in rows if r["variant_count"] == 1]
-        single_prices: dict[int, dict[str, float]] = {}
-        if single_variant_ids:
-            placeholders = ",".join(["%s"] * len(single_variant_ids))
+        # 查询关联产品并作为独立 item 追加
+        if rows:
+            all_ids = [r["id"] for r in rows]
+            placeholders = ",".join(["%s"] * len(all_ids))
             cursor.execute(
-                f"""SELECT part_id, no_tax_price, purchase_special_invoice,
-                           purchase_general_invoice, external_price_fields
-                    FROM product_variant_prices
-                    WHERE part_id IN ({placeholders})
-                    ORDER BY part_id, id""",
-                single_variant_ids,
+                f"""SELECT DISTINCT r.related_product_id
+                    FROM product_relations r
+                    WHERE r.product_id IN ({placeholders})
+                    AND r.related_product_id NOT IN ({placeholders})""",
+                all_ids + all_ids,
             )
-            for row in cursor.fetchall(): # 判断有对外展示标记的价格
-                fields = (row.get('external_price_fields') or '').split(',')
-                prices = single_prices.setdefault(row["part_id"], {})
-                if 'no_tax' in fields and row.get('no_tax_price') is not None:
-                    prices['no_tax'] = float(row['no_tax_price'])
-                if 'special' in fields and row.get('purchase_special_invoice') is not None:
-                    prices['special'] = float(row['purchase_special_invoice'])
-                if 'general' in fields and row.get('purchase_general_invoice') is not None:
-                    prices['general'] = float(row['purchase_general_invoice'])
+            related_ids = [row["related_product_id"] for row in cursor.fetchall()]
 
-        items = []
-        for row in rows:
-            variant_count = row["variant_count"]
-            if variant_count == 0: # 针对没有规格的，价格是parts中的老数据
-                display_type = "no_variant"
-                display_price = _display_price(
-                    row.get("purchase_cost"),
-                    row.get("product_name"),
-                    row.get("product_type"),
-                )
-                display_price_min = None
-                display_price_max = None
-                special_price = None
-                general_price = None
-            elif variant_count == 1: # 针对单规格，只显示对外展示的价格
-                display_type = "single_variant"
-                prices = single_prices.get(row["id"], {})
-                display_price = _display_price(
-                    prices.get('no_tax'),
-                    row.get("product_name"),
-                    row.get("product_type"),
-                )
-                display_price_min = None
-                display_price_max = None
-                special_price = _display_price(
-                    prices.get('special'),
-                    row.get("product_name"),
-                    row.get("product_type"),
-                )
-                general_price = _display_price(
-                    prices.get('general'),
-                    row.get("product_name"),
-                    row.get("product_type"),
-                )
-            else:  # 针对多规格，显示价格区间（最小值~最大值）
-                display_type = "multi_variant"
-                display_price = None
-                display_price_min = _display_price(
-                    row.get("display_price_min"),
-                    row.get("product_name"),
-                    row.get("product_type"),
-                )
-                display_price_max = _display_price(
-                    row.get("display_price_max"),
-                    row.get("product_name"),
-                    row.get("product_type"),
-                )
-                special_price = None
-                general_price = None
+            if related_ids:
+                placeholders = ",".join(["%s"] * len(related_ids))
+                related_rows = _fetch_parts_rows(cursor, all_select_columns, f" WHERE p.id IN ({placeholders})", related_ids, "p.id DESC", None)
+                related_prices = _collect_single_prices(cursor, [r["id"] for r in related_rows if r["variant_count"] == 1])
+                for row in related_rows:
+                    item = _build_parts_item(row, related_prices.get(row["id"], {}), detail_columns)
+                    item["record_source_label"] = "替代品"
+                    items.append(item)
+                total += len(related_rows)
 
-            items.append({
-                "id": row["id"],
-                "product_name": row.get("product_name"),
-                "model": row.get("model"),
-                "specification": row.get("specification"),
-                "product_brand": row.get("product_brand"),
-                "product_type": row.get("product_type"),
-                "nature": row.get("nature"),
-                **{field: row.get(field) for field in detail_columns},
-                "image": _first_product_image(row),
-                "display_type": display_type,
-                "display_price": display_price,
-                "display_price_min": display_price_min,
-                "display_price_max": display_price_max,
-                "special_price": special_price,
-                "general_price": general_price,
-                "modification_completed": bool(row.get("modification_completed")),
-                "quote_updated_at": row.get("quote_updated_at"),
-                "record_source": "parts",
-                "record_source_label": "来自配件库",
-            })
         return total, items
     finally:
         conn.close()
@@ -544,7 +552,8 @@ def _fetch_inquiry_communications(order_goods_id: int) -> list:
 
 
 def _fetch_parts_variant_quotes(part_id: int) -> dict:
-    """每个有效规格组合优先返回对外供应商，否则返回最早保存的供应商。"""
+    """每个有效规格组合优先返回对外供应商，否则返回最早保存的供应商。
+    同一规格组合存在多条供应商记录时，按 external_price_fields 合并各价格。"""
     conn = get_db()
     try:
         cursor = conn.cursor()
@@ -556,113 +565,111 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
         if not part:
             raise HTTPException(status_code=404, detail="配件不存在")
 
+        # 取出该 part 下所有有效规格组合的完整记录（含 external_price_fields）
         cursor.execute(
             """SELECT price.id, price.variant_group_id, price.supplier,
                       price.is_external_visible,
                       price.no_tax_price,
-                       price.purchase_special_invoice,
-                       price.purchase_general_invoice,
-                       price.purchase_shipping, price.freight_remark,
-                       price.shipping_origin, price.shipping_time,
-                       price.warranty_time, price.daily_order_time,
-                       price.quote_time, price.expire_date,
-                       price.remark, price.update_time,
-                       GROUP_CONCAT(
-                          CONCAT(spec.spec_name, '：', spec.spec_value)
-                          ORDER BY link.sort_order, link.id SEPARATOR '；'
+                      price.purchase_special_invoice,
+                      price.purchase_general_invoice,
+                      price.purchase_shipping, price.freight_remark,
+                      price.shipping_origin, price.shipping_time,
+                      price.warranty_time, price.daily_order_time,
+                      price.quote_time, price.expire_date,
+                      price.remark, price.update_time,
+                      price.external_price_fields,
+                      GROUP_CONCAT(
+                         CONCAT(spec.spec_name, '：', spec.spec_value)
+                         ORDER BY link.sort_order, link.id SEPARATOR '；'
                       ) AS specification,
                       MIN(link.id) AS first_link_id
-                 FROM (
-                      SELECT candidate.variant_group_id,
-                             candidate.id AS first_price_id
-                        FROM product_variant_prices candidate
-                       WHERE candidate.part_id=%s
-                         AND NOT EXISTS (
-                             SELECT 1
-                               FROM product_variant_prices preferred
-                              WHERE preferred.part_id=candidate.part_id
-                                AND preferred.variant_group_id=candidate.variant_group_id
-                                AND (
-                                    COALESCE(preferred.is_external_visible,0)
-                                        > COALESCE(candidate.is_external_visible,0)
-                                    OR (
-                                        COALESCE(preferred.is_external_visible,0)
-                                            = COALESCE(candidate.is_external_visible,0)
-                                        AND preferred.id < candidate.id
-                                    )
-                                )
-                         )
-                 ) first_price
-                 JOIN product_variant_prices price
-                   ON price.id=first_price.first_price_id
-                  AND price.part_id=%s
+                 FROM product_variant_prices price
                  JOIN product_variant_group_specs link
                    ON link.part_id=price.part_id
                   AND link.variant_group_id=price.variant_group_id
                  JOIN product_variant_specs spec
                    ON spec.id=link.spec_id
-                GROUP BY price.id, price.variant_group_id, price.supplier,
-                         price.is_external_visible,
-                          price.no_tax_price,
-                          price.purchase_special_invoice,
-                          price.purchase_general_invoice,
-                          price.purchase_shipping, price.freight_remark,
-                          price.shipping_origin, price.shipping_time,
-                          price.warranty_time, price.daily_order_time,
-                          price.quote_time, price.expire_date,
-                          price.remark, price.update_time
+                WHERE price.part_id=%s
+                GROUP BY price.id
                HAVING MIN(spec.is_active)=1
-                ORDER BY first_link_id, price.id""",
-            [part_id, part_id],
+                ORDER BY price.variant_group_id, price.id""",
+            [part_id],
         )
+        all_records = cursor.fetchall()
+
+        # 按 variant_group_id 分组，合并价格
+        groups: dict[int, list] = {}
+        for rec in all_records:
+            gid = rec.get("variant_group_id")
+            groups.setdefault(gid, []).append(rec)
+
+        items = []
+        for gid in sorted(groups.keys()):
+            records = groups[gid]
+            # 主记录：is_external_visible 最高，其次 id 最小
+            main = max(records, key=lambda r: (
+                int(r.get("is_external_visible") or 0),
+                -int(r.get("id") or 0),
+            ))
+            items.append(_merge_variant_prices(main, records, part))
+
         multiplier = _sales_price_multiplier(
             part.get("product_name"),
             part.get("product_type"),
         )
-        items = []
-        for row in cursor.fetchall():
-            items.append({
-                "variant_group_id": row.get("variant_group_id"),
-                "specification": row.get("specification"),
-                "supplier": row.get("supplier"),
-                "is_external_visible": bool(row.get("is_external_visible")),
-                "no_tax_price": _scaled_positive_price(
-                    row.get("no_tax_price"),
-                    part.get("product_name"),
-                    part.get("product_type"),
-                ),
-                "special_invoice_price": _scaled_positive_price(
-                    row.get("purchase_special_invoice"),
-                    part.get("product_name"),
-                    part.get("product_type"),
-                ),
-                "special_invoice_available": _is_explicit_zero(
-                    row.get("purchase_special_invoice")
-                ),
-                "general_invoice_price": _scaled_positive_price(
-                    row.get("purchase_general_invoice"),
-                    part.get("product_name"),
-                    part.get("product_type"),
-                ),
-                 "general_invoice_available": _is_explicit_zero(
-                     row.get("purchase_general_invoice")
-                 ),
-                 "purchase_shipping": _plain_business_value(
-                     row.get("purchase_shipping")
-                 ),
-                 "freight_remark": row.get("freight_remark"),
-                 "shipping_origin": row.get("shipping_origin"),
-                 "shipping_time": row.get("shipping_time"),
-                 "warranty_time": row.get("warranty_time"),
-                 "daily_order_time": row.get("daily_order_time"),
-                 "quote_time": row.get("quote_time"),
-                 "expire_date": row.get("expire_date"),
-                 "quote_remark": row.get("remark"),
-                 "update_time": row.get("update_time"),
-             })
         return {"multiplier": str(multiplier), "items": items}
     finally:
         conn.close()
+
+
+def _merge_variant_prices(main: dict, records: list, part: dict) -> dict:
+    """以主记录的元信息为基础，按 external_price_fields 合并各记录的价格。"""
+    fields = {f.strip() for f in (main.get("external_price_fields") or "").split(",")}
+    # field -> (db_column, response_price_key, response_available_key)
+    price_keys = {
+        "no_tax": ("no_tax_price", "no_tax_price", None),
+        "special": ("purchase_special_invoice", "special_invoice_price", "special_invoice_available"),
+        "general": ("purchase_general_invoice", "general_invoice_price", "general_invoice_available"),
+    }
+    pn, pt = part.get("product_name"), part.get("product_type")
+    result = {
+        "variant_group_id": main.get("variant_group_id"),
+        "specification": main.get("specification"),
+        "supplier": main.get("supplier"),
+        "is_external_visible": bool(main.get("is_external_visible")),
+        "purchase_shipping": _plain_business_value(main.get("purchase_shipping")),
+        "freight_remark": main.get("freight_remark"),
+        "shipping_origin": main.get("shipping_origin"),
+        "shipping_time": main.get("shipping_time"),
+        "warranty_time": main.get("warranty_time"),
+        "daily_order_time": main.get("daily_order_time"),
+        "quote_time": main.get("quote_time"),
+        "expire_date": main.get("expire_date"),
+        "quote_remark": main.get("remark"),
+        "update_time": main.get("update_time"),
+    }
+    # 先收集主记录已有的价格
+    for field, (db_col, price_key, avail_key) in price_keys.items():
+        if field in fields:
+            result[price_key] = _scaled_positive_price(main.get(db_col), pn, pt)
+            if avail_key is not None:
+                result[avail_key] = _is_explicit_zero(main.get(db_col))
+        else:
+            result[price_key] = None
+            if avail_key is not None:
+                result[avail_key] = False
+    # 从其他记录补充缺失的价格
+    for field, (db_col, price_key, avail_key) in price_keys.items():
+        if result.get(price_key) is not None:
+            continue
+        for rec in records:
+            rec_fields = {f.strip() for f in (rec.get("external_price_fields") or "").split(",")}
+            if field in rec_fields and rec.get(db_col) is not None:
+                result[price_key] = _scaled_positive_price(rec.get(db_col), pn, pt)
+                if avail_key is not None:
+                    result[avail_key] = _is_explicit_zero(rec.get(db_col))
+                break
+    return result
 
 
 @app.get("/api/sales/products")

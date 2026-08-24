@@ -196,8 +196,10 @@ function renderSalesProducts() {
 
 function renderSalesCard(item, index) {
     const image = escapeSalesHtml(safeSalesImage(item.image));
+    const isSubstitute = item.record_source_label === '替代品';
     const source = item.record_source === 'inquiry' ? 'inquiry' : 'parts';
     const sourceLabel = source === 'inquiry' ? '来自询价记录' : '来自配件库';
+    const badges = `<span class="source-badge ${source}">${sourceLabel}</span>${isSubstitute ? '<span class="source-badge substitute">替代品</span>' : ''}`;
     return `
         <article class="goods-card">
             <div class="goods-picture">
@@ -205,10 +207,9 @@ function renderSalesCard(item, index) {
                      loading="lazy" onerror="this.src='/static/img/site-logo.png';this.onerror=null">
             </div>
             <div class="goods-body">
-                <span class="source-badge ${source}">${sourceLabel}</span>
                 ${item.modification_completed ? '<span class="sales-completed-badge">已完成</span>' : ''}
                 ${formatSalesPrice(item.display_price_min ?? item.display_price, false, item.display_price_max)}
-                <div class="goods-name" title="${escapeSalesHtml(item.product_name)}">${escapeSalesHtml(salesText(item.product_name))}</div>
+                <div class="goods-name" title="${escapeSalesHtml(item.product_name)}">${escapeSalesHtml(salesText(item.product_name))}${badges}</div>
                 <div class="goods-meta">
                     <div><label>品牌</label><span>${escapeSalesHtml(salesText(item.product_brand))}</span></div>
                     <div><label>型号</label><span title="${escapeSalesHtml(item.model)}">${escapeSalesHtml(salesText(item.model))}</span></div>
@@ -250,10 +251,12 @@ function renderInquiryQuoteInfo(item) {
 
 function renderSalesListRow(item, index) {
     const image = escapeSalesHtml(safeSalesImage(item.image));
+    const isSubstitute = item.record_source_label === '替代品';
     const source = item.record_source === 'inquiry' ? 'inquiry' : 'parts';
     const sourceLabel = source === 'inquiry' ? '来自询价记录' : '来自配件库';
+    const badges = `<span class="source-badge ${source}">${sourceLabel}</span>${isSubstitute ? '<span class="source-badge substitute">替代品</span>' : ''}`;
     return `<tr>
-        <td><div class="list-product"><button class="list-image-button" type="button" data-sales-preview-image="${image}" title="点击查看大图"><img src="${image}" alt="商品图片" loading="lazy" onerror="this.src='/static/img/site-logo.png';this.onerror=null"></button><div><strong>${escapeSalesHtml(salesText(item.product_name))}</strong><span class="source-badge ${source}">${sourceLabel}</span></div></div></td>
+        <td><div class="list-product"><button class="list-image-button" type="button" data-sales-preview-image="${image}" title="点击查看大图"><img src="${image}" alt="商品图片" loading="lazy" onerror="this.src='/static/img/site-logo.png';this.onerror=null"></button><div><strong>${escapeSalesHtml(salesText(item.product_name))}</strong>${badges}</div></div></td>
         <td>${escapeSalesHtml(salesText(item.product_brand))}</td>
         <td>${escapeSalesHtml(salesText(item.model))}</td>
         <td class="list-specification" title="${escapeSalesHtml(salesText(item.specification))}">${escapeSalesHtml(salesText(item.specification))}</td>
@@ -484,15 +487,15 @@ async function loadSalesPartVariantQuotes(partId, item) {
 function openSalesProductDetail(index) {
     const item = salesState.items[index];
     if (!item) return;
+    const isSubstitute = item.record_source_label === '替代品';
     const source = item.record_source === 'inquiry' ? 'inquiry' : 'parts';
-    activeSalesDetailItem = item;
     const sourceLabel = source === 'inquiry' ? '来自询价记录' : '来自配件库';
+    activeSalesDetailItem = item;
     const detailModal = document.getElementById('salesDetailModal');
     detailModal.classList.toggle('inquiry-detail', source === 'inquiry');
     detailModal.classList.toggle('parts-detail', source === 'parts');
-    const sourceBadge = document.getElementById('salesDetailSource');
-    sourceBadge.textContent = sourceLabel;
-    sourceBadge.className = `source-badge ${source}`;
+    const sourceBadgeWrap = document.getElementById('salesDetailSource');
+    sourceBadgeWrap.innerHTML = `<span class="source-badge ${source}">${sourceLabel}</span>${isSubstitute ? '<span class="source-badge substitute">替代品</span>' : ''}`;
     setSalesDetailText('salesDetailTitle', source === 'inquiry' ? '询价商品详情' : '配件商品详情');
     setSalesDetailText('salesDetailName', item.product_name);
     setSalesDetailText('salesDetailModel', salesText(item.model));

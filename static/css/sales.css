@@ -109,6 +109,7 @@ button { cursor: pointer; }
 .source-badge { display: inline-flex; width: fit-content; align-items: center; margin-bottom: 7px; padding: 3px 7px; border-radius: 5px; font-size: 11px; font-weight: 700; line-height: 1.2; }
 .source-badge.parts { color: #167b5b; background: #e9f8f2; }
 .source-badge.inquiry { color: #b45b16; background: #fff1e5; }
+.source-badge.substitute { color: #6b21a8; background: #f3e8ff; }
 .goods-price { min-height: 31px; color: var(--sales-price); font-size: 23px; font-weight: 800; letter-spacing: -.5px; }
 .goods-price small { margin-left: 3px; color: #9a6a6a; font-size: 11px; font-weight: 500; }
 .goods-price.pending { display: flex; align-items: center; color: #7d8aa0; font-size: 15px; letter-spacing: 0; }

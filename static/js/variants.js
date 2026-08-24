@@ -414,6 +414,11 @@
             _programmaticFields.delete(field);
         }
 
+        // 四舍五入到整数，先消除浮点数精度误差（如 150*1.13=169.4999...）
+        function _roundPrice(value) {
+            return Math.round(Math.round(value * 100) / 100);
+        }
+
         function _autoCalcPrices(sourceKey) {
             if (_programmaticFields.has(sourceKey)) {
                 _programmaticFields.delete(sourceKey);
@@ -432,16 +437,16 @@
 
             if (sourceKey === 'noTax' && noTaxVal !== '' && !isNaN(Number(noTaxVal))) {
                 const base = Number(noTaxVal);
-                if (!specialEl.disabled) { _programmaticFields.add('special'); specialEl.value = Math.round(base * (1 + taxSpecial / 100)); }
-                if (!normalEl.disabled) { _programmaticFields.add('normal'); normalEl.value = Math.round(base * (1 + taxNormal / 100)); }
+                if (!specialEl.disabled) { _programmaticFields.add('special'); specialEl.value = _roundPrice(base * (1 + taxSpecial / 100)); }
+                if (!normalEl.disabled) { _programmaticFields.add('normal'); normalEl.value = _roundPrice(base * (1 + taxNormal / 100)); }
             } else if (sourceKey === 'special' && specialVal !== '' && !isNaN(Number(specialVal)) && taxSpecial != null) {
                 const base = taxSpecial ? Number(specialVal) / (1 + taxSpecial / 100) : Number(specialVal);
-                _programmaticFields.add('noTax'); noTaxEl.value = Math.round(base);
-                if (!normalEl.disabled) { _programmaticFields.add('normal'); normalEl.value = Math.round(base * (1 + taxNormal / 100)); }
+                _programmaticFields.add('noTax'); noTaxEl.value = _roundPrice(base);
+                if (!normalEl.disabled) { _programmaticFields.add('normal'); normalEl.value = _roundPrice(base * (1 + taxNormal / 100)); }
             } else if (sourceKey === 'normal' && normalVal !== '' && !isNaN(Number(normalVal)) && taxNormal != null) {
                 const base = taxNormal ? Number(normalVal) / (1 + taxNormal / 100) : Number(normalVal);
-                _programmaticFields.add('noTax'); noTaxEl.value = Math.round(base);
-                if (!specialEl.disabled) { _programmaticFields.add('special'); specialEl.value = Math.round(base * (1 + taxSpecial / 100)); }
+                _programmaticFields.add('noTax'); noTaxEl.value = _roundPrice(base);
+                if (!specialEl.disabled) { _programmaticFields.add('special'); specialEl.value = _roundPrice(base * (1 + taxSpecial / 100)); }
             }
         }
 
