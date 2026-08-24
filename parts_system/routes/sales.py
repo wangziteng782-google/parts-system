@@ -303,7 +303,7 @@ def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dic
         general_price = None
     elif variant_count == 1:
         display_type = "single_variant"
-        display_price = _display_price(prices.get('no_tax'), row.get("product_name"), row.get("product_type"))
+        display_price = _display_price(prices.get('no_tax') or prices.get('special') or prices.get('general'), row.get("product_name"), row.get("product_type"))
         display_price_min = None
         display_price_max = None
         special_price = _display_price(prices.get('special'), row.get("product_name"), row.get("product_type"))
