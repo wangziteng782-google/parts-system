@@ -234,7 +234,7 @@ def _collect_single_prices(cursor, ids: list[int]) -> dict[int, dict[str, float]
     return prices
 
 
-def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: list, order_clause: str, limit: int | None):
+def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: list, order_clause: str, limit=None):
     """查询产品行数据。where_clause 包含 WHERE 关键字，limit 为 None 时不限制。"""
     limit_sql = "" if limit is None else " LIMIT %s"
     limit_params = [] if limit is None else [limit]
