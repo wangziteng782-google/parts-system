@@ -191,6 +191,9 @@ function renderSalesProducts() {
     document.querySelectorAll('[data-sales-detail-index]').forEach(button => {
         button.addEventListener('click', () => openSalesProductDetail(Number(button.dataset.salesDetailIndex)));
     });
+    document.querySelectorAll('[data-sales-ai-index]').forEach(button => {
+        button.addEventListener('click', () => toggleSalesAiExplain(Number(button.dataset.salesAiIndex)));
+    });
     renderSalesPagination();
 }
 
@@ -214,8 +217,15 @@ function renderSalesCard(item, index) {
                     <div><label>型号</label><span title="${escapeSalesHtml(item.model)}">${escapeSalesHtml(salesText(item.model))}</span></div>
                     <div><label>更新</label><span>${escapeSalesHtml(formatSalesDate(item.quote_updated_at))}</span></div>
                 </div>
-                <button class="sales-card-detail-button" type="button" data-sales-detail-index="${index}">查看详情</button>
+                <div class="goods-actions">
+                    <button class="sales-card-detail-button" type="button" data-sales-detail-index="${index}">查看详情</button>
+                    <button class="sales-ai-button" type="button" data-sales-ai-index="${index}">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.2L19.5 8 12 11.8 4.5 8 12 4.2zM4 9.8l7 3.5v7.4l-7-3.5V9.8zm9 10.9v-7.4l7-3.5v7.4l-7 3.5z"/></svg>
+                        AI讲解
+                    </button>
+                </div>
             </div>
+            <div class="sales-ai-panel" id="salesAiPanel-${index}" hidden></div>
         </article>`;
 }
 
@@ -272,8 +282,9 @@ function renderSalesListRow(item, index) {
         <td><div class="sales-list-extra">${renderInquiryQuoteInfo(item)}</div></td>
         <td>${escapeSalesHtml(formatSalesDate(item.quote_updated_at))}</td>
         <td>${item.modification_completed ? '<span class="sales-completed-badge">已完成</span>' : ''}</td>
-        <td><button class="sales-detail-button" type="button" data-sales-detail-index="${index}">详情</button></td>
-    </tr>`;
+        <td><div class="list-actions"><button class="sales-detail-button" type="button" data-sales-detail-index="${index}">详情</button><button class="sales-ai-button" type="button" data-sales-ai-index="${index}">AI讲解</button></div></td>
+    </tr>
+    <tr class="sales-ai-list-row" id="salesAiListRow-${index}" hidden><td colspan="10"><div class="sales-ai-panel-content" id="salesAiListPanel-${index}"></div></td></tr>`;
 }
 
 function detailPriceText(value) {
@@ -550,6 +561,112 @@ function closeSalesProductDetail() {
     salesEls.detailOverlay.classList.remove('show');
     salesEls.detailOverlay.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
+}
+
+// ===================== AI 讲解 =====================
+
+const salesAiState = {};
+
+function toggleSalesAiExplain(index) {
+    const item = salesState.items[index];
+    if (!item) return;
+    const gridPanel = document.getElementById(`salesAiPanel-${index}`);
+    const listRow = document.getElementById(`salesAiListRow-${index}`);
+    const isGrid = gridPanel && !gridPanel.hidden;
+    const isList = listRow && !listRow.hidden;
+    if (isGrid) {
+        gridPanel.hidden = true;
+        return;
+    }
+    if (isList) {
+        listRow.hidden = true;
+        return;
+    }
+    const target = gridPanel || (listRow ? document.getElementById(`salesAiListPanel-${index}`) : null);
+    if (!target) return;
+    if (gridPanel) gridPanel.hidden = false;
+    if (listRow) listRow.hidden = false;
+    if (salesAiState[index]) {
+        target.innerHTML = salesAiState[index];
+        return;
+    }
+    fetchSalesAiExplain(index, item, target);
+}
+
+async function fetchSalesAiExplain(index, item, container) {
+    container.innerHTML = `
+        <div class="sales-ai-loading">
+            <div class="ai-loading-header">
+                <span class="ai-loading-icon">AI</span>
+                <span class="ai-loading-text">正在理解产品并生成讲解话术</span>
+                <span class="ai-loading-timer" id="aiTimer-${index}">0s</span>
+            </div>
+            <div class="ai-progress-bar"><div class="ai-progress-fill" id="aiProgress-${index}"></div></div>
+            <div class="ai-loading-steps">
+                <span class="ai-step active" data-step="1">解析产品</span>
+                <span class="ai-step" data-step="2">匹配卖点</span>
+                <span class="ai-step" data-step="3">生成话术</span>
+            </div>
+        </div>`;
+    const startTime = Date.now();
+    const timerEl = container.querySelector(`#aiTimer-${index}`);
+    const progressEl = container.querySelector(`#aiProgress-${index}`);
+    const stepEls = container.querySelectorAll('.ai-step');
+    const timer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        if (timerEl) timerEl.textContent = elapsed + 's';
+        const pct = Math.min(90, elapsed * 8);
+        if (progressEl) progressEl.style.width = pct + '%';
+        if (elapsed >= 3 && stepEls[1]) stepEls[1].classList.add('active');
+        if (elapsed >= 8 && stepEls[2]) stepEls[2].classList.add('active');
+    }, 200);
+    const body = {
+        product_name: item.product_name || '',
+        model: item.model || null,
+        product_brand: item.product_brand || null,
+        specification: item.specification || null,
+        product_type: item.product_type || null,
+        nature: item.nature || null,
+        display_price: item.display_price || null,
+        warranty: item.warranty || null,
+        shipping_origin: item.shipping_origin || null,
+        shipping_time: item.shipping_time || null,
+        precautions: item.precautions || null,
+        technical_params: item.technical_params || null,
+        remark: item.remark || null,
+        substitute_model: item.substitute_model || null,
+        applicable_elevator_brand: item.applicable_elevator_brand || null,
+        record_source: item.record_source || null,
+    };
+    try {
+        const data = await salesRequest('/api/sales/ai-explain', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        clearInterval(timer);
+        if (progressEl) progressEl.style.width = '100%';
+        if (timerEl) timerEl.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
+        const content = data.content || '（AI 未返回内容）';
+        salesAiState[index] = `<div class="sales-ai-content">${renderAiMarkdown(content)}</div>`;
+        setTimeout(() => {
+            container.innerHTML = salesAiState[index];
+        }, 300);
+    } catch (error) {
+        clearInterval(timer);
+        container.innerHTML = `<div class="sales-ai-error">${escapeSalesHtml(error.message)}</div>`;
+    }
+}
+
+function renderAiMarkdown(text) {
+    let html = escapeSalesHtml(text);
+    html = html.replace(/\*\*/g, '');
+    html = html.replace(/^(安装位置)[:：]?\s*/gm, '<div class="ai-section"><span class="ai-section-label">安装位置：</span>');
+    html = html.replace(/^(产品特点)[:：]?\s*/gm, '</div><div class="ai-section"><span class="ai-section-label">产品特点：</span>');
+    html = html.replace(/^(销售话术)[:：]?\s*/gm, '</div><div class="ai-section"><span class="ai-section-label">销售话术：</span>');
+    html += '</div>';
+    html = html.replace(/\n/g, '<br>');
+    return html;
 }
 
 function clearSalesFeedbackErrors() {

@@ -908,3 +908,161 @@ async def create_sales_feedback(req: SalesFeedbackRequest):
         raise HTTPException(status_code=500, detail="反馈提交失败，请稍后重试") from exc
     finally:
         conn.close()
+
+
+# ===================== AI 讲解 =====================
+
+class AIExplainRequest(BaseModel):
+    product_name: str
+    model: Optional[str] = None
+    product_brand: Optional[str] = None
+    specification: Optional[str] = None
+    product_type: Optional[str] = None
+    nature: Optional[str] = None
+    display_price: Optional[str] = None
+    warranty: Optional[str] = None
+    shipping_origin: Optional[str] = None
+    shipping_time: Optional[str] = None
+    precautions: Optional[str] = None
+    technical_params: Optional[str] = None
+    remark: Optional[str] = None
+    substitute_model: Optional[str] = None
+    applicable_elevator_brand: Optional[str] = None
+    record_source: Optional[str] = None
+
+    model_config = {"extra": "allow"}
+
+
+def _extract_ai_sections(text: str) -> str:
+    """从 AI 响应中提取三段内容，丢弃思考过程。"""
+    import re as _re
+    pattern = _re.compile(
+        r'(安装位置[：:][^\n]*?)(?:\n|$)(.*?)(?=产品特点[：:]|销售话术[：:]|$)',
+        _re.DOTALL
+    )
+    pattern2 = _re.compile(
+        r'(产品特点[：:][^\n]*?)(?:\n|$)(.*?)(?=销售话术[：:]|安装位置[：:]|$)',
+        _re.DOTALL
+    )
+    pattern3 = _re.compile(
+        r'(销售话术[：:][^\n]*?)(?:\n|$)(.*?)(?=安装位置[：:]|产品特点[：:]|$)',
+        _re.DOTALL
+    )
+    sections = []
+    for pat in [pattern, pattern2, pattern3]:
+        m = pat.search(text)
+        if m:
+            label = m.group(1).strip()
+            body = m.group(2).strip()
+            sections.append(f"{label}\n{body}" if body else label)
+    return "\n\n".join(sections)
+
+
+def _build_sales_ai_prompt(item: dict) -> list:
+    """根据产品信息组装 AI 提示词。"""
+    lines = []
+    if item.get("product_name"):
+        lines.append(f"产品：{item['product_name']}")
+    if item.get("model"):
+        lines.append(f"型号：{item['model']}")
+    if item.get("product_brand"):
+        lines.append(f"品牌：{item['product_brand']}")
+    if item.get("specification"):
+        lines.append(f"规格：{item['specification']}")
+    if item.get("product_type"):
+        lines.append(f"分类：{item['product_type']}")
+    if item.get("display_price"):
+        lines.append(f"参考价：¥{item['display_price']}")
+    if item.get("warranty"):
+        lines.append(f"质保：{item['warranty']}")
+    if item.get("shipping_origin"):
+        lines.append(f"发货地：{item['shipping_origin']}")
+    if item.get("applicable_elevator_brand"):
+        lines.append(f"适用品牌：{item['applicable_elevator_brand']}")
+    if item.get("technical_params"):
+        lines.append(f"技术参数：{item['technical_params']}")
+    if item.get("remark"):
+        lines.append(f"备注：{item['remark']}")
+
+    product_info = "\n".join(lines) if lines else "（信息不完整）"
+
+    return [
+        {
+            "role": "system",
+            "content": (
+                "直接输出三段，不要任何分析、思考、解释。格式：\n"
+                "安装位置：xxx\n产品特点：xxx\n销售话术：xxx\n"
+                "每段1-2句，口语化，共100字。纯文本，禁止markdown。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": product_info,
+        },
+    ]
+
+
+@app.post("/api/sales/ai-explain")
+def sales_ai_explain(req: AIExplainRequest):
+    """调用大模型生成产品讲解话术。"""
+    import json as _json
+    import urllib.request
+    import urllib.error
+
+    api_key = os.getenv("LONGCAT_API_KEY", "").strip()
+    api_url = os.getenv("LONGCAT_API_URL", "").strip()
+    model_name = os.getenv("LONGCAT_MODEL", "").strip()
+
+    if not api_key or not api_url or not model_name:
+        raise HTTPException(
+            status_code=503,
+            detail="AI服务未配置，请在.env中设置 LONGCAT_API_KEY/LONGCAT_API_URL/LONGCAT_MODEL",
+        )
+
+    item_data = req.model_dump()
+    messages = _build_sales_ai_prompt(item_data)
+
+    try:
+        payload = _json.dumps(
+            {
+                "model": model_name,
+                "messages": messages,
+                "stream": False,
+                "temperature": 0.2,
+                "max_tokens": 256,
+            }
+        ).encode("utf-8")
+        request_obj = urllib.request.Request(
+            api_url,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(request_obj, timeout=30) as resp:
+            result = _json.loads(resp.read().decode("utf-8"))
+        logger.debug("[AI讲解] 原始响应 | %s", _json.dumps(result, ensure_ascii=False)[:800])
+        message = result.get("choices", [{}])[0].get("message", {})
+        content = message.get("content") or message.get("reasoning_content") or ""
+        if not content:
+            raise HTTPException(status_code=502, detail="AI未返回有效内容")
+        content = _extract_ai_sections(content)
+        if not content:
+            raise HTTPException(status_code=502, detail="AI未返回有效内容")
+        return {"content": content}
+    except urllib.error.HTTPError as exc:
+        error_body = ""
+        try:
+            error_body = exc.read().decode("utf-8")[:500]
+        except Exception:
+            pass
+        logger.warning("[AI讲解] 调用失败 | status=%s | error=%s", exc.code, error_body)
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI服务返回错误({exc.code})，请稍后重试",
+        ) from exc
+    except Exception as exc:
+        logger.exception("[AI讲解] 异常 | error=%s", exc)
+        raise HTTPException(status_code=500, detail="AI讲解生成失败，请稍后重试") from exc
