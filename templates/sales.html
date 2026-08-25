@@ -6,7 +6,7 @@
     <title>销售商品查询</title>
     <link rel="icon" href="/static/img/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="/static/img/site-logo.png">
-    <link rel="stylesheet" href="/static/css/sales.css?v=20260824-5">
+    <link rel="stylesheet" href="/static/css/sales.css?v=20260825-4">
 </head>
 <body data-user-name="{{ sales_user_name }}">
     <header>
@@ -36,6 +36,10 @@
                     <button type="submit" aria-label="搜索商品">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/></svg>
                         搜索
+                    </button>
+                    <button type="button" class="sales-ai-match-button" id="salesAiMatchButton">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.2L19.5 8 12 11.8 4.5 8 12 4.2zM4 9.8l7 3.5v7.4l-7-3.5V9.8zm9 10.9v-7.4l7-3.5v7.4l-7 3.5z"/></svg>
+                        AI识别
                     </button>
                 </form>
 
@@ -230,7 +234,47 @@
         </form>
     </div>
 
+    <div class="sales-compare-bar" id="salesCompareBar">
+        <div class="compare-bar-inner">
+            <div class="compare-bar-info">
+                <span class="compare-bar-title">对比 <b id="salesCompareCount">0</b>/2</span>
+                <span class="compare-bar-names" id="salesCompareNames"></span>
+            </div>
+            <div class="compare-bar-actions">
+                <button type="button" class="compare-clear" onclick="clearSalesCompare()">清空</button>
+                <button type="button" class="compare-go" id="salesCompareGo" onclick="openSalesCompare()">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2L2 7v10l10 5 10-5V7L12 2z"/></svg>
+                    AI 对比
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="sales-compare-overlay" id="salesCompareOverlay" aria-hidden="true">
+        <section class="sales-compare-modal" role="dialog" aria-modal="true" aria-labelledby="salesCompareTitle">
+            <header class="sales-compare-header">
+                <div class="sales-compare-vs">
+                    <span class="compare-head-item" id="salesCompareNameA">产品A</span>
+                    <span class="compare-head-vs">VS</span>
+                    <span class="compare-head-item" id="salesCompareNameB">产品B</span>
+                </div>
+                <button type="button" class="sales-compare-close" onclick="closeSalesCompare()" aria-label="关闭对比">×</button>
+            </header>
+            <div class="sales-compare-body" id="salesCompareBody"></div>
+        </section>
+    </div>
+
+    <div class="sales-compare-overlay" id="salesAiToolOverlay" aria-hidden="true">
+        <section class="sales-compare-modal" role="dialog" aria-modal="true" aria-labelledby="salesAiToolTitle">
+            <header class="sales-compare-header">
+                <div class="compare-head-item" id="salesAiToolTitle" style="flex:none;text-align:left;">AI 助手</div>
+                <button type="button" class="sales-compare-close" onclick="closeSalesAiTool()" aria-label="关闭">×</button>
+            </header>
+            <div class="sales-compare-body" id="salesAiToolBody"></div>
+        </section>
+    </div>
+
     <div class="sales-toast" id="salesToast"></div>
-    <script src="/static/js/sales.js?v=20260824-7"></script>
+    <script src="/static/js/sales.js?v=20260825-3"></script>
 </body>
 </html>

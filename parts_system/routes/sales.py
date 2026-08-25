@@ -6,6 +6,7 @@ import os
 from typing import Optional
 
 from fastapi import HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import pymysql
 
@@ -933,29 +934,161 @@ class AIExplainRequest(BaseModel):
     model_config = {"extra": "allow"}
 
 
-def _extract_ai_sections(text: str) -> str:
-    """从 AI 响应中提取三段内容，丢弃思考过程。"""
+def _extract_labeled_sections(text: str, labels: list) -> str:
+    """从 AI 响应中按标签提取各段内容，丢弃思考过程。"""
     import re as _re
-    pattern = _re.compile(
-        r'(安装位置[：:][^\n]*?)(?:\n|$)(.*?)(?=产品特点[：:]|销售话术[：:]|$)',
-        _re.DOTALL
-    )
-    pattern2 = _re.compile(
-        r'(产品特点[：:][^\n]*?)(?:\n|$)(.*?)(?=销售话术[：:]|安装位置[：:]|$)',
-        _re.DOTALL
-    )
-    pattern3 = _re.compile(
-        r'(销售话术[：:][^\n]*?)(?:\n|$)(.*?)(?=安装位置[：:]|产品特点[：:]|$)',
-        _re.DOTALL
-    )
     sections = []
-    for pat in [pattern, pattern2, pattern3]:
-        m = pat.search(text)
+    for label in labels:
+        others = "|".join(_re.escape(l) for l in labels if l != label)
+        lookahead = f"(?={others}|$)" if others else "(?=$)"
+        pattern = _re.compile(
+            rf'({_re.escape(label)}[：:][^\n]*?)(?:\n|$)(.*?){lookahead}',
+            _re.DOTALL,
+        )
+        m = pattern.search(text)
         if m:
-            label = m.group(1).strip()
+            head = m.group(1).strip()
             body = m.group(2).strip()
-            sections.append(f"{label}\n{body}" if body else label)
+            sections.append(f"{head}\n{body}" if body else head)
     return "\n\n".join(sections)
+
+
+def _extract_ai_sections(text: str) -> str:
+    """从 AI 响应中提取讲解三段内容，丢弃思考过程。"""
+    return _extract_labeled_sections(text, ["安装位置", "产品特点", "销售话术"])
+
+
+def _parse_ai_json(content: str, fields: list) -> Optional[dict]:
+    """把 AI 返回的 JSON 解析成 {中文标签: 内容}；失败返回 None。
+
+    fields 为 [(json_key, 中文标签)]，按期望输出顺序排列。
+    模型偶发错别字/多段时，正则标签匹配会丢失内容；JSON 键名由 prompt 固定，
+    解析更稳，此处作为首选路径。
+    """
+    import json as _json
+    import re as _re
+    text = (content or "").strip()
+    code = _re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, _re.DOTALL)
+    if code:
+        text = code.group(1)
+    else:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            text = text[start:end + 1]
+    try:
+        data = _json.loads(text)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    result = {}
+    for key, label in fields:
+        value = data.get(key)
+        if value is None:
+            continue
+        value = str(value).strip()
+        if value:
+            result[label] = value
+    return result or None
+
+
+def _format_sections(data: dict) -> str:
+    """把 {标签: 内容} 转成「标签：内容」分段文本，供前端按标签渲染。"""
+    return "\n\n".join(f"{label}：{body}" for label, body in data.items())
+
+
+def _stream_ai(messages: list, json_fields: list, text_labels: list, max_tokens: int = 1024):
+    """流式调用 LONGCAT，产出 SSE 事件（stage / done / error）。
+
+    事件：
+    - stage: {stage: "reasoning"|"content"}  模型思考→生成 阶段切换
+    - done:  {content: "..."}                 最终解析结果
+    - error: {detail: "..."}                  失败
+    """
+    import json as _json
+    import urllib.request
+    import urllib.error
+
+    api_key = os.getenv("LONGCAT_API_KEY", "").strip()
+    api_url = os.getenv("LONGCAT_API_URL", "").strip()
+    model_name = os.getenv("LONGCAT_MODEL", "").strip()
+
+    def sse(event, data):
+        return f"event: {event}\ndata: {_json.dumps(data, ensure_ascii=False)}\n\n"
+
+    if not api_key or not api_url or not model_name:
+        yield sse("error", {"detail": "AI服务未配置，请在.env中设置 LONGCAT_API_KEY/LONGCAT_API_URL/LONGCAT_MODEL"})
+        return
+
+    payload = _json.dumps({
+        "model": model_name,
+        "messages": messages,
+        "stream": True,
+        "temperature": 0.2,
+        "max_tokens": max_tokens,
+    }).encode("utf-8")
+    request_obj = urllib.request.Request(
+        api_url,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+
+    final_content = ""
+    stage = None
+    try:
+        with urllib.request.urlopen(request_obj, timeout=60) as resp:
+            for raw in resp:
+                line = raw.decode("utf-8", "ignore").strip()
+                if not line.startswith("data:"):
+                    continue
+                data_str = line[5:].strip()
+                if data_str == "[DONE]":
+                    break
+                try:
+                    obj = _json.loads(data_str)
+                except Exception:
+                    continue
+                choices = obj.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta", {}) or {}
+                rc = delta.get("reasoning_content") or ""
+                cc = delta.get("content") or ""
+                if rc and stage != "reasoning":
+                    stage = "reasoning"
+                    yield sse("stage", {"stage": "reasoning"})
+                if cc:
+                    if stage != "content":
+                        stage = "content"
+                        yield sse("stage", {"stage": "content"})
+                    final_content += cc
+
+        data = _parse_ai_json(final_content, json_fields)
+        if data:
+            result = _format_sections(data)
+        else:
+            result = _extract_labeled_sections(final_content, text_labels)
+        yield sse("done", {"content": result or ""})
+    except urllib.error.HTTPError as exc:
+        logger.warning("[AI流式] 调用失败 | status=%s", exc.code)
+        yield sse("error", {"detail": f"AI服务返回错误({exc.code})，请稍后重试"})
+    except Exception as exc:
+        logger.exception("[AI流式] 异常 | error=%s", exc)
+        yield sse("error", {"detail": "AI生成失败，请稍后重试"})
+
+
+def _ai_stream_response(messages: list, json_fields: list, text_labels: list, max_tokens: int = 1024):
+    """包装流式 AI 为 StreamingResponse。"""
+    return StreamingResponse(
+        _stream_ai(messages, json_fields, text_labels, max_tokens=max_tokens),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 def _build_sales_ai_prompt(item: dict) -> list:
@@ -990,9 +1123,9 @@ def _build_sales_ai_prompt(item: dict) -> list:
         {
             "role": "system",
             "content": (
-                "直接输出三段，不要任何分析、思考、解释。格式：\n"
-                "安装位置：xxx\n产品特点：xxx\n销售话术：xxx\n"
-                "每段1-2句，口语化，共100字。纯文本，禁止markdown。"
+                "你是电梯配件销售讲解助手。只输出一个 JSON 对象，不要任何分析、思考、解释、markdown。字段固定：\n"
+                '{"location":"安装位置说明","feature":"产品特点说明","pitch":"销售话术"}\n'
+                "每项1-2句，口语化，共100字以内。"
             ),
         },
         {
@@ -1004,65 +1137,177 @@ def _build_sales_ai_prompt(item: dict) -> list:
 
 @app.post("/api/sales/ai-explain")
 def sales_ai_explain(req: AIExplainRequest):
-    """调用大模型生成产品讲解话术。"""
-    import json as _json
-    import urllib.request
-    import urllib.error
+    """调用大模型生成产品讲解话术（流式）。"""
+    messages = _build_sales_ai_prompt(req.model_dump())
+    return _ai_stream_response(
+        messages,
+        [("location", "安装位置"), ("feature", "产品特点"), ("pitch", "销售话术")],
+        ["安装位置", "产品特点", "销售话术"],
+    )
 
-    api_key = os.getenv("LONGCAT_API_KEY", "").strip()
-    api_url = os.getenv("LONGCAT_API_URL", "").strip()
-    model_name = os.getenv("LONGCAT_MODEL", "").strip()
 
-    if not api_key or not api_url or not model_name:
-        raise HTTPException(
-            status_code=503,
-            detail="AI服务未配置，请在.env中设置 LONGCAT_API_KEY/LONGCAT_API_URL/LONGCAT_MODEL",
-        )
+# ===================== AI 产品对比 =====================
 
-    item_data = req.model_dump()
-    messages = _build_sales_ai_prompt(item_data)
+class AICompareRequest(BaseModel):
+    product_a: dict
+    product_b: dict
 
-    try:
-        payload = _json.dumps(
-            {
-                "model": model_name,
-                "messages": messages,
-                "stream": False,
-                "temperature": 0.2,
-                "max_tokens": 256,
-            }
-        ).encode("utf-8")
-        request_obj = urllib.request.Request(
-            api_url,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(request_obj, timeout=30) as resp:
-            result = _json.loads(resp.read().decode("utf-8"))
-        logger.debug("[AI讲解] 原始响应 | %s", _json.dumps(result, ensure_ascii=False)[:800])
-        message = result.get("choices", [{}])[0].get("message", {})
-        content = message.get("content") or message.get("reasoning_content") or ""
-        if not content:
-            raise HTTPException(status_code=502, detail="AI未返回有效内容")
-        content = _extract_ai_sections(content)
-        if not content:
-            raise HTTPException(status_code=502, detail="AI未返回有效内容")
-        return {"content": content}
-    except urllib.error.HTTPError as exc:
-        error_body = ""
-        try:
-            error_body = exc.read().decode("utf-8")[:500]
-        except Exception:
-            pass
-        logger.warning("[AI讲解] 调用失败 | status=%s | error=%s", exc.code, error_body)
-        raise HTTPException(
-            status_code=502,
-            detail=f"AI服务返回错误({exc.code})，请稍后重试",
-        ) from exc
-    except Exception as exc:
-        logger.exception("[AI讲解] 异常 | error=%s", exc)
-        raise HTTPException(status_code=500, detail="AI讲解生成失败，请稍后重试") from exc
+
+def _compare_product_lines(item: dict, label: str) -> list:
+    """把单个产品的关键字段组装成对比提示词中的若干行。"""
+    lines = [label]
+    if item.get("product_name"):
+        lines.append(f"名称：{item['product_name']}")
+    if item.get("model"):
+        lines.append(f"型号：{item['model']}")
+    if item.get("product_brand"):
+        lines.append(f"品牌：{item['product_brand']}")
+    if item.get("specification"):
+        lines.append(f"规格：{item['specification']}")
+    if item.get("product_type"):
+        lines.append(f"分类：{item['product_type']}")
+    if item.get("display_price"):
+        lines.append(f"参考价：¥{item['display_price']}")
+    if item.get("warranty"):
+        lines.append(f"质保：{item['warranty']}")
+    if item.get("shipping_origin"):
+        lines.append(f"发货地：{item['shipping_origin']}")
+    if item.get("applicable_elevator_brand"):
+        lines.append(f"适用品牌：{item['applicable_elevator_brand']}")
+    if item.get("technical_params"):
+        lines.append(f"技术参数：{item['technical_params']}")
+    return lines
+
+
+def _build_compare_prompt(product_a: dict, product_b: dict) -> list:
+    """根据两个产品的信息组装对比提示词。"""
+    lines_a = _compare_product_lines(product_a, "产品A")
+    lines_b = _compare_product_lines(product_b, "产品B")
+    product_info = "\n".join(lines_a) + "\n\n" + "\n".join(lines_b)
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是电梯配件销售专家。只输出一个 JSON 对象，对比下面两个配件，不要任何分析、思考、解释、markdown。字段固定：\n"
+                '{"difference":"差异对比","advantages":"各自优势","suggestion":"推荐建议"}\n'
+                "每项2-3句，口语化，共150字以内。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": product_info,
+        },
+    ]
+
+
+@app.post("/api/sales/ai-compare")
+def sales_ai_compare(req: AICompareRequest):
+    """调用大模型对比两个产品，输出差异对比/各自优势/推荐建议（流式）。"""
+    messages = _build_compare_prompt(req.product_a, req.product_b)
+    return _ai_stream_response(
+        messages,
+        [("difference", "差异对比"), ("advantages", "各自优势"), ("suggestion", "推荐建议")],
+        ["差异对比", "各自优势", "推荐建议"],
+        max_tokens=1536,
+    )
+
+
+# ===================== AI 替代型号推荐 =====================
+
+class AISubstituteRequest(BaseModel):
+    product_name: str
+    model: Optional[str] = None
+    product_brand: Optional[str] = None
+    specification: Optional[str] = None
+    product_type: Optional[str] = None
+    applicable_elevator_brand: Optional[str] = None
+    technical_params: Optional[str] = None
+    substitute_model: Optional[str] = None
+    model_config = {"extra": "allow"}
+
+
+def _build_substitute_prompt(item: dict) -> list:
+    """根据配件信息组装替代型号推荐提示词。"""
+    lines = []
+    if item.get("product_name"):
+        lines.append(f"产品：{item['product_name']}")
+    if item.get("model"):
+        lines.append(f"型号：{item['model']}")
+    if item.get("product_brand"):
+        lines.append(f"品牌：{item['product_brand']}")
+    if item.get("specification"):
+        lines.append(f"规格：{item['specification']}")
+    if item.get("product_type"):
+        lines.append(f"分类：{item['product_type']}")
+    if item.get("applicable_elevator_brand"):
+        lines.append(f"适用电梯品牌：{item['applicable_elevator_brand']}")
+    if item.get("technical_params"):
+        lines.append(f"技术参数：{item['technical_params']}")
+    if item.get("substitute_model"):
+        lines.append(f"已有替代型号：{item['substitute_model']}")
+    product_info = "\n".join(lines) if lines else "（信息不完整）"
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是电梯配件专家。只输出一个 JSON 对象，根据下面的配件信息推荐可替代型号，不要任何分析、思考、解释、markdown。字段固定：\n"
+                '{"models":"替代型号","reason":"替代理由"}\n'
+                "每项1-2句，口语化，共80字以内。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": product_info,
+        },
+    ]
+
+
+@app.post("/api/sales/ai-substitute")
+def sales_ai_substitute(req: AISubstituteRequest):
+    """调用大模型推荐可替代型号（流式）。"""
+    messages = _build_substitute_prompt(req.model_dump())
+    return _ai_stream_response(
+        messages,
+        [("models", "替代型号"), ("reason", "替代理由")],
+        ["替代型号", "替代理由"],
+    )
+
+
+# ===================== AI 询价匹配 =====================
+
+class AIMatchRequest(BaseModel):
+    text: str
+
+
+def _build_match_prompt(text: str) -> list:
+    """根据客户需求描述组装关键词提取提示词。"""
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是电梯配件搜索助手。只输出一个 JSON 对象，从用户的需求描述中提取用于搜索配件的关键词，不要任何分析、思考、解释、markdown。字段固定：\n"
+                '{"keyword":"搜索关键词","brand":"品牌","model":"型号","category":"品类"}\n'
+                "搜索关键词要精简、适合搜索，无则填“无”。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"客户需求描述：{text}",
+        },
+    ]
+
+
+@app.post("/api/sales/ai-match")
+def sales_ai_match(req: AIMatchRequest):
+    """调用大模型解析客户需求，提取搜索关键词（流式）。"""
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="请先输入需求描述")
+    if len(text) > 500:
+        raise HTTPException(status_code=400, detail="需求描述过长，请精简到500字以内")
+    messages = _build_match_prompt(text)
+    return _ai_stream_response(
+        messages,
+        [("keyword", "搜索关键词"), ("brand", "品牌"), ("model", "型号"), ("category", "品类")],
+        ["搜索关键词", "品牌", "型号", "品类"],
+    )

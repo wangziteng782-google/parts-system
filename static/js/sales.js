@@ -194,6 +194,13 @@ function renderSalesProducts() {
     document.querySelectorAll('[data-sales-ai-index]').forEach(button => {
         button.addEventListener('click', () => toggleSalesAiExplain(Number(button.dataset.salesAiIndex)));
     });
+    document.querySelectorAll('[data-sales-compare-index]').forEach(button => {
+        button.addEventListener('click', () => toggleSalesCompare(Number(button.dataset.salesCompareIndex)));
+    });
+    document.querySelectorAll('[data-sales-substitute-index]').forEach(button => {
+        button.addEventListener('click', () => openSalesAiSubstitute(Number(button.dataset.salesSubstituteIndex)));
+    });
+    refreshSalesCompareUI();
     renderSalesPagination();
 }
 
@@ -219,10 +226,12 @@ function renderSalesCard(item, index) {
                 </div>
                 <div class="goods-actions">
                     <button class="sales-card-detail-button" type="button" data-sales-detail-index="${index}">查看详情</button>
+                    <button class="sales-compare-button" type="button" data-sales-compare-index="${index}">对比</button>
                     <button class="sales-ai-button" type="button" data-sales-ai-index="${index}">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.2L19.5 8 12 11.8 4.5 8 12 4.2zM4 9.8l7 3.5v7.4l-7-3.5V9.8zm9 10.9v-7.4l7-3.5v7.4l-7 3.5z"/></svg>
                         AI讲解
                     </button>
+                    <button class="sales-ai-button" type="button" data-sales-substitute-index="${index}">AI替代</button>
                 </div>
             </div>
             <div class="sales-ai-panel" id="salesAiPanel-${index}" hidden></div>
@@ -282,7 +291,7 @@ function renderSalesListRow(item, index) {
         <td><div class="sales-list-extra">${renderInquiryQuoteInfo(item)}</div></td>
         <td>${escapeSalesHtml(formatSalesDate(item.quote_updated_at))}</td>
         <td>${item.modification_completed ? '<span class="sales-completed-badge">已完成</span>' : ''}</td>
-        <td><div class="list-actions"><button class="sales-detail-button" type="button" data-sales-detail-index="${index}">详情</button><button class="sales-ai-button" type="button" data-sales-ai-index="${index}">AI讲解</button></div></td>
+        <td><div class="list-actions"><button class="sales-detail-button" type="button" data-sales-detail-index="${index}">详情</button><button class="sales-compare-button" type="button" data-sales-compare-index="${index}">对比</button><button class="sales-ai-button" type="button" data-sales-ai-index="${index}">AI讲解</button><button class="sales-ai-button" type="button" data-sales-substitute-index="${index}">AI替代</button></div></td>
     </tr>
     <tr class="sales-ai-list-row" id="salesAiListRow-${index}" hidden><td colspan="10"><div class="sales-ai-panel-content" id="salesAiListPanel-${index}"></div></td></tr>`;
 }
@@ -594,32 +603,6 @@ function toggleSalesAiExplain(index) {
 }
 
 async function fetchSalesAiExplain(index, item, container) {
-    container.innerHTML = `
-        <div class="sales-ai-loading">
-            <div class="ai-loading-header">
-                <span class="ai-loading-icon">AI</span>
-                <span class="ai-loading-text">正在理解产品并生成讲解话术</span>
-                <span class="ai-loading-timer" id="aiTimer-${index}">0s</span>
-            </div>
-            <div class="ai-progress-bar"><div class="ai-progress-fill" id="aiProgress-${index}"></div></div>
-            <div class="ai-loading-steps">
-                <span class="ai-step active" data-step="1">解析产品</span>
-                <span class="ai-step" data-step="2">匹配卖点</span>
-                <span class="ai-step" data-step="3">生成话术</span>
-            </div>
-        </div>`;
-    const startTime = Date.now();
-    const timerEl = container.querySelector(`#aiTimer-${index}`);
-    const progressEl = container.querySelector(`#aiProgress-${index}`);
-    const stepEls = container.querySelectorAll('.ai-step');
-    const timer = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        if (timerEl) timerEl.textContent = elapsed + 's';
-        const pct = Math.min(90, elapsed * 8);
-        if (progressEl) progressEl.style.width = pct + '%';
-        if (elapsed >= 3 && stepEls[1]) stepEls[1].classList.add('active');
-        if (elapsed >= 8 && stepEls[2]) stepEls[2].classList.add('active');
-    }, 200);
     const body = {
         product_name: item.product_name || '',
         model: item.model || null,
@@ -638,35 +621,324 @@ async function fetchSalesAiExplain(index, item, container) {
         applicable_elevator_brand: item.applicable_elevator_brand || null,
         record_source: item.record_source || null,
     };
+    const labels = ['安装位置', '产品特点', '销售话术'];
+    await streamAiRequest('/api/sales/ai-explain', body, container, labels, (content) => {
+        salesAiState[index] = `<div class="sales-ai-content">${renderAiSections(content, labels)}</div>`;
+    });
+}
+
+// ===================== AI 产品对比 =====================
+
+const salesCompareState = { items: [] };
+
+function compareItemKey(item) {
+    return `${item.record_source || 'parts'}:${item.id ?? ''}`;
+}
+
+function isItemCompared(item) {
+    return salesCompareState.items.some(c => c.key === compareItemKey(item));
+}
+
+function toggleSalesCompare(index) {
+    const item = salesState.items[index];
+    if (!item) return;
+    const key = compareItemKey(item);
+    const existing = salesCompareState.items.findIndex(c => c.key === key);
+    if (existing >= 0) {
+        salesCompareState.items.splice(existing, 1);
+    } else {
+        if (salesCompareState.items.length >= 2) {
+            showSalesToast('最多选择两个商品进行对比', 'error');
+            return;
+        }
+        salesCompareState.items.push({ key, item });
+    }
+    refreshSalesCompareUI();
+}
+
+function refreshSalesCompareUI() {
+    document.querySelectorAll('[data-sales-compare-index]').forEach(button => {
+        const item = salesState.items[Number(button.dataset.salesCompareIndex)];
+        const active = item && isItemCompared(item);
+        button.classList.toggle('active', active);
+        button.textContent = active ? '已选对比' : '对比';
+    });
+    renderSalesCompareBar();
+}
+
+function renderSalesCompareBar() {
+    const bar = document.getElementById('salesCompareBar');
+    const names = document.getElementById('salesCompareNames');
+    const countEl = document.getElementById('salesCompareCount');
+    const go = document.getElementById('salesCompareGo');
+    if (!bar || !names || !countEl || !go) return;
+    const count = salesCompareState.items.length;
+    if (count === 0) {
+        bar.classList.remove('show');
+        return;
+    }
+    bar.classList.add('show');
+    countEl.textContent = count;
+    names.innerHTML = salesCompareState.items
+        .map(c => `<span class="compare-chip">${escapeSalesHtml(salesText(c.item.product_name, '未命名商品'))}</span>`)
+        .join('<span class="compare-vs">vs</span>');
+    go.disabled = count < 2;
+}
+
+function clearSalesCompare() {
+    salesCompareState.items = [];
+    refreshSalesCompareUI();
+}
+
+function comparePayload(item) {
+    return {
+        product_name: item.product_name || '',
+        model: item.model || null,
+        product_brand: item.product_brand || null,
+        specification: item.specification || null,
+        product_type: item.product_type || null,
+        nature: item.nature || null,
+        display_price: item.display_price || null,
+        warranty: item.warranty || null,
+        shipping_origin: item.shipping_origin || null,
+        shipping_time: item.shipping_time || null,
+        precautions: item.precautions || null,
+        technical_params: item.technical_params || null,
+        remark: item.remark || null,
+        substitute_model: item.substitute_model || null,
+        applicable_elevator_brand: item.applicable_elevator_brand || null,
+        record_source: item.record_source || null,
+    };
+}
+
+function openSalesCompare() {
+    const overlay = document.getElementById('salesCompareOverlay');
+    if (!overlay || salesCompareState.items.length < 2) {
+        showSalesToast('请选择两个商品进行对比', 'error');
+        return;
+    }
+    const [a, b] = salesCompareState.items;
+    document.getElementById('salesCompareNameA').textContent = salesText(a.item.product_name, '产品A');
+    document.getElementById('salesCompareNameB').textContent = salesText(b.item.product_name, '产品B');
+    document.getElementById('salesCompareBody').innerHTML = '';
+    overlay.classList.add('show');
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    runSalesAiCompare();
+}
+
+function closeSalesCompare() {
+    const overlay = document.getElementById('salesCompareOverlay');
+    if (!overlay) return;
+    overlay.classList.remove('show');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+}
+
+async function runSalesAiCompare() {
+    const [a, b] = salesCompareState.items;
+    const body = document.getElementById('salesCompareBody');
+    if (!body || !a || !b) return;
+    await streamAiRequest(
+        '/api/sales/ai-compare',
+        { product_a: comparePayload(a.item), product_b: comparePayload(b.item) },
+        body,
+        ['差异对比', '各自优势', '推荐建议'],
+    );
+}
+
+function renderAiSections(text, labels) {
+    let html = escapeSalesHtml(text).replace(/\*\*/g, '');
+    labels.forEach((label, i) => {
+        const re = new RegExp(`^${label}[:：]?\\s*`, 'gm');
+        html = html.replace(re, `${i === 0 ? '' : '</div>'}<div class="ai-section"><span class="ai-section-label">${label}：</span>`);
+    });
+    html += '</div>';
+    return html.replace(/\n/g, '<br>');
+}
+
+function aiLoadingHtml(initialText) {
+    return `
+        <div class="sales-ai-loading">
+            <div class="ai-loading-header">
+                <span class="ai-loading-icon">AI</span>
+                <span class="ai-loading-text ai-stage-text">${escapeSalesHtml(initialText)}</span>
+            </div>
+            <div class="ai-progress-bar"><div class="ai-progress-fill ai-stream-fill"></div></div>
+        </div>`;
+}
+
+async function streamAiRequest(url, payload, container, labels, afterDone) {
+    container.innerHTML = aiLoadingHtml('正在连接 AI...');
+    const setStage = (pct, text) => {
+        const fill = container.querySelector('.ai-stream-fill');
+        const txt = container.querySelector('.ai-stage-text');
+        if (fill) fill.style.width = pct + '%';
+        if (txt) txt.textContent = text;
+    };
     try {
-        const data = await salesRequest('/api/sales/ai-explain', {
+        const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
+            body: JSON.stringify(payload),
+            credentials: 'same-origin',
         });
-        clearInterval(timer);
-        if (progressEl) progressEl.style.width = '100%';
-        if (timerEl) timerEl.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
-        const content = data.content || '（AI 未返回内容）';
-        salesAiState[index] = `<div class="sales-ai-content">${renderAiMarkdown(content)}</div>`;
-        setTimeout(() => {
-            container.innerHTML = salesAiState[index];
-        }, 300);
+        if (!response.ok) {
+            let message = '请求失败，请稍后重试';
+            try { const err = await response.json(); message = err.detail || message; } catch (_) {}
+            throw new Error(message);
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finished = false;
+        let resultContent = '';
+        while (!finished) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let idx;
+            while ((idx = buffer.indexOf('\n\n')) !== -1) {
+                const chunk = buffer.slice(0, idx);
+                buffer = buffer.slice(idx + 2);
+                let event = 'message';
+                let data = '';
+                for (const line of chunk.split('\n')) {
+                    if (line.startsWith('event:')) event = line.slice(6).trim();
+                    else if (line.startsWith('data:')) data += line.slice(5).trim();
+                }
+                if (!data) continue;
+                let parsed;
+                try { parsed = JSON.parse(data); } catch (_) { continue; }
+                if (event === 'stage') {
+                    if (parsed.stage === 'reasoning') setStage(55, 'AI 思考中...');
+                    else if (parsed.stage === 'content') setStage(85, '正在生成回答...');
+                } else if (event === 'done') {
+                    finished = true;
+                    resultContent = parsed.content || '';
+                } else if (event === 'error') {
+                    throw new Error(parsed.detail || 'AI生成失败，请稍后重试');
+                }
+            }
+        }
+        if (!finished) throw new Error('AI 响应中断，请重试');
+        setStage(100, '完成');
+        container.innerHTML = `<div class="sales-ai-content">${renderAiSections(resultContent, labels)}</div>`;
+        if (afterDone) afterDone(resultContent);
     } catch (error) {
-        clearInterval(timer);
         container.innerHTML = `<div class="sales-ai-error">${escapeSalesHtml(error.message)}</div>`;
     }
 }
 
-function renderAiMarkdown(text) {
-    let html = escapeSalesHtml(text);
-    html = html.replace(/\*\*/g, '');
-    html = html.replace(/^(安装位置)[:：]?\s*/gm, '<div class="ai-section"><span class="ai-section-label">安装位置：</span>');
-    html = html.replace(/^(产品特点)[:：]?\s*/gm, '</div><div class="ai-section"><span class="ai-section-label">产品特点：</span>');
-    html = html.replace(/^(销售话术)[:：]?\s*/gm, '</div><div class="ai-section"><span class="ai-section-label">销售话术：</span>');
-    html += '</div>';
-    html = html.replace(/\n/g, '<br>');
-    return html;
+// ===================== 通用 AI 工具弹窗 =====================
+
+function showSalesAiTool(title) {
+    const overlay = document.getElementById('salesAiToolOverlay');
+    if (!overlay) return;
+    document.getElementById('salesAiToolTitle').textContent = title;
+    document.getElementById('salesAiToolBody').innerHTML = '';
+    overlay.classList.add('show');
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeSalesAiTool() {
+    const overlay = document.getElementById('salesAiToolOverlay');
+    if (!overlay) return;
+    overlay.classList.remove('show');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+}
+
+async function runAiTool(body, url, payload, labels) {
+    await streamAiRequest(url, payload, body, labels);
+}
+
+// ===================== AI 替代型号 =====================
+
+function openSalesAiSubstitute(index) {
+    const item = salesState.items[index];
+    if (!item) return;
+    showSalesAiTool(`AI 替代型号 · ${salesText(item.product_name, '商品')}`);
+    const body = document.getElementById('salesAiToolBody');
+    runAiTool(body, '/api/sales/ai-substitute', substitutePayload(item), ['替代型号', '替代理由']);
+}
+
+function substitutePayload(item) {
+    return {
+        product_name: item.product_name || '',
+        model: item.model || null,
+        product_brand: item.product_brand || null,
+        specification: item.specification || null,
+        product_type: item.product_type || null,
+        applicable_elevator_brand: item.applicable_elevator_brand || null,
+        technical_params: item.technical_params || null,
+        substitute_model: item.substitute_model || null,
+    };
+}
+
+// ===================== AI 询价匹配 =====================
+
+function openSalesAiMatch() {
+    showSalesAiTool('AI 需求识别');
+    const body = document.getElementById('salesAiToolBody');
+    body.innerHTML = `
+        <div class="ai-match-input-wrap">
+            <textarea id="salesAiMatchInput" class="ai-match-input" maxlength="500"
+                placeholder="粘贴客户需求描述，例如：&#10;三菱门机变频器，要全新的，现货"></textarea>
+            <div class="ai-match-hint"><span id="salesAiMatchCount">0</span>/500</div>
+        </div>
+        <div class="ai-match-actions">
+            <button type="button" class="compare-go" id="salesAiMatchGo">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2L2 7v10l10 5 10-5V7L12 2z"/></svg>
+                智能识别
+            </button>
+        </div>`;
+    const input = document.getElementById('salesAiMatchInput');
+    const countEl = document.getElementById('salesAiMatchCount');
+    const go = document.getElementById('salesAiMatchGo');
+    input.addEventListener('input', () => {
+        countEl.textContent = String(input.value.length);
+    });
+    go.addEventListener('click', () => runSalesAiMatch());
+    input.focus();
+}
+
+async function runSalesAiMatch() {
+    const input = document.getElementById('salesAiMatchInput');
+    const body = document.getElementById('salesAiToolBody');
+    if (!input || !body) return;
+    const text = input.value.trim();
+    if (!text) {
+        showSalesToast('请先粘贴需求描述', 'error');
+        return;
+    }
+    const labels = ['搜索关键词', '品牌', '型号', '品类'];
+    await streamAiRequest('/api/sales/ai-match', { text }, body, labels, (content) => {
+        const keyword = extractMatchKeyword(content);
+        if (!keyword) return;
+        body.insertAdjacentHTML('beforeend', `
+            <div class="ai-match-actions">
+                <button type="button" class="compare-go" id="salesAiMatchSearch">用关键词搜索</button>
+            </div>`);
+        const searchBtn = document.getElementById('salesAiMatchSearch');
+        if (searchBtn) {
+            searchBtn.addEventListener('click', () => {
+                closeSalesAiTool();
+                salesEls.input.value = keyword;
+                salesState.keyword = keyword;
+                salesState.page = 1;
+                loadSalesProducts();
+            });
+        }
+    });
+}
+
+function extractMatchKeyword(content) {
+    const m = content.match(/搜索关键词[:：]\s*([^\n]+)/);
+    if (!m) return '';
+    const kw = m[1].trim();
+    return (kw && kw !== '无') ? kw : '';
 }
 
 function clearSalesFeedbackErrors() {
@@ -813,6 +1085,8 @@ function bindSalesEvents() {
     });
     salesEls.gridButton.addEventListener('click', () => setSalesView('grid'));
     salesEls.listButton.addEventListener('click', () => setSalesView('list'));
+    const aiMatchButton = document.getElementById('salesAiMatchButton');
+    if (aiMatchButton) aiMatchButton.addEventListener('click', openSalesAiMatch);
     document.getElementById('salesFeedbackOpenButton').addEventListener('click', openSalesFeedback);
     document.getElementById('salesFeedbackCloseButton').addEventListener('click', closeSalesFeedback);
     salesEls.feedbackDescription.addEventListener('input', () => {
@@ -833,7 +1107,11 @@ function bindSalesEvents() {
     document.addEventListener('keydown', event => {
         if (event.key !== 'Escape') return;
         if (salesEls.feedbackOverlay.classList.contains('show')) return;
+        const compareOverlay = document.getElementById('salesCompareOverlay');
+        const aiToolOverlay = document.getElementById('salesAiToolOverlay');
         if (salesEls.imageOverlay.classList.contains('show')) closeSalesImagePreview();
+        else if (compareOverlay && compareOverlay.classList.contains('show')) closeSalesCompare();
+        else if (aiToolOverlay && aiToolOverlay.classList.contains('show')) closeSalesAiTool();
         else if (salesEls.detailOverlay.classList.contains('show')) closeSalesProductDetail();
     });
 }
