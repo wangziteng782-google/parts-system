@@ -384,25 +384,13 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         single_prices = _collect_single_prices(cursor, [r["id"] for r in rows if r["variant_count"] == 1])
         items = [_build_parts_item(row, single_prices.get(row["id"], {}), detail_columns) for row in rows]
 
-        # 检查搜索结果中是否有相互关联的产品，标记后出现的为"替代品"
-        if len(rows) > 1:
-            all_ids = [r["id"] for r in rows]
-            placeholders = ",".join(["%s"] * len(all_ids))
-            cursor.execute(
-                f"""SELECT r.product_id, r.related_product_id
-                    FROM product_relations r
-                    WHERE r.product_id IN ({placeholders})
-                    AND r.related_product_id IN ({placeholders})""",
-                all_ids + all_ids,
-            )
-            # 构建关联集合（每对只保留一次，标记 related_product_id 为替代品）
-            related_as_substitute = set()
-            for rel in cursor.fetchall():
-                related_as_substitute.add(rel["related_product_id"])
-            if related_as_substitute:
-                for item in items:
-                    if item["id"] in related_as_substitute:
-                        item["record_source_label"] = "替代品"
+        # 型号与搜索关键词精确匹配的主产品不打标签，其余标记为"替代品"
+        if keyword and keyword.strip() and len(items) > 1:
+            kw = keyword.strip().lower()
+            for item in items:
+                model = (item.get("model") or "").strip().lower()
+                if model != kw and item.get("record_source_label") == "来自配件库":
+                    item["record_source_label"] = "替代品"
 
         # 查询关联产品并作为独立 item 追加（双向关系）
         if rows:
