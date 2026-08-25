@@ -74,18 +74,14 @@
             return value !== null && value !== undefined && String(value).trim() !== '';
         }
 
-        function supplierInvoicePriceText(value, invoiceName) {
+        function supplierInvoicePriceText(value) {
             if (!hasConfiguredSupplierPrice(value)) return null;
-            if (Number(value) === 0) return `可开${invoiceName}（价格待定）`;
             return `¥${String(value)}`;
         }
 
-        function formatSpecSupplierPrice(value, invoiceName = '') {
-            if (value === null || value === undefined || String(value).trim() === '') {
+        function formatSpecSupplierPrice(value) {
+            if (!hasConfiguredSupplierPrice(value)) {
                 return '<span class="vs-price-empty">未配置</span>';
-            }
-            if (invoiceName && Number(value) === 0) {
-                return `<span class="vs-price-available">${escapeHtml(`可开${invoiceName}（价格待定）`)}</span>`;
             }
             return `<span class="vs-price-amount">¥${escapeHtml(String(value))}</span>`;
         }
@@ -106,11 +102,11 @@
                             </div>
                             <div class="vs-supplier-price-row">
                                 <span class="vs-price-label">含专票</span>
-                                ${(!cap || cap.is_special) ? formatSpecSupplierPrice(p.purchase_special_invoice, '专票') : '<span class="vs-price-empty">不支持</span>'}
+                                ${(!cap || cap.is_special) ? formatSpecSupplierPrice(p.purchase_special_invoice) : '<span class="vs-price-empty">不支持</span>'}
                             </div>
                             <div class="vs-supplier-price-row">
                                 <span class="vs-price-label">含普票</span>
-                                ${(!cap || cap.is_normal) ? formatSpecSupplierPrice(p.purchase_general_invoice, '普票') : '<span class="vs-price-empty">不支持</span>'}
+                                ${(!cap || cap.is_normal) ? formatSpecSupplierPrice(p.purchase_general_invoice) : '<span class="vs-price-empty">不支持</span>'}
                             </div>
                         </div>
                     </div>`;
@@ -121,8 +117,15 @@
             const specsJson = JSON.stringify(specs).replace(/"/g, '&quot;');
             const classes = ['vs-spec-item'];
             if (!hasSupplier) classes.push('no-supplier');
+            // 所有供应商三个价格都未配置 → 标记为已停产
+            const allPricesEmpty = prices.length > 0 && prices.every(p =>
+                !hasConfiguredSupplierPrice(p.no_tax_price) &&
+                !hasConfiguredSupplierPrice(p.purchase_special_invoice) &&
+                !hasConfiguredSupplierPrice(p.purchase_general_invoice)
+            );
+            const discontinuedMark = allPricesEmpty ? '<span class="vs-discontinued-tag">已停产</span>' : '';
             return `<div class="${classes.join(' ')}" onclick="openSupplierPanel('${specsJson}')">
-                <div class="vs-spec-title"><span class="vs-spec-key">${escapeHtml(specName)}：</span><span class="vs-spec-value">${escapeHtml(specValue)}</span></div>
+                <div class="vs-spec-title"><span class="vs-spec-key">${escapeHtml(specName)}：</span><span class="vs-spec-value">${escapeHtml(specValue)}</span>${discontinuedMark}</div>
                 <div class="vs-supplier-prices">${supplierPricesHtml}</div>
             </div>`;
         }
@@ -208,8 +211,8 @@
                         const cap = p.oa_supplier_id ? _oaSupplierCapability[p.oa_supplier_id] : null;
                         const priceMap = {
                             no_tax: (!cap || cap.is_no_tax) && hasConfiguredSupplierPrice(p.no_tax_price) ? `¥${escapeHtml(String(p.no_tax_price))}` : null,
-                            special: (!cap || cap.is_special) && supplierInvoicePriceText(p.purchase_special_invoice, '专票'),
-                            general: (!cap || cap.is_normal) && supplierInvoicePriceText(p.purchase_general_invoice, '普票'),
+                            special: (!cap || cap.is_special) && supplierInvoicePriceText(p.purchase_special_invoice),
+                            general: (!cap || cap.is_normal) && supplierInvoicePriceText(p.purchase_general_invoice),
                         };
                         const labelMap = { no_tax: '不含票', special: '含专票', general: '含普票' };
                         // 展示全部 3 个价格，对外展示的加标记
@@ -912,11 +915,11 @@
             setVariantText('fv-retail_price', row.retail_price, '0');
             setVariantText(
                 'fv-purchase_special_invoice',
-                (!cap || cap.is_special) ? supplierInvoicePriceText(row.purchase_special_invoice, '专票') : '不支持'
+                (!cap || cap.is_special) ? supplierInvoicePriceText(row.purchase_special_invoice) : '不支持'
             );
             setVariantText(
                 'fv-purchase_general_invoice',
-                (!cap || cap.is_normal) ? supplierInvoicePriceText(row.purchase_general_invoice, '普票') : '不支持'
+                (!cap || cap.is_normal) ? supplierInvoicePriceText(row.purchase_general_invoice) : '不支持'
             );
             setVariantText('fv-purchase_shipping', row.purchase_shipping);
             setVariantText('fv-retail_ladder_price', row.retail_ladder_price);
