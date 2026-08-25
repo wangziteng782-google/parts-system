@@ -384,18 +384,23 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         single_prices = _collect_single_prices(cursor, [r["id"] for r in rows if r["variant_count"] == 1])
         items = [_build_parts_item(row, single_prices.get(row["id"], {}), detail_columns) for row in rows]
 
-        # 查询关联产品并作为独立 item 追加
+        # 查询关联产品并作为独立 item 追加（双向关系）
         if rows:
             all_ids = [r["id"] for r in rows]
             placeholders = ",".join(["%s"] * len(all_ids))
             cursor.execute(
-                f"""SELECT DISTINCT r.related_product_id
+                f"""SELECT r.related_product_id AS pid
                     FROM product_relations r
                     WHERE r.product_id IN ({placeholders})
-                    AND r.related_product_id NOT IN ({placeholders})""",
-                all_ids + all_ids,
+                    AND r.related_product_id NOT IN ({placeholders})
+                    UNION
+                    SELECT r.product_id AS pid
+                    FROM product_relations r
+                    WHERE r.related_product_id IN ({placeholders})
+                    AND r.product_id NOT IN ({placeholders})""",
+                all_ids + all_ids + all_ids + all_ids,
             )
-            related_ids = [row["related_product_id"] for row in cursor.fetchall()]
+            related_ids = [row["pid"] for row in cursor.fetchall()]
 
             if related_ids:
                 placeholders = ",".join(["%s"] * len(related_ids))
