@@ -10,7 +10,16 @@ async function init() {
             const classificationData = await classificationRes.json();
             if (uploadConfigRes.ok) imageUploadConfig = await uploadConfigRes.json();
             applyClassificationData(classificationData);
-            loadProducts();
+            // 支持从 URL 参数 product_id 自动跳转到指定产品
+            const urlParams = new URLSearchParams(window.location.search);
+            const targetProductId = urlParams.get('product_id');
+            if (targetProductId && Number.isFinite(Number(targetProductId))) {
+                currentProductId = Number(targetProductId);
+                await loadProducts();
+                await selectProduct(currentProductId);
+            } else {
+                await loadProducts();
+            }
         }
 
         function openProductCreate() {

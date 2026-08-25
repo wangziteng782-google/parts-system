@@ -113,6 +113,7 @@ button { cursor: pointer; }
 .goods-price { min-height: 31px; color: var(--sales-price); font-size: 23px; font-weight: 800; letter-spacing: -.5px; }
 .goods-price small { margin-left: 3px; color: #9a6a6a; font-size: 11px; font-weight: 500; }
 .goods-price.pending { display: flex; align-items: center; color: #7d8aa0; font-size: 15px; letter-spacing: 0; }
+.goods-price.discontinued { display: flex; align-items: center; color: #92400e; font-size: 15px; letter-spacing: 0; }
 .goods-name { min-height: 46px; margin: 7px 0 10px; overflow: hidden; color: #253047; font-size: 15px; font-weight: 700; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .goods-meta { display: grid; gap: 6px; color: var(--sales-muted); font-size: 13px; }
 .goods-meta div { display: flex; gap: 6px; min-width: 0; }
@@ -141,6 +142,7 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .list-specification { min-width: 150px; max-width: 260px; line-height: 1.6; }
 .list-price { color: var(--sales-price); font-size: 16px; font-weight: 800; white-space: nowrap; }
 .list-price.pending { color: #7d8aa0; font-size: 13px; }
+.list-price.discontinued { color: #92400e; font-size: 13px; font-weight: 600; }
 .sales-list-extra { min-width: 118px; display: grid; gap: 4px; }
 .sales-list-extra div { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
 .sales-list-extra label { color: #8290a5; font-size: 11px; }

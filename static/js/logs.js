@@ -206,13 +206,15 @@
             const item = await response.json();
             const entries = item.entries || [];
             el.drawerTitle.textContent = item.product_name || `配件 #${item.part_id || "-"}`;
+            const partId = item.part_id;
+            const jumpBtn = partId ? `<a class="log-jump-btn" href="/goods?product_id=${partId}" target="_blank">查看产品详情 →</a>` : '';
             el.drawerContent.innerHTML = `
                 <section class="detail-card">
                     <h3>产品信息</h3>
                     <div class="product-summary">
                         ${imageHtml(item)}
                         <div>
-                            <div class="summary-name">${escapeHtml(item.product_name || `配件 #${item.part_id || "-"}`)}</div>
+                            <div class="summary-name">${escapeHtml(item.product_name || `配件 #${partId || "-"}`)}</div>
                             <div class="summary-meta">
                                 型号：${escapeHtml(item.model || "-")}<br>
                                 品牌：${escapeHtml(item.product_brand || "-")}　分类：${escapeHtml(item.product_type || "-")}<br>
@@ -220,6 +222,7 @@
                             </div>
                         </div>
                     </div>
+                    ${jumpBtn}
                 </section>
                 <section class="detail-card">
                     <h3>全部变更内容</h3>

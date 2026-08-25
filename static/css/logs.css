@@ -356,6 +356,8 @@ tbody tr:hover { background: #fafcff; }
 .product-summary .product-thumb { width: 68px; height: 68px; flex: 0 0 auto; }
 .summary-name { margin-bottom: 8px; font-size: 16px; font-weight: 700; }
 .summary-meta { color: var(--muted); line-height: 1.8; font-size: 13px; }
+.log-jump-btn { display: inline-block; margin-top: 14px; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; text-decoration: none; transition: background 0.15s; }
+.log-jump-btn:hover { background: #dbeafe; }
 .change-content { padding: 14px 16px; color: #46546a; border-left: 3px solid var(--blue); background: #f7faff; line-height: 1.8; white-space: pre-wrap; }
 .change-history { display: grid; gap: 12px; }
 .change-history-item { padding: 14px; border: 1px solid #e5eaf1; border-radius: 9px; background: #fbfcfe; }

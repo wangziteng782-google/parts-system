@@ -194,12 +194,24 @@ function renderSalesProducts() {
     renderSalesPagination();
 }
 
+function isSalesItemDiscontinued(item) {
+    const isEmpty = v => v === null || v === undefined || v === '' || Number(v) === 0;
+    if (item.display_type === 'multi_variant') {
+        return isEmpty(item.display_price_min) && isEmpty(item.display_price_max);
+    }
+    return isEmpty(item.display_price);
+}
+
 function renderSalesCard(item, index) {
     const image = escapeSalesHtml(safeSalesImage(item.image));
     const isSubstitute = item.record_source_label === '替代品';
     const source = item.record_source === 'inquiry' ? 'inquiry' : 'parts';
     const sourceLabel = source === 'inquiry' ? '来自询价记录' : '来自配件库';
     const badges = `<span class="source-badge ${source}">${sourceLabel}</span>${isSubstitute ? '<span class="source-badge substitute">替代品</span>' : ''}`;
+    const isDiscontinued = isSalesItemDiscontinued(item);
+    const priceHtml = isDiscontinued
+        ? '<div class="goods-price discontinued">已停产</div>'
+        : formatSalesPrice(item.display_price_min ?? item.display_price, false, item.display_price_max);
     return `
         <article class="goods-card">
             <div class="goods-picture">
@@ -208,7 +220,7 @@ function renderSalesCard(item, index) {
             </div>
             <div class="goods-body">
                 ${item.modification_completed ? '<span class="sales-completed-badge">已完成</span>' : ''}
-                ${formatSalesPrice(item.display_price_min ?? item.display_price, false, item.display_price_max)}
+                ${priceHtml}
                 <div class="goods-name" title="${escapeSalesHtml(item.product_name)}">${escapeSalesHtml(salesText(item.product_name))}${badges}</div>
                 <div class="goods-meta">
                     <div><label>品牌</label><span>${escapeSalesHtml(salesText(item.product_brand))}</span></div>
@@ -255,12 +267,16 @@ function renderSalesListRow(item, index) {
     const source = item.record_source === 'inquiry' ? 'inquiry' : 'parts';
     const sourceLabel = source === 'inquiry' ? '来自询价记录' : '来自配件库';
     const badges = `<span class="source-badge ${source}">${sourceLabel}</span>${isSubstitute ? '<span class="source-badge substitute">替代品</span>' : ''}`;
+    const isDiscontinued = isSalesItemDiscontinued(item);
+    const priceHtml = isDiscontinued
+        ? '<span class="list-price discontinued">已停产</span>'
+        : formatSalesPrice(item.display_price_min ?? item.display_price, true, item.display_price_max);
     return `<tr>
         <td><div class="list-product"><button class="list-image-button" type="button" data-sales-preview-image="${image}" title="点击查看大图"><img src="${image}" alt="商品图片" loading="lazy" onerror="this.src='/static/img/site-logo.png';this.onerror=null"></button><div><strong>${escapeSalesHtml(salesText(item.product_name))}</strong>${badges}</div></div></td>
         <td>${escapeSalesHtml(salesText(item.product_brand))}</td>
         <td>${escapeSalesHtml(salesText(item.model))}</td>
         <td class="list-specification" title="${escapeSalesHtml(salesText(item.specification))}">${escapeSalesHtml(salesText(item.specification))}</td>
-        <td>${formatSalesPrice(item.display_price_min ?? item.display_price, true, item.display_price_max)}</td>
+        <td>${priceHtml}</td>
         <td><div class="sales-list-extra">${renderPartsInvoiceInfo(item)}</div></td>
         <td><div class="sales-list-extra">${renderInquiryQuoteInfo(item)}</div></td>
         <td>${escapeSalesHtml(formatSalesDate(item.quote_updated_at))}</td>
