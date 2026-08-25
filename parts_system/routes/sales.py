@@ -1311,3 +1311,61 @@ def sales_ai_match(req: AIMatchRequest):
         [("keyword", "搜索关键词"), ("brand", "品牌"), ("model", "型号"), ("category", "品类")],
         ["搜索关键词", "品牌", "型号", "品类"],
     )
+
+
+# ===================== AI 销售洞察 =====================
+
+class AIInsightRequest(BaseModel):
+    product_name: str
+    model: Optional[str] = None
+    product_brand: Optional[str] = None
+    product_type: Optional[str] = None
+    display_price: Optional[str] = None
+    display_price_min: Optional[str] = None
+    display_price_max: Optional[str] = None
+    has_variant_quotes: bool = False
+    model_config = {"extra": "allow"}
+
+
+def _build_insight_prompt(item: dict) -> list:
+    """根据产品价格与市场信息组装销售洞察提示词。"""
+    lines = []
+    if item.get("product_name"):
+        lines.append(f"产品：{item['product_name']}")
+    if item.get("model"):
+        lines.append(f"型号：{item['model']}")
+    if item.get("product_brand"):
+        lines.append(f"品牌：{item['product_brand']}")
+    if item.get("product_type"):
+        lines.append(f"分类：{item['product_type']}")
+    price_min = item.get("display_price_min") or item.get("display_price")
+    price_max = item.get("display_price_max")
+    if price_min and price_max and str(price_max) != str(price_min):
+        lines.append(f"价格区间：¥{price_min} ~ ¥{price_max}")
+    elif price_min:
+        lines.append(f"参考价：¥{price_min}")
+    if item.get("has_variant_quotes"):
+        lines.append("存在多个供应商/规格的报价")
+    product_info = "\n".join(lines) if lines else "（信息不完整）"
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是电梯配件销售分析专家。根据下面的产品价格和市场信息给出销售洞察。只输出一个 JSON 对象，不要任何分析、思考、解释、markdown。字段固定：\n"
+                '{"price_insight":"价格洞察","competition_insight":"竞争洞察","suggestion":"销售建议"}\n'
+                "每项1-2句，口语化，共120字以内。"
+            ),
+        },
+        {"role": "user", "content": product_info},
+    ]
+
+
+@app.post("/api/sales/ai-insight")
+def sales_ai_insight(req: AIInsightRequest):
+    """调用大模型分析产品销售数据，输出价格洞察/竞争洞察/销售建议（流式）。"""
+    messages = _build_insight_prompt(req.model_dump())
+    return _ai_stream_response(
+        messages,
+        [("price_insight", "价格洞察"), ("competition_insight", "竞争洞察"), ("suggestion", "销售建议")],
+        ["价格洞察", "竞争洞察", "销售建议"],
+    )

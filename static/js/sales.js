@@ -200,6 +200,9 @@ function renderSalesProducts() {
     document.querySelectorAll('[data-sales-substitute-index]').forEach(button => {
         button.addEventListener('click', () => openSalesAiSubstitute(Number(button.dataset.salesSubstituteIndex)));
     });
+    document.querySelectorAll('[data-sales-insight-index]').forEach(button => {
+        button.addEventListener('click', () => openSalesAiInsight(Number(button.dataset.salesInsightIndex)));
+    });
     refreshSalesCompareUI();
     renderSalesPagination();
 }
@@ -225,13 +228,14 @@ function renderSalesCard(item, index) {
                     <div><label>更新</label><span>${escapeSalesHtml(formatSalesDate(item.quote_updated_at))}</span></div>
                 </div>
                 <div class="goods-actions">
-                    <button class="sales-card-detail-button" type="button" data-sales-detail-index="${index}">查看详情</button>
+                    <button class="sales-card-detail-button" type="button" data-sales-detail-index="${index}">详情</button>
                     <button class="sales-compare-button" type="button" data-sales-compare-index="${index}">对比</button>
                     <button class="sales-ai-button" type="button" data-sales-ai-index="${index}">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.2L19.5 8 12 11.8 4.5 8 12 4.2zM4 9.8l7 3.5v7.4l-7-3.5V9.8zm9 10.9v-7.4l7-3.5v7.4l-7 3.5z"/></svg>
                         AI讲解
                     </button>
                     <button class="sales-ai-button" type="button" data-sales-substitute-index="${index}">AI替代</button>
+                    <button class="sales-ai-button" type="button" data-sales-insight-index="${index}">AI洞察</button>
                 </div>
             </div>
             <div class="sales-ai-panel" id="salesAiPanel-${index}" hidden></div>
@@ -291,7 +295,7 @@ function renderSalesListRow(item, index) {
         <td><div class="sales-list-extra">${renderInquiryQuoteInfo(item)}</div></td>
         <td>${escapeSalesHtml(formatSalesDate(item.quote_updated_at))}</td>
         <td>${item.modification_completed ? '<span class="sales-completed-badge">已完成</span>' : ''}</td>
-        <td><div class="list-actions"><button class="sales-detail-button" type="button" data-sales-detail-index="${index}">详情</button><button class="sales-compare-button" type="button" data-sales-compare-index="${index}">对比</button><button class="sales-ai-button" type="button" data-sales-ai-index="${index}">AI讲解</button><button class="sales-ai-button" type="button" data-sales-substitute-index="${index}">AI替代</button></div></td>
+        <td><div class="list-actions"><button class="sales-detail-button" type="button" data-sales-detail-index="${index}">详情</button><button class="sales-compare-button" type="button" data-sales-compare-index="${index}">对比</button><button class="sales-ai-button" type="button" data-sales-ai-index="${index}">AI讲解</button><button class="sales-ai-button" type="button" data-sales-substitute-index="${index}">AI替代</button><button class="sales-ai-button" type="button" data-sales-insight-index="${index}">AI洞察</button></div></td>
     </tr>
     <tr class="sales-ai-list-row" id="salesAiListRow-${index}" hidden><td colspan="10"><div class="sales-ai-panel-content" id="salesAiListPanel-${index}"></div></td></tr>`;
 }
@@ -874,6 +878,30 @@ function substitutePayload(item) {
         applicable_elevator_brand: item.applicable_elevator_brand || null,
         technical_params: item.technical_params || null,
         substitute_model: item.substitute_model || null,
+    };
+}
+
+// ===================== AI 销售洞察 =====================
+
+function openSalesAiInsight(index) {
+    const item = salesState.items[index];
+    if (!item) return;
+    showSalesAiTool(`AI 销售洞察 · ${salesText(item.product_name, '商品')}`);
+    const body = document.getElementById('salesAiToolBody');
+    runAiTool(body, '/api/sales/ai-insight', insightPayload(item), ['价格洞察', '竞争洞察', '销售建议']);
+}
+
+function insightPayload(item) {
+    const summary = item.invoice_quote_summary || {};
+    return {
+        product_name: item.product_name || '',
+        model: item.model || null,
+        product_brand: item.product_brand || null,
+        product_type: item.product_type || null,
+        display_price: item.display_price || null,
+        display_price_min: item.display_price_min ?? item.display_price ?? null,
+        display_price_max: item.display_price_max || null,
+        has_variant_quotes: !!summary.has_variant_quotes,
     };
 }
 
