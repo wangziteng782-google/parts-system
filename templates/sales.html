@@ -107,7 +107,10 @@
     <div class="sales-image-overlay" id="salesImageOverlay" onclick="closeSalesImagePreview()">
         <div class="sales-image-modal" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="商品图片大图预览">
             <button class="image-preview-close" type="button" onclick="closeSalesImagePreview()" aria-label="关闭">×</button>
-            <img id="salesPreviewImage" src="" alt="商品图片大图">
+            <button class="gallery-nav gallery-prev" id="salesGalleryPrev" type="button" onclick="salesImageGalleryPrev()" aria-label="上一张">‹</button>
+            <img id="salesPreviewImage" src="" alt="商品图片大图" onerror="this.src='/static/img/site-logo.png';this.onerror=null">
+            <button class="gallery-nav gallery-next" id="salesGalleryNext" type="button" onclick="salesImageGalleryNext()" aria-label="下一张">›</button>
+            <span class="gallery-counter" id="salesImageCounter"></span>
         </div>
     </div>
 

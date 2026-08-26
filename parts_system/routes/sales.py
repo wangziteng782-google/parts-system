@@ -101,6 +101,10 @@ def _first_product_image(row: dict) -> Optional[str]:
     return None
 
 
+def _all_product_images(row: dict) -> list[str]:
+    return list(dict.fromkeys(u for f in IMAGE_FIELDS for u in parse_image_urls(row.get(f))))
+
+
 def _oa_image(value) -> Optional[str]:
     urls = parse_image_urls(value)
     return urls[0] if urls else None
@@ -325,6 +329,7 @@ def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dic
         "nature": row.get("nature"),
         **{field: row.get(field) for field in detail_columns},
         "image": _first_product_image(row),
+        "images": _all_product_images(row),
         "display_type": display_type,
         "display_price": display_price,
         "display_price_min": display_price_min,

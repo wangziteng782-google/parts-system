@@ -24,6 +24,9 @@ const salesEls = {
     listButton: document.getElementById('salesListButton'),
     imageOverlay: document.getElementById('salesImageOverlay'),
     previewImage: document.getElementById('salesPreviewImage'),
+    galleryPrev: document.getElementById('salesGalleryPrev'),
+    galleryNext: document.getElementById('salesGalleryNext'),
+    imageCounter: document.getElementById('salesImageCounter'),
     detailOverlay: document.getElementById('salesDetailOverlay'),
     detailChat: document.getElementById('salesDetailChat'),
     detailChatCount: document.getElementById('salesDetailChatCount'),
@@ -185,8 +188,13 @@ function renderSalesProducts() {
     if (!salesState.items.length) return;
     salesEls.grid.innerHTML = salesState.items.map(renderSalesCard).join('');
     salesEls.list.innerHTML = salesState.items.map(renderSalesListRow).join('');
-    salesEls.list.querySelectorAll('[data-sales-preview-image]').forEach(button => {
-        button.addEventListener('click', () => openSalesImagePreview(button.dataset.salesPreviewImage));
+    salesEls.list.querySelectorAll('[data-sales-preview-index]').forEach(button => {
+        button.addEventListener('click', () => {
+            const idx = Number(button.dataset.salesPreviewIndex);
+            const item = salesState.items[idx];
+            const images = (item && item.images && item.images.length) ? item.images : [item?.image || '/static/img/site-logo.png'];
+            openSalesImagePreview(images);
+        });
     });
     document.querySelectorAll('[data-sales-detail-index]').forEach(button => {
         button.addEventListener('click', () => openSalesProductDetail(Number(button.dataset.salesDetailIndex)));
@@ -272,7 +280,7 @@ function renderSalesListRow(item, index) {
         ? '<span class="list-price discontinued">已停产</span>'
         : formatSalesPrice(item.display_price_min ?? item.display_price, true, item.display_price_max);
     return `<tr>
-        <td><div class="list-product"><button class="list-image-button" type="button" data-sales-preview-image="${image}" title="点击查看大图"><img src="${image}" alt="商品图片" loading="lazy" onerror="this.src='/static/img/site-logo.png';this.onerror=null"></button><div><strong>${escapeSalesHtml(salesText(item.product_name))}</strong>${badges}</div></div></td>
+        <td><div class="list-product"><button class="list-image-button" type="button" data-sales-preview-index="${index}" title="点击查看大图"><img src="${image}" alt="商品图片" loading="lazy" onerror="this.src='/static/img/site-logo.png';this.onerror=null"></button><div><strong>${escapeSalesHtml(salesText(item.product_name))}</strong>${badges}</div></div></td>
         <td>${escapeSalesHtml(salesText(item.product_brand))}</td>
         <td>${escapeSalesHtml(salesText(item.model))}</td>
         <td class="list-specification" title="${escapeSalesHtml(salesText(item.specification))}">${escapeSalesHtml(salesText(item.specification))}</td>
@@ -525,7 +533,11 @@ function openSalesProductDetail(index) {
         source === 'inquiry' ? detailAmountText(item.post_fee_has_tax_purchase) : '',
     );
     renderSalesDetailInfo(item, source, sourceLabel);
-    document.getElementById('salesDetailImage').src = safeSalesImage(item.image);
+    const detailImage = document.getElementById('salesDetailImage');
+    detailImage.src = safeSalesImage(item.image);
+    const images = (item.images && item.images.length) ? item.images : [item.image || '/static/img/site-logo.png'];
+    detailImage.onclick = () => openSalesImagePreview(images);
+    detailImage.style.cursor = 'zoom-in';
     const orderGoodsId = Number(item.order_goods_id);
     const showCommunications = source === 'inquiry' && Number.isInteger(orderGoodsId) && orderGoodsId > 0;
     salesEls.detailChat.hidden = !showCommunications;
@@ -547,6 +559,7 @@ function closeSalesProductDetail() {
     activeSalesDetailPartId = null;
     activeSalesDetailItem = null;
     activeSalesVariantQuotes = [];
+    document.getElementById('salesDetailImage').onclick = null;
     salesEls.detailOverlay.classList.remove('show');
     salesEls.detailOverlay.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
@@ -666,15 +679,45 @@ function setSalesView(view) {
     localStorage.setItem('sales_view', salesState.view);
 }
 
+let salesImageGallery = { images: [], index: 0 };
+
 function openSalesImagePreview(imageUrl) {
-    salesEls.previewImage.src = safeSalesImage(imageUrl);
+    const images = Array.isArray(imageUrl) ? imageUrl : [imageUrl];
+    salesImageGallery = { images, index: 0 };
+    _renderSalesImageGallery();
     salesEls.imageOverlay.classList.add('show');
     document.body.style.overflow = 'hidden';
+}
+
+function _renderSalesImageGallery() {
+    const { images, index } = salesImageGallery;
+    salesEls.previewImage.src = safeSalesImage(images[index]);
+    const counter = salesEls.imageCounter;
+    if (counter) counter.textContent = images.length > 1 ? `${index + 1} / ${images.length}` : '';
+    const prevBtn = salesEls.galleryPrev;
+    const nextBtn = salesEls.galleryNext;
+    if (prevBtn) prevBtn.style.visibility = images.length > 1 && index > 0 ? 'visible' : 'hidden';
+    if (nextBtn) nextBtn.style.visibility = images.length > 1 && index < images.length - 1 ? 'visible' : 'hidden';
+}
+
+function salesImageGalleryPrev() {
+    if (salesImageGallery.index > 0) {
+        salesImageGallery.index--;
+        _renderSalesImageGallery();
+    }
+}
+
+function salesImageGalleryNext() {
+    if (salesImageGallery.index < salesImageGallery.images.length - 1) {
+        salesImageGallery.index++;
+        _renderSalesImageGallery();
+    }
 }
 
 function closeSalesImagePreview() {
     salesEls.imageOverlay.classList.remove('show');
     salesEls.previewImage.src = '';
+    salesImageGallery = { images: [], index: 0 };
     document.body.style.overflow = '';
 }
 
@@ -714,10 +757,16 @@ function bindSalesEvents() {
     });
     salesEls.feedbackForm.addEventListener('submit', submitSalesFeedback);
     document.addEventListener('keydown', event => {
-        if (event.key !== 'Escape') return;
         if (salesEls.feedbackOverlay.classList.contains('show')) return;
-        if (salesEls.imageOverlay.classList.contains('show')) closeSalesImagePreview();
-        else if (salesEls.detailOverlay.classList.contains('show')) closeSalesProductDetail();
+        if (salesEls.imageOverlay.classList.contains('show')) {
+            if (event.key === 'Escape') closeSalesImagePreview();
+            else if (event.key === 'ArrowLeft') salesImageGalleryPrev();
+            else if (event.key === 'ArrowRight') salesImageGalleryNext();
+            return;
+        }
+        if (event.key === 'Escape' && salesEls.detailOverlay.classList.contains('show')) {
+            closeSalesProductDetail();
+        }
     });
 }
 
