@@ -140,45 +140,39 @@ async def list_products(
 
 @app.get("/api/products/{product_id}")
 async def get_product(product_id: int):
-    """获取单个产品完整详情"""
+    """获取单个产品完整详情（产品数据 + 修改完成状态 + 操作人信息，单次查询）"""
     logger.info(f"[查询] 产品详情 | product_id={product_id}")
     conn = get_db()
     try:
         cursor = conn.cursor()
-        sql = "SELECT * FROM parts WHERE id = %s"
-        logger.debug(f"[SQL] {sql} | params=({product_id},)")
-        cursor.execute(sql, (product_id,))
+        sql = """SELECT p.*,
+                   agg.complete_id, agg.change_id,
+                   completed_log.created_at AS completed_at,
+                   COALESCE(NULLIF(u.nickname,''), u.username,
+                            CONCAT('用户', completed_log.user_id)) AS operator_name
+            FROM parts p
+            LEFT JOIN (
+                SELECT part_id,
+                       MAX(CASE WHEN operation_type='COMPLETE' THEN id END) AS complete_id,
+                       MAX(CASE WHEN operation_type IN ('CREATE','UPDATE') THEN id END) AS change_id
+                FROM employee_operation_logs
+                WHERE part_id = %s
+            ) agg ON agg.part_id = p.id
+            LEFT JOIN employee_operation_logs completed_log ON completed_log.id = agg.complete_id
+            LEFT JOIN yh_admin_user u ON u.id = completed_log.user_id
+            WHERE p.id = %s"""
+        cursor.execute(sql, (product_id, product_id))
         row = cursor.fetchone()
         if not row:
             logger.warning(f"[查询] 产品不存在 | product_id={product_id}")
             raise HTTPException(status_code=404, detail="产品不存在")
-        cursor.execute(
-            """SELECT
-                   MAX(CASE WHEN operation_type='COMPLETE' THEN id END) AS complete_id,
-                   MAX(CASE WHEN operation_type IN ('CREATE','UPDATE') THEN id END) AS change_id
-               FROM employee_operation_logs
-               WHERE part_id=%s""",
-            (product_id,),
-        )
-        completion = cursor.fetchone() or {}
-        complete_id = int(completion.get("complete_id") or 0)
-        change_id = int(completion.get("change_id") or 0)
+        complete_id = int(row.pop("complete_id") or 0)
+        change_id = int(row.pop("change_id") or 0)
+        completed_at = row.pop("completed_at", None)
+        operator_name = row.pop("operator_name", None)
         row["modification_completed"] = complete_id > change_id
-        row["modification_completed_at"] = None
-        row["modification_completed_by"] = ""
-        if row["modification_completed"]:
-            cursor.execute(
-                """SELECT log.created_at,
-                          COALESCE(NULLIF(user.nickname,''), user.username,
-                                   CONCAT('用户', log.user_id)) AS operator_name
-                   FROM employee_operation_logs log
-                   LEFT JOIN yh_admin_user user ON user.id=log.user_id
-                   WHERE log.id=%s""",
-                (complete_id,),
-            )
-            completed_log = cursor.fetchone() or {}
-            row["modification_completed_at"] = completed_log.get("created_at")
-            row["modification_completed_by"] = completed_log.get("operator_name") or ""
+        row["modification_completed_at"] = completed_at if row["modification_completed"] else None
+        row["modification_completed_by"] = (operator_name or "") if row["modification_completed"] else ""
         logger.info(f"[查询] 产品详情完成 | product_id={product_id}, name={row.get('product_name', 'N/A')}")
         return row
     except HTTPException:
