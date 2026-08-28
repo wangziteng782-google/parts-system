@@ -1,4 +1,5 @@
 import uuid
+import time
 from typing import Optional, List
 
 from fastapi import HTTPException
@@ -10,6 +11,9 @@ from ..model import *
 from ..model import get_oa_db as _get_oa_db
 from ..util import *
 from ..audit import write_operation_log
+
+_supplier_cache = None  # (fetched_at, [rows])
+_SUPPLIER_CACHE_TTL = 60  # 秒，供应商列表变更频率低
 
 # ========== 产品规格与供应商价格 ==========
 class VariantSpecRequest(BaseModel):
@@ -1126,31 +1130,33 @@ async def update_variant_price(product_id: int, price_id: int, req: VariantPrice
 @app.get("/api/oa/suppliers")
 async def list_oa_suppliers(keyword: str = ""):
     """返回OA供应商列表，供前端下拉选择。支持keyword模糊搜索。"""
-    conn = _get_oa_db()
-    try:
-        cur = conn.cursor()
-        if keyword:
-            cur.execute(
-                """SELECT id, supplier_name
-                   FROM yh_supplier
-                   WHERE delete_time IS NULL AND supplier_name LIKE %s
-                   ORDER BY id
-                   LIMIT 50""",
-                (f"%{keyword}%",),
-            )
-        else:
+    global _supplier_cache
+    now = time.time()
+
+    if _supplier_cache and now - _supplier_cache[0] < _SUPPLIER_CACHE_TTL:
+        rows = _supplier_cache[1]
+    else:
+        conn = _get_oa_db()
+        try:
+            cur = conn.cursor()
             cur.execute(
                 """SELECT id, supplier_name
                    FROM yh_supplier
                    WHERE delete_time IS NULL
                    ORDER BY id""",
             )
-        return [
-            {"oa_supplier_id": row["id"], "supplier_name": row["supplier_name"]}
-            for row in cur.fetchall()
-        ]
-    finally:
-        conn.close()
+            rows = [
+                {"oa_supplier_id": row["id"], "supplier_name": row["supplier_name"]}
+                for row in cur.fetchall()
+            ]
+        finally:
+            conn.close()
+        _supplier_cache = (now, rows)
+
+    if keyword:
+        kw = keyword.lower()
+        return [r for r in rows if kw in r["supplier_name"].lower()][:50]
+    return rows
 
 
 @app.get("/api/oa/suppliers/{supplier_id}")
