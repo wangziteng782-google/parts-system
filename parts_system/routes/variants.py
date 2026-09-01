@@ -1,8 +1,9 @@
+import datetime
 import uuid
 import time
 from typing import Optional, List
 
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from ..bootstrap import app, templates
@@ -14,6 +15,9 @@ from ..audit import write_operation_log
 
 _supplier_cache = None  # (fetched_at, [rows])
 _SUPPLIER_CACHE_TTL = 60  # 秒，供应商列表变更频率低
+
+_oa_supplier_name_cache = {}  # {oa_id: (fetched_at, supplier_name)}
+_OA_SUPPLIER_NAME_TTL = 300  # 秒，单条供应商名缓存
 
 # ========== 产品规格与供应商价格 ==========
 class VariantSpecRequest(BaseModel):
@@ -45,7 +49,7 @@ class VariantPriceRequest(BaseModel):
     quote_time: Optional[str] = None
     expire_date: Optional[str] = None
     is_external_visible: bool = False
-    oa_supplier_id: int  # 必填，从OA选择
+    oa_supplier_id: Optional[int] = None  # 可选；不传则使用前端传入的 supplier 名称
     external_price_fields: Optional[str] = None
     remark: Optional[str] = None
 
@@ -60,7 +64,11 @@ class VariantGroupRequest(BaseModel):
 
 
 def _get_oa_supplier_name(oa_id: int) -> str:
-    """从OA获取供应商名称，不存在则抛异常"""
+    """从OA获取供应商名称，带内存缓存（TTL 300s）避免每次独立连接OA库。"""
+    now = time.time()
+    cached = _oa_supplier_name_cache.get(oa_id)
+    if cached and now - cached[0] < _OA_SUPPLIER_NAME_TTL:
+        return cached[1]
     oa_conn = _get_oa_db()
     try:
         oa_cur = oa_conn.cursor()
@@ -68,9 +76,11 @@ def _get_oa_supplier_name(oa_id: int) -> str:
         row = oa_cur.fetchone()
         if not row:
             raise HTTPException(status_code=400, detail="OA供应商不存在")
-        return row["supplier_name"]
+        name = row["supplier_name"]
     finally:
         oa_conn.close()
+    _oa_supplier_name_cache[oa_id] = (now, name)
+    return name
 
 
 def _variant_spec_catalog(cur, product_id: int):
@@ -291,43 +301,75 @@ def _expand_groups_for_new_spec_value(
 
 
 def _recalculate_part_display_price(product_id, cur):
-    """多规格时把所有对外展示价的 min/max 写回 parts，单规格/无价格时写 NULL。"""
+    """把所有对外展示价的 min/max 写回 parts，单规格/无价格时写 NULL。单次聚合 SQL 代替原 3 次查询。"""
     cur.execute(
-        """SELECT COUNT(DISTINCT variant_group_id) AS count
+        """SELECT COUNT(DISTINCT variant_group_id) AS group_count,
+                  MIN(CASE WHEN FIND_IN_SET('no_tax', external_price_fields) THEN no_tax_price END) AS min_no_tax,
+                  MAX(CASE WHEN FIND_IN_SET('no_tax', external_price_fields) THEN no_tax_price END) AS max_no_tax,
+                  MIN(CASE WHEN FIND_IN_SET('special', external_price_fields) THEN purchase_special_invoice END) AS min_special,
+                  MAX(CASE WHEN FIND_IN_SET('special', external_price_fields) THEN purchase_special_invoice END) AS max_special,
+                  MIN(CASE WHEN FIND_IN_SET('general', external_price_fields) THEN purchase_general_invoice END) AS min_general,
+                  MAX(CASE WHEN FIND_IN_SET('general', external_price_fields) THEN purchase_general_invoice END) AS max_general
            FROM product_variant_prices WHERE part_id=%s""",
         (product_id,),
     )
-    if cur.fetchone()['count'] <= 1:
+    row = cur.fetchone()
+    if row['group_count'] <= 1:
         cur.execute(
             "UPDATE parts SET display_price_min=NULL, display_price_max=NULL WHERE id=%s",
             (product_id,),
         )
         return
-    cur.execute(
-        """SELECT no_tax_price, purchase_special_invoice, purchase_general_invoice,
-                  external_price_fields
-           FROM product_variant_prices WHERE part_id=%s""",
-        (product_id,),
-    )
-    prices = []
-    for row in cur.fetchall():
-        fields = (row.get('external_price_fields') or '').split(',')
-        if 'no_tax' in fields and row.get('no_tax_price') is not None:
-            prices.append(float(row['no_tax_price']))
-        if 'special' in fields and row.get('purchase_special_invoice') is not None:
-            prices.append(float(row['purchase_special_invoice']))
-        if 'general' in fields and row.get('purchase_general_invoice') is not None:
-            prices.append(float(row['purchase_general_invoice']))
-    if prices:
+    # 从聚合结果中找全局 min/max（跳过 NULL）
+    lows = [row[k] for k in ('min_no_tax','min_special','min_general') if row[k] is not None]
+    highs = [row[k] for k in ('max_no_tax','max_special','max_general') if row[k] is not None]
+    if lows and highs:
         cur.execute(
             "UPDATE parts SET display_price_min=%s, display_price_max=%s WHERE id=%s",
-            (min(prices), max(prices), product_id),
+            (min(lows), max(highs), product_id),
         )
     else:
         cur.execute(
             "UPDATE parts SET display_price_min=NULL, display_price_max=NULL WHERE id=%s",
             (product_id,),
         )
+
+
+def _bg_recalculate_display_price(product_id: int):
+    """后台任务：用独立连接重算展示价，失败只记日志不影响主流程。"""
+    try:
+        conn = get_db()
+        try:
+            cur = conn.cursor()
+            _recalculate_part_display_price(product_id, cur)
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception(f"[后台任务] 产品 {product_id} 展示价重算失败")
+
+
+def _bg_write_operation_log(*, part_id, operation_type, module_code, detail, user_id=None, product_name=None, model=None):
+    """后台任务：用独立连接写操作日志，失败只记日志不影响已保存的业务数据。"""
+    try:
+        conn = get_db()
+        try:
+            cur = conn.cursor()
+            write_operation_log(
+                cur,
+                part_id=part_id,
+                operation_type=operation_type,
+                module_code=module_code,
+                detail=detail,
+                user_id=user_id,
+                product_name=product_name,
+                model=model,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception(f"[后台任务] 操作日志写入失败 part_id={part_id}")
 
 
 @app.get("/api/products/{product_id}/variant-specs")
@@ -820,67 +862,77 @@ async def delete_variant_group(product_id: int, group_id: str):
 
 
 @app.post("/api/products/{product_id}/variant-prices")
-async def save_variant_price(product_id: int, req: VariantPriceRequest):
+async def save_variant_price(product_id: int, req: VariantPriceRequest, background_tasks: BackgroundTasks):
     if not req.variant_group_id.strip():
         raise HTTPException(status_code=400, detail="规格组合不能为空")
-    if not req.oa_supplier_id:
-        raise HTTPException(status_code=400, detail="请选择OA供应商")
-    req.supplier = _get_oa_supplier_name(req.oa_supplier_id)
-    fields = ['supplier','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','oa_supplier_id','external_price_fields','remark']
+    if req.oa_supplier_id:
+        try:
+            req.supplier = _get_oa_supplier_name(req.oa_supplier_id)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"[variant-prices] OA供应商查询失败: {e}")
+            raise HTTPException(status_code=502, detail=f"OA供应商查询失败: {e}")
+    elif not req.supplier or not req.supplier.strip():
+        raise HTTPException(status_code=400, detail="请填写供应商名称或选择OA供应商")
+    # is_external_visible 不在此管理——由 PATCH /variant-prices/{id}/external-visible 单独切换
+    fields = ['supplier','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','oa_supplier_id','external_price_fields','remark']
     values = [getattr(req, f) for f in fields]
     conn = get_db()
     try:
         cur = conn.cursor()
-        ensure_employee_operation_logs_table(conn)
-        cur.execute("SELECT id FROM parts WHERE id=%s", (product_id,))
-        if not cur.fetchone(): raise HTTPException(status_code=404, detail="产品不存在")
+        # 1. 产品存在性 + 顺便取 product_name/model 给 write_operation_log 用
+        cur.execute("SELECT id, product_name, model FROM parts WHERE id=%s", (product_id,))
+        product = cur.fetchone()
+        if not product:
+            raise HTTPException(status_code=404, detail="产品不存在")
+        # 2. 规格组合存在性检查（SELECT 1 LIMIT 1 比 COUNT 轻）
         cur.execute(
-            "SELECT COUNT(*) AS count FROM product_variant_group_specs WHERE part_id=%s AND variant_group_id=%s",
+            "SELECT 1 FROM product_variant_group_specs WHERE part_id=%s AND variant_group_id=%s LIMIT 1",
             (product_id, req.variant_group_id)
         )
-        if cur.fetchone()['count'] == 0:
+        if not cur.fetchone():
             raise HTTPException(status_code=400, detail="规格组合不存在")
+        # 3. 判重 + 拿 price_id + 拿数据库里实际的 is_external_visible（日志要用）
         cur.execute(
-            "SELECT id FROM product_variant_prices WHERE part_id=%s AND variant_group_id=%s AND supplier=%s",
+            "SELECT id, is_external_visible FROM product_variant_prices WHERE part_id=%s AND variant_group_id=%s AND supplier=%s",
             (product_id, req.variant_group_id, req.supplier),
         )
         existed = cur.fetchone()
+        existing_price_id = existed['id'] if existed else None
+        # 4. 写入（INSERT 或 UPDATE，不碰 is_external_visible）
         cols = ','.join(fields); marks = ','.join(['%s'] * len(fields))
-        updates = ','.join(f"{f}=VALUES({f})" for f in fields[1:])
-        sql = f"INSERT INTO product_variant_prices(part_id,variant_group_id,{cols}) VALUES(%s,%s,{marks}) ON DUPLICATE KEY UPDATE {updates}"
+        updates = ','.join(f"{f}=new.{f}" for f in fields[1:])
+        sql = f"INSERT INTO product_variant_prices(part_id,variant_group_id,{cols}) VALUES(%s,%s,{marks}) AS new ON DUPLICATE KEY UPDATE {updates}"
         cur.execute(sql, [product_id, req.variant_group_id, *values])
-        price_id = cur.lastrowid
-        if not price_id:
-            cur.execute(
-                "SELECT id FROM product_variant_prices WHERE part_id=%s AND variant_group_id=%s AND supplier=%s",
-                (product_id, req.variant_group_id, req.supplier)
-            )
-            price_id = cur.fetchone()['id']
-        if req.is_external_visible:
-            cur.execute(
-                """UPDATE product_variant_prices
-                   SET is_external_visible=0
-                   WHERE part_id=%s AND variant_group_id=%s
-                     AND id<>%s AND is_external_visible<>0""",
-                (product_id, req.variant_group_id, price_id),
-            )
-        write_operation_log(
-            cur,
-            part_id=product_id,
-            operation_type='UPDATE' if existed else 'CREATE',
-            module_code='PRICE',
-            detail=(
-                f"{'修改' if existed else '新增'}供应商价格；规格组合：{req.variant_group_id}；"
-                f"供应商：{req.supplier}；"
-                f"对外展示：{'是' if req.is_external_visible else '否'}"
-            ),
-        )
+        # UPDATE 场景下 lastrowid=0，直接复用之前查到的 id；INSERT 场景用 lastrowid
+        price_id = existing_price_id or cur.lastrowid
+        # is_external_visible 由 PATCH 接口单独管理，这里不重置其他记录的展示标记
+        # 5. 产品更新时间 + commit（到此为止主事务完成，价格已安全落库）
         cur.execute("UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s", (product_id,))
-        _recalculate_part_display_price(product_id, cur)
         conn.commit()
-        cur.execute("SELECT update_time_2 FROM parts WHERE id=%s", (product_id,))
-        updated_at = cur.fetchone()['update_time_2']
-        return {'id': price_id, 'message': '规格组合价格已保存', 'update_time_2': updated_at}
+        # 6. 展示价重算 + 操作日志 均为后台异步任务
+        op_type = 'UPDATE' if existed else 'CREATE'
+        bg_detail = (
+            f"{'修改' if existed else '新增'}供应商价格；规格组合：{req.variant_group_id}；"
+            f"供应商：{req.supplier}"
+        )
+        background_tasks.add_task(_bg_recalculate_display_price, product_id)
+        background_tasks.add_task(
+            _bg_write_operation_log,
+            part_id=product_id,
+            operation_type=op_type,
+            module_code='PRICE',
+            detail=bg_detail,
+            product_name=product['product_name'],
+            model=product['model'],
+        )
+        return {'id': price_id, 'message': '规格组合价格已保存', 'update_time_2': datetime.datetime.now()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"[variant-prices] 保存规格价格失败: {e}")
+        raise HTTPException(status_code=500, detail=f"保存失败: {e}")
     finally:
         conn.close()
 
@@ -998,7 +1050,7 @@ class VariantPriceUpdateRequest(BaseModel):
     quote_time: Optional[str] = None
     expire_date: Optional[str] = None
     is_external_visible: bool = False
-    oa_supplier_id: int  # 必填，从OA选择
+    oa_supplier_id: Optional[int] = None  # 可选；不传则使用前端传入的 supplier 名称
     external_price_fields: Optional[str] = None
     remark: Optional[str] = None
 
@@ -1070,58 +1122,56 @@ async def update_variant_external_visibility(
 
 
 @app.put("/api/products/{product_id}/variant-prices/{price_id}")
-async def update_variant_price(product_id: int, price_id: int, req: VariantPriceUpdateRequest):
-    if not req.oa_supplier_id:
-        raise HTTPException(status_code=400, detail="请选择OA供应商")
-    # 从OA获取供应商名称
-    oa_conn = _get_oa_db()
-    try:
-        oa_cur = oa_conn.cursor()
-        oa_cur.execute("SELECT supplier_name FROM yh_supplier WHERE id=%s AND delete_time IS NULL", (req.oa_supplier_id,))
-        oa_row = oa_cur.fetchone()
-        if not oa_row:
-            raise HTTPException(status_code=400, detail="OA供应商不存在")
-        req.supplier = oa_row["supplier_name"]
-    finally:
-        oa_conn.close()
-    fields = ['supplier','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','is_external_visible','oa_supplier_id','external_price_fields','remark']
+async def update_variant_price(product_id: int, price_id: int, req: VariantPriceUpdateRequest, background_tasks: BackgroundTasks):
+    if req.oa_supplier_id:
+        try:
+            req.supplier = _get_oa_supplier_name(req.oa_supplier_id)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"[variant-prices PUT] OA供应商查询失败: {e}")
+            raise HTTPException(status_code=502, detail=f"OA供应商查询失败: {e}")
+    elif not req.supplier or not req.supplier.strip():
+        raise HTTPException(status_code=400, detail="请填写供应商名称或选择OA供应商")
+    # is_external_visible 不在此管理——由 PATCH /variant-prices/{id}/external-visible 单独切换
+    fields = ['supplier','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','retail_ladder_price','retail_tax','retail_shipping','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','oa_supplier_id','external_price_fields','remark']
     values = [getattr(req, f) for f in fields]
     conn = get_db()
     try:
         cur = conn.cursor()
-        ensure_employee_operation_logs_table(conn)
-        cur.execute("SELECT id, variant_group_id, supplier AS old_supplier FROM product_variant_prices WHERE id=%s AND part_id=%s", (price_id, product_id))
+        cur.execute("SELECT id, variant_group_id, supplier AS old_supplier, is_external_visible FROM product_variant_prices WHERE id=%s AND part_id=%s", (price_id, product_id))
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="价格记录不存在")
+        cur.execute("SELECT product_name, model FROM parts WHERE id=%s", (product_id,))
+        product = cur.fetchone() or {}
         set_clause = ','.join(f"{f}=%s" for f in fields)
         cur.execute(f"UPDATE product_variant_prices SET {set_clause} WHERE id=%s AND part_id=%s", [*values, price_id, product_id])
-        if req.is_external_visible:
-            cur.execute(
-                """UPDATE product_variant_prices
-                   SET is_external_visible=0
-                   WHERE part_id=%s AND variant_group_id=%s
-                     AND id<>%s AND is_external_visible<>0""",
-                (product_id, existing['variant_group_id'], price_id),
-            )
-        write_operation_log(
-            cur,
+        # is_external_visible 由 PATCH 接口单独管理，这里不重置其他记录的展示标记
+        cur.execute("UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s", (product_id,))
+        conn.commit()
+        bg_detail = (
+            f"修改供应商价格；规格组合：{existing['variant_group_id']}；"
+            f"供应商：{existing['old_supplier']} → {req.supplier}"
+        )
+        background_tasks.add_task(_bg_recalculate_display_price, product_id)
+        background_tasks.add_task(
+            _bg_write_operation_log,
             part_id=product_id,
             operation_type='UPDATE',
             module_code='PRICE',
-            detail=(
-                f"修改供应商价格；规格组合：{existing['variant_group_id']}；"
-                f"供应商：{existing['old_supplier']} → {req.supplier}；"
-                f"对外展示：{'是' if req.is_external_visible else '否'}"
-            ),
+            detail=bg_detail,
+            product_name=product.get('product_name'),
+            model=product.get('model'),
         )
-        cur.execute("UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s", (product_id,))
-        _recalculate_part_display_price(product_id, cur)
-        conn.commit()
         return {'message': '已更新'}
     except HTTPException:
         conn.rollback()
         raise
+    except Exception as e:
+        conn.rollback()
+        logger.exception(f"[variant-prices PUT] 更新规格价格失败: {e}")
+        raise HTTPException(status_code=500, detail=f"保存失败: {e}")
     finally:
         conn.close()
 

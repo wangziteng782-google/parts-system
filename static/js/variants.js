@@ -1399,13 +1399,23 @@
                 showToast('请选择所有已有规格值；未填写的固定规格可以跳过','error');return;
             }
             const specs=selectedSpecs.map(item=>({spec_name:item.name,spec_value:item.value}));
-            const supplier=document.getElementById('variantSupplier').value.trim();
+            // 兼容两种模式：修改已有供应商（带下拉）和新增供应商（手动输入）
+            const supplierSelect = document.getElementById('variantExistingSupplier');
+            const supplierInput = document.getElementById('variantSupplier');
+            let supplier='', oaSupplierId=null;
+            if(supplierSelect && supplierSelect.value && supplierSelect.value!=='__new__'){
+                const row = currentVariantPrices.find(item => String(item.id) === supplierSelect.value);
+                if(row){ supplier = row.supplier; oaSupplierId = row.oa_supplier_id || null; }
+            }else{
+                supplier = supplierInput.value.trim();
+            }
             if(!supplier){showToast('请输入供应商','error');return;}
             const groupRes=await fetch(`/api/products/${currentProductId}/variant-groups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({specs})});
             if(!groupRes.ok){showToast('规格组合保存失败','error');return;}
             const {variant_group_id}=await groupRes.json();
             const numberOrNull=id=>{const value=document.getElementById(id).value;return value===''?null:Number(value)};
             const payload={variant_group_id,supplier,
+                oa_supplier_id: oaSupplierId,
                 retail_price:numberOrNull('variantRetailPrice'),
                 purchase_special_invoice:numberOrNull('variantPurchaseSpecialInvoice'),purchase_general_invoice:numberOrNull('variantPurchaseGeneralInvoice'),
                 purchase_shipping:numberOrNull('variantPurchaseShipping'),retail_ladder_price:numberOrNull('variantRetailLadderPrice'),

@@ -4,6 +4,7 @@ import pymysql
 
 from ..config import DB_CONFIG, OA_DB_CONFIG, logger
 from .migration import (
+    ensure_employee_operation_logs_table,
     ensure_product_spec_required_rules,
     ensure_product_variant_tables,
     ensure_technical_params_column,
@@ -20,6 +21,7 @@ def get_oa_db():
 def get_db():
     """获取主数据库连接，并执行惰性迁移。"""
     conn = pymysql.connect(**DB_CONFIG)
+    ensure_employee_operation_logs_table(conn)
     ensure_technical_params_column(conn)
     ensure_product_variant_tables(conn)
     ensure_product_spec_required_rules(conn)
