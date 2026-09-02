@@ -902,8 +902,8 @@ async def save_variant_price(product_id: int, req: VariantPriceRequest, backgrou
         existing_price_id = existed['id'] if existed else None
         # 4. 写入（INSERT 或 UPDATE，不碰 is_external_visible）
         cols = ','.join(fields); marks = ','.join(['%s'] * len(fields))
-        updates = ','.join(f"{f}=new.{f}" for f in fields[1:])
-        sql = f"INSERT INTO product_variant_prices(part_id,variant_group_id,{cols}) VALUES(%s,%s,{marks}) AS new ON DUPLICATE KEY UPDATE {updates}"
+        updates = ','.join(f"{f}=VALUES({f})" for f in fields[1:])
+        sql = f"INSERT INTO product_variant_prices(part_id,variant_group_id,{cols}) VALUES(%s,%s,{marks}) ON DUPLICATE KEY UPDATE {updates}"
         cur.execute(sql, [product_id, req.variant_group_id, *values])
         # UPDATE 场景下 lastrowid=0，直接复用之前查到的 id；INSERT 场景用 lastrowid
         price_id = existing_price_id or cur.lastrowid
