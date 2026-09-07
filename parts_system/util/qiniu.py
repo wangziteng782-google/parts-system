@@ -1,16 +1,16 @@
 """七牛云工具函数。"""
 
+import re
 from urllib.parse import quote
 
 from ..config import QINIU_CONFIG
 
 
 def qiniu_public_url(key):
-    """构建七牛云公开访问 URL。"""
+    """构建七牛云公开访问 URL，强制 HTTPS。"""
     domain = QINIU_CONFIG["domain"]
-    if not domain.startswith(("http://", "https://")):
-        domain = "https://" + domain
-    return f"{domain}/{quote(key, safe='/')}"
+    domain = re.sub(r"^https?://", "", domain)  # 剥掉旧协议，统一用 https
+    return f"https://{domain}/{quote(key, safe='/')}"
 
 
 def validate_qiniu_config():

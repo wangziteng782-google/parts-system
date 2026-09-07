@@ -5,11 +5,12 @@ import re
 
 
 def clean_image_urls(value):
-    """清洗图片 URL：替换转义反斜杠、修复双斜杠"""
+    """清洗图片 URL：替换转义反斜杠、修复双斜杠、强制 HTTPS"""
     if not value:
         return value
     cleaned = value.replace("\\/", "/")
     cleaned = re.sub(r"(?<!:)//", "/", cleaned)
+    cleaned = re.sub(r"http://", "https://", cleaned)
     return cleaned
 
 
