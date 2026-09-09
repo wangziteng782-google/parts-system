@@ -53,13 +53,16 @@ async def list_products(
         params = []
 
         if keyword:
-            # 按空格拆分多个关键词，每个关键词独立匹配型号（OR 逻辑），满足任意一个即可返回
+            # 按空格拆分多个关键词，每个关键词独立匹配型号/产品名称/品牌（OR 逻辑），满足任意一个即可返回
             terms = [t for t in keyword.split() if t]
             if terms:
                 term_conditions = []
                 for term in terms:
-                    term_conditions.append("parts.model LIKE %s")
-                    params.append(f"%{term}%")
+                    pattern = f"%{term}%"
+                    term_conditions.append(
+                        "(parts.model LIKE %s OR parts.product_name LIKE %s OR parts.product_brand LIKE %s)"
+                    )
+                    params.extend([pattern, pattern, pattern])
                 where += " AND (" + " OR ".join(term_conditions) + ")"
 
         if duplicates_only:
