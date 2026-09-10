@@ -3,7 +3,7 @@
 from ..config import logger
 
 
-def ensure_employee_operation_logs_table(conn):
+def  ensure_employee_operation_logs_table(conn):
     """创建员工操作日志表，并修复历史数据快照。"""
     cursor = conn.cursor()
     cursor.execute(
@@ -376,6 +376,7 @@ def ensure_product_variant_tables(conn):
             variant_group_id VARCHAR(64) NOT NULL COMMENT '完整规格组合ID',
             spec_id BIGINT NOT NULL COMMENT '规格字典ID，对应product_variant_specs.id',
             sort_order INT NOT NULL DEFAULT 0 COMMENT '规格在组合中的显示顺序',
+            is_discontinued TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否停产：0否，1是',
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
             PRIMARY KEY (id),
             UNIQUE KEY uq_variant_group_spec (part_id, variant_group_id, spec_id),
@@ -385,6 +386,12 @@ def ensure_product_variant_tables(conn):
             CONSTRAINT fk_variant_group_specs_spec FOREIGN KEY (spec_id) REFERENCES product_variant_specs(id) ON DELETE RESTRICT
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='规格组合关联表：关联完整组合与规格字典值'"""
     )
+    cursor.execute("SHOW COLUMNS FROM product_variant_group_specs LIKE 'is_discontinued'")
+    if not cursor.fetchone():
+        cursor.execute(
+            "ALTER TABLE product_variant_group_specs ADD COLUMN is_discontinued TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否停产：0否，1是'"
+        )
+        logger.info("[数据库迁移] product_variant_group_specs.is_discontinued -> TINYINT(1) DEFAULT 0")
     cursor.execute("SHOW COLUMNS FROM product_variant_specs LIKE 'variant_group_id'")
     if cursor.fetchone():
         cursor.execute(

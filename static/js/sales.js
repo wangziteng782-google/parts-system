@@ -106,6 +106,19 @@ function formatSalesDate(value) {
     return String(value).replace('T', ' ').slice(0, 16);
 }
 
+function formatExpiryDeadline(expireDate, updateTime) {
+    if (!expireDate) return '';
+    const daysMatch = String(expireDate).match(/^(\d+)\s*天$/);
+    if (daysMatch && updateTime) {
+        const d = new Date(updateTime);
+        if (!isNaN(d)) {
+            d.setDate(d.getDate() + parseInt(daysMatch[1], 10));
+            return `<div class="list-expiry-deadline">有效期至 ${d.toISOString().slice(0, 10)}</div>`;
+        }
+    }
+    return `<div class="list-expiry-deadline">${escapeSalesHtml(expireDate)}</div>`;
+}
+
 async function salesRequest(url, options = {}) {
     const response = await fetch(url, {
         credentials: 'same-origin',
@@ -203,11 +216,20 @@ function renderSalesProducts() {
 }
 
 function isSalesItemDiscontinued(item) {
-    const isEmpty = v => v === null || v === undefined || v === '' || Number(v) === 0;
+    return item.has_any_price && !item.has_nonzero_price;
+}
+
+function isEmptyPrice(v) {
+    return v === null || v === undefined || v === '' || Number(v) === 0;
+}
+
+function isPricePending(item) {
+    if (!item.has_any_price) return true;
+    if (!item.has_nonzero_price) return false;
     if (item.display_type === 'multi_variant') {
-        return isEmpty(item.display_price_min) && isEmpty(item.display_price_max);
+        return isEmptyPrice(item.display_price_min) && isEmptyPrice(item.display_price_max);
     }
-    return isEmpty(item.display_price);
+    return isEmptyPrice(item.display_price);
 }
 
 function renderSalesCard(item, index) {
@@ -217,9 +239,12 @@ function renderSalesCard(item, index) {
     const sourceLabel = source === 'inquiry' ? '来自询价记录' : '来自配件库';
     const badges = `<span class="source-badge ${source}">${sourceLabel}</span>${isSubstitute ? '<span class="source-badge substitute">替代品</span>' : ''}`;
     const isDiscontinued = isSalesItemDiscontinued(item);
+    const isPending = isPricePending(item);
     const priceHtml = isDiscontinued
         ? '<div class="goods-price discontinued">已停产</div>'
-        : formatSalesPrice(item.display_price_min ?? item.display_price, false, item.display_price_max);
+        : isPending
+            ? '<div class="goods-price pending">价格待定</div>'
+            : formatSalesPrice(item.display_price_min ?? item.display_price, false, item.display_price_max);
     return `
         <article class="goods-card">
             <div class="goods-picture">
@@ -276,21 +301,35 @@ function renderSalesListRow(item, index) {
     const sourceLabel = source === 'inquiry' ? '来自询价记录' : '来自配件库';
     const badges = `<span class="source-badge ${source}">${sourceLabel}</span>${isSubstitute ? '<span class="source-badge substitute">替代品</span>' : ''}`;
     const isDiscontinued = isSalesItemDiscontinued(item);
+    const isPending = isPricePending(item);
     const priceHtml = isDiscontinued
         ? '<span class="list-price discontinued">已停产</span>'
-        : formatSalesPrice(item.display_price_min ?? item.display_price, true, item.display_price_max);
+        : isPending
+            ? '<span class="list-price pending">价格待定</span>'
+            : formatSalesPrice(item.display_price_min ?? item.display_price, true, item.display_price_max);
     return `<tr>
         <td><div class="list-product"><button class="list-image-button" type="button" data-sales-preview-index="${index}" title="点击查看大图"><img src="${image}" alt="商品图片" loading="lazy" onerror="this.src='/static/img/site-logo.png';this.onerror=null"></button><div><strong>${escapeSalesHtml(salesText(item.product_name))}</strong>${badges}</div></div></td>
         <td>${escapeSalesHtml(salesText(item.product_brand))}</td>
         <td>${escapeSalesHtml(salesText(item.model))}</td>
-        <td class="list-specification" title="${escapeSalesHtml(salesText(item.specification))}">${escapeSalesHtml(salesText(item.specification))}</td>
-        <td>${priceHtml}</td>
+        <td class="list-specification">${source === 'inquiry' ? escapeSalesHtml(salesText(item.specification)) : renderVariantCombinations(item.variant_combinations)}</td>
+        <td>${priceHtml}${formatExpiryDeadline(item.expire_date, item.quote_updated_at)}</td>
         <td><div class="sales-list-extra">${renderPartsInvoiceInfo(item)}</div></td>
         <td><div class="sales-list-extra">${renderInquiryQuoteInfo(item)}</div></td>
         <td>${escapeSalesHtml(formatSalesDate(item.quote_updated_at))}</td>
         <td>${item.modification_completed ? '<span class="sales-completed-badge">已完成</span>' : ''}</td>
         <td><button class="sales-detail-button" type="button" data-sales-detail-index="${index}">详情</button></td>
     </tr>`;
+}
+
+function renderVariantCombinations(combinations) {
+    if (!combinations || !combinations.length) {
+        return '<span class="list-spec-empty">—</span>';
+    }
+    return combinations.map(combo => {
+        const name = escapeSalesHtml(combo.specification || '未命名组合');
+        const mark = combo.is_discontinued ? '<span class="list-discontinued-tag">已停产</span>' : '';
+        return `<div class="variant-combo-row">${name}${mark}</div>`;
+    }).join('');
 }
 
 function detailPriceText(value) {
@@ -437,7 +476,7 @@ async function loadSalesCommunications(orderGoodsId) {
 function renderSalesVariantPrices(items) {
     const showActions = items.length > 1;
     const rows = items.map((item, index) => `<tr data-variant-index="${index}">
-        <td>${escapeSalesHtml(detailValue(item.specification))}</td>
+        <td>${escapeSalesHtml(detailValue(item.specification))}${item.is_discontinued ? '<span class="list-discontinued-tag">已停产</span>' : ''}</td>
         <td class="sales-detail-variant-price">${escapeSalesHtml(detailAmountText(item.no_tax_price) || '—')}</td>
         <td class="sales-detail-variant-price">${escapeSalesHtml(detailAmountText(item.special_invoice_price) || '—')}</td>
         <td class="sales-detail-variant-price">${escapeSalesHtml(detailAmountText(item.general_invoice_price) || '—')}</td>

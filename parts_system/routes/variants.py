@@ -169,6 +169,7 @@ def _locked_required_spec_names(cur, product_id: int):
 def _variant_group_links(cur, product_id: int):
     cur.execute(
         """SELECT link.id, link.variant_group_id, link.spec_id, link.sort_order,
+                  link.is_discontinued,
                   spec.spec_name, spec.spec_value, spec.is_active
            FROM product_variant_group_specs link
            JOIN product_variant_specs spec ON spec.id=link.spec_id
@@ -732,6 +733,7 @@ async def get_variant_combinations(product_id: int):
                 'prices': prices,
                 'is_configured': bool(prices),
                 'is_active': all(bool(link['is_active']) for link in links),
+                'is_discontinued': any(bool(link.get('is_discontinued')) for link in links),
                 '_first_link_id': min(link.get('id', 0) or 0 for link in links),
             })
         combinations.sort(
@@ -893,6 +895,8 @@ async def save_variant_price(product_id: int, req: VariantPriceRequest, backgrou
         )
         if not cur.fetchone():
             raise HTTPException(status_code=400, detail="规格组合不存在")
+        # 2.5 停产组合禁止配置供应商
+        _assert_variant_group_not_discontinued(cur, product_id, req.variant_group_id)
         # 3. 判重 + 拿 price_id + 拿数据库里实际的 is_external_visible（日志要用）
         cur.execute(
             "SELECT id, is_external_visible FROM product_variant_prices WHERE part_id=%s AND variant_group_id=%s AND supplier=%s",
@@ -917,6 +921,7 @@ async def save_variant_price(product_id: int, req: VariantPriceRequest, backgrou
             f"{'修改' if existed else '新增'}供应商价格；规格组合：{req.variant_group_id}；"
             f"供应商：{req.supplier}"
         )
+        # 两个异步任务来执行计算最大最小值和记录操作日志
         background_tasks.add_task(_bg_recalculate_display_price, product_id)
         background_tasks.add_task(
             _bg_write_operation_log,
@@ -1079,6 +1084,8 @@ async def update_variant_external_visibility(
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="供应商报价不存在")
+        # 停产组合禁止切换可见性
+        _assert_variant_group_not_discontinued(cur, product_id, existing['variant_group_id'])
         cur.execute(
             "UPDATE product_variant_prices SET is_external_visible=%s WHERE id=%s AND part_id=%s",
             (1 if req.is_external_visible else 0, price_id, product_id),
@@ -1121,6 +1128,68 @@ async def update_variant_external_visibility(
         conn.close()
 
 
+class VariantDiscontinuedRequest(BaseModel):
+    is_discontinued: bool
+
+
+def _assert_variant_group_not_discontinued(cur, product_id: int, variant_group_id: str):
+    """如果规格组合已停产，抛出 409 异常"""
+    cur.execute(
+        "SELECT 1 FROM product_variant_group_specs "
+        "WHERE part_id=%s AND variant_group_id=%s AND is_discontinued=1 LIMIT 1",
+        (product_id, variant_group_id),
+    )
+    if cur.fetchone():
+        raise HTTPException(status_code=409, detail="该规格组合已停产，请先上架再配置供应商")
+
+
+@app.patch("/api/products/{product_id}/variant-groups/{variant_group_id}/discontinued")
+async def update_variant_group_discontinued(
+    product_id: int,
+    variant_group_id: str,
+    req: VariantDiscontinuedRequest,
+):
+    """切换规格组合的停产状态"""
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        ensure_employee_operation_logs_table(conn)
+        cur.execute(
+            "SELECT 1 FROM product_variant_group_specs "
+            "WHERE part_id=%s AND variant_group_id=%s LIMIT 1",
+            (product_id, variant_group_id),
+        )
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="规格组合不存在")
+        cur.execute(
+            "UPDATE product_variant_group_specs SET is_discontinued=%s "
+            "WHERE part_id=%s AND variant_group_id=%s",
+            (1 if req.is_discontinued else 0, product_id, variant_group_id),
+        )
+        write_operation_log(
+            cur,
+            part_id=product_id,
+            operation_type="UPDATE",
+            module_code="SPEC",
+            detail=f"规格组合停产状态：{variant_group_id} → {'停产' if req.is_discontinued else '上架'}",
+        )
+        cur.execute("UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s", (product_id,))
+        conn.commit()
+        return {
+            "message": "已标记为停产" if req.is_discontinued else "已恢复上架",
+            "is_discontinued": req.is_discontinued,
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        logger.exception(f"[variant-groups] 切换停产状态失败: {e}")
+        raise HTTPException(status_code=500, detail=f"操作失败: {e}")
+    finally:
+        conn.close()
+
+
 @app.put("/api/products/{product_id}/variant-prices/{price_id}")
 async def update_variant_price(product_id: int, price_id: int, req: VariantPriceUpdateRequest, background_tasks: BackgroundTasks):
     if req.oa_supplier_id:
@@ -1143,6 +1212,8 @@ async def update_variant_price(product_id: int, price_id: int, req: VariantPrice
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="价格记录不存在")
+        # 停产组合禁止修改供应商
+        _assert_variant_group_not_discontinued(cur, product_id, existing['variant_group_id'])
         cur.execute("SELECT product_name, model FROM parts WHERE id=%s", (product_id,))
         product = cur.fetchone() or {}
         set_clause = ','.join(f"{f}=%s" for f in fields)

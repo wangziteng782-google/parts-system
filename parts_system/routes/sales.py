@@ -273,7 +273,16 @@ def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: li
                        NULLIF(TRIM(p.nature), '')
                    ) AS specification,
                    COALESCE(MAX(v.update_time), p.update_time_2, p.update_time)
-                       AS quote_updated_at
+                       AS quote_updated_at,
+                   MAX(CASE WHEN v.no_tax_price IS NOT NULL
+                             OR v.purchase_special_invoice IS NOT NULL
+                             OR v.purchase_general_invoice IS NOT NULL
+                        THEN 1 ELSE 0 END) AS has_any_price,
+                   MAX(CASE WHEN (v.no_tax_price IS NOT NULL AND v.no_tax_price != 0)
+                             OR (v.purchase_special_invoice IS NOT NULL AND v.purchase_special_invoice != 0)
+                             OR (v.purchase_general_invoice IS NOT NULL AND v.purchase_general_invoice != 0)
+                        THEN 1 ELSE 0 END) AS has_nonzero_price,
+                   MIN(v.expire_date) AS expire_date
             FROM parts p
             LEFT JOIN product_variant_prices v ON v.part_id=p.id
             LEFT JOIN (
@@ -338,6 +347,9 @@ def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dic
         "general_price": general_price,
         "modification_completed": bool(row.get("modification_completed")),
         "quote_updated_at": row.get("quote_updated_at"),
+        "has_any_price": bool(row.get("has_any_price")),
+        "has_nonzero_price": bool(row.get("has_nonzero_price")),
+        "expire_date": row.get("expire_date"),
         "record_source": "parts",
         "record_source_label": "来自配件库",
     }
@@ -398,6 +410,7 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
                     item["record_source_label"] = "替代品"
 
         # 查询关联产品并作为独立 item 追加（双向关系）
+        # 查询关联产品的相关逻辑
         if rows:
             all_ids = [r["id"] for r in rows]
             placeholders = ",".join(["%s"] * len(all_ids))
@@ -426,6 +439,42 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
                 total += len(related_rows)
 
         return total, items
+    finally:
+        conn.close()
+
+
+def _fetch_variant_combinations(part_ids: list[int]) -> dict[int, list[dict]]:
+    """批量获取多个商品的规格组合数据（含停产状态）"""
+    if not part_ids:
+        return {}
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        placeholders = ','.join(['%s'] * len(part_ids))
+        cur.execute(
+            f"""SELECT link.part_id, link.variant_group_id,
+                       MAX(link.is_discontinued) AS is_discontinued,
+                       GROUP_CONCAT(
+                           CONCAT(spec.spec_name, '：', spec.spec_value)
+                           ORDER BY link.sort_order SEPARATOR '；'
+                       ) AS specification
+                   FROM product_variant_group_specs link
+                   JOIN product_variant_specs spec ON spec.id=link.spec_id
+                   WHERE link.part_id IN ({placeholders})
+                     AND spec.is_active = 1
+                     AND COALESCE(TRIM(spec.spec_value), '') <> ''
+                   GROUP BY link.part_id, link.variant_group_id
+                   ORDER BY link.part_id, link.variant_group_id""",
+            part_ids,
+        )
+        result: dict[int, list[dict]] = {}
+        for row in cur.fetchall():
+            result.setdefault(row['part_id'], []).append({
+                'variant_group_id': row['variant_group_id'],
+                'specification': row['specification'] or '',
+                'is_discontinued': bool(row.get('is_discontinued')),
+            })
+        return result
     finally:
         conn.close()
 
@@ -533,6 +582,8 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
                 "display_price": None if price is None else str(price),
                 "modification_completed": False,
                 "quote_updated_at": row.get("quote_updated_at"),
+                "has_any_price": True,
+                "has_nonzero_price": True,
                 "record_source": "inquiry",
                 "record_source_label": "来自询价记录",
             })
@@ -596,6 +647,7 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
                       price.quote_time, price.expire_date,
                       price.remark, price.update_time,
                       price.external_price_fields,
+                      MAX(link.is_discontinued) AS is_discontinued,
                       GROUP_CONCAT(
                          CONCAT(spec.spec_name, '：', spec.spec_value)
                          ORDER BY link.sort_order, link.id SEPARATOR '；'
@@ -655,6 +707,7 @@ def _merge_variant_prices(main: dict, records: list, part: dict) -> dict:
         "specification": main.get("specification"),
         "supplier": main.get("supplier"),
         "is_external_visible": bool(main.get("is_external_visible")),
+        "is_discontinued": bool(main.get("is_discontinued")),
         "purchase_shipping": _plain_business_value(main.get("purchase_shipping")),
         "freight_remark": main.get("freight_remark"),
         "shipping_origin": main.get("shipping_origin"),
@@ -690,6 +743,7 @@ def _merge_variant_prices(main: dict, records: list, part: dict) -> dict:
     return result
 
 
+# 销售主查询
 @app.get("/api/sales/products")
 async def sales_products(
     keyword: str = "",
@@ -719,6 +773,14 @@ async def sales_products(
     except Exception as exc:
         oa_available = False
         logger.warning("[销售查询] OA询价库暂不可用，仅展示配件库 | error=%s", exc)
+
+    # 批量获取规格组合数据
+    part_ids = [item['id'] for item in parts_items]
+    variant_combinations_map = _fetch_variant_combinations(part_ids)
+    for item in parts_items:
+        item['variant_combinations'] = variant_combinations_map.get(item['id'], [])
+    for item in inquiry_items:
+        item['variant_combinations'] = []
 
     merged = _merge_sales_items(parts_items, inquiry_items, sort)
     offset = (page - 1) * page_size

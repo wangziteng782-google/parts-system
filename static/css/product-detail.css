@@ -426,6 +426,8 @@
         .combination-table tr.combination-configured { background:#f7fff9; }
         .combination-table tr.combination-pending { background:#fffaf0; }
         .combination-table tr.combination-history { background:#f8fafc; }
+        .combination-table tr.combination-discontinued { background:#fef2f2; }
+        .combination-table tr.combination-discontinued .combination-spec-value { color:#94a3b8; }
         .combination-history .combination-spec-value { color:#94a3b8; }
         .combination-spec-value { min-width:85px; color:#334155; font-weight:600; }
         .combination-display-input {
@@ -439,6 +441,10 @@
         .combination-actions button { padding:5px 10px; border-radius:5px; cursor:pointer; font-size:11px; }
         .combination-edit-btn { border:1px solid #818cf8; background:#eef2ff; color:#4338ca; }
         .combination-delete-btn { border:1px solid #fca5a5; background:#fff; color:#dc2626; }
+        .combination-discontinue-check { display:inline-flex; align-items:center; gap:4px; cursor:pointer; font-size:11px; color:#64748b; user-select:none; }
+        .combination-discontinue-check input[type="checkbox"] { width:14px; height:14px; cursor:pointer; accent-color:#dc2626; }
+        .combination-discontinue-check input[type="checkbox"]:disabled { cursor:wait; opacity:0.6; }
+        .combination-discontinue-check span { line-height:1; }
         .combination-empty { padding:24px; color:#94a3b8; text-align:center; font-size:12px; }
         .spec-col-name { padding:10px 14px; }
         .spec-col-values { padding:10px 14px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }

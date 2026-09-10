@@ -40,7 +40,7 @@
                         );
                         if (!combination) return;
                         const prices = combination.prices || [];
-                        html += renderSpecItem(spec.spec_name, v.value, specs, prices);
+                        html += renderSpecItem(spec.spec_name, v.value, specs, prices, combination.is_discontinued);
                     } else {
                         // 中间层：显示分组标题，递归下一层
                         html += `<div class="vs-level vs-level-${level + 1}">`;
@@ -86,7 +86,7 @@
             return `<span class="vs-price-amount">¥${escapeHtml(String(value))}</span>`;
         }
 
-        function renderSpecItem(specName, specValue, specs, prices) {
+        function renderSpecItem(specName, specValue, specs, prices, isDiscontinued) {
             const hasSupplier = prices.length > 0;
             let supplierPricesHtml = '';
             if (hasSupplier) {
@@ -117,13 +117,7 @@
             const specsJson = JSON.stringify(specs).replace(/"/g, '&quot;');
             const classes = ['vs-spec-item'];
             if (!hasSupplier) classes.push('no-supplier');
-            // 所有供应商三个价格都未配置 → 标记为已停产
-            const allPricesEmpty = prices.length > 0 && prices.every(p =>
-                !hasConfiguredSupplierPrice(p.no_tax_price) &&
-                !hasConfiguredSupplierPrice(p.purchase_special_invoice) &&
-                !hasConfiguredSupplierPrice(p.purchase_general_invoice)
-            );
-            const discontinuedMark = allPricesEmpty ? '<span class="vs-discontinued-tag">已停产</span>' : '';
+            const discontinuedMark = isDiscontinued ? '<span class="vs-discontinued-tag">已停产</span>' : '';
             return `<div class="${classes.join(' ')}" onclick="openSupplierPanel('${specsJson}')">
                 <div class="vs-spec-title"><span class="vs-spec-key">${escapeHtml(specName)}：</span><span class="vs-spec-value">${escapeHtml(specValue)}</span>${discontinuedMark}</div>
                 <div class="vs-supplier-prices">${supplierPricesHtml}</div>
@@ -1073,9 +1067,11 @@
                 )).replace(/'/g, '%27');
                 const groupId = encodeURIComponent(combo.variant_group_id).replace(/'/g, '%27');
                 const configured = prices.length > 0;
-                const rowClass = combo.is_active === false
-                    ? 'combination-history'
-                    : (configured ? 'combination-configured' : 'combination-pending');
+                const rowClass = combo.is_discontinued
+                    ? 'combination-discontinued'
+                    : (combo.is_active === false
+                        ? 'combination-history'
+                        : (configured ? 'combination-configured' : 'combination-pending'));
                 return `<tr class="${rowClass}">
                     ${specNames.map(name => `<td class="combination-spec-value">${escapeHtml(
                         valueMap[name] || (pendingSpecNames.has(name) ? '待填写' : '-')
@@ -1087,7 +1083,13 @@
                         value="${escapeHtml(priceText)}" placeholder="待配置：请输入价格"
                         onclick="openCombinationSupplier('${encodedSpecs}')"></td>
                     <td><div class="combination-actions">
-                        <button class="combination-edit-btn" onclick="openCombinationSupplier('${encodedSpecs}')">${configured ? '修改' : '配置'}</button>
+                        <label class="combination-discontinue-check">
+                            <input type="checkbox" ${combo.is_discontinued ? 'checked' : ''} onchange="toggleVariantGroupDiscontinued('${groupId}', this.checked, this)" />
+                            <span>停产</span>
+                        </label>
+                        ${combo.is_discontinued
+                            ? ''
+                            : `<button class="combination-edit-btn" onclick="openCombinationSupplier('${encodedSpecs}')">${configured ? '修改' : '配置'}</button>`}
                         <button class="combination-delete-btn" onclick="deleteVariantCombination('${groupId}',${prices.length})">删除组合</button>
                     </div></td>
                 </tr>`;
@@ -1120,6 +1122,30 @@
                 showToast('规格组合已删除', 'success');
             } catch (error) {
                 showToast(`删除失败：${error.message}`, 'error');
+            }
+        }
+
+        async function toggleVariantGroupDiscontinued(encodedGroupId, isDiscontinued, checkbox) {
+            const groupId = decodeURIComponent(encodedGroupId);
+            checkbox.disabled = true;
+            try {
+                const res = await fetch(
+                    `/api/products/${currentProductId}/variant-groups/${encodeURIComponent(groupId)}/discontinued`,
+                    {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ is_discontinued: isDiscontinued }),
+                    }
+                );
+                const result = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(result.detail || '操作失败');
+                showToast(result.message || '操作成功', 'success');
+            } catch (error) {
+                checkbox.checked = !isDiscontinued;
+                showToast(`操作失败：${error.message}`, 'error');
+            } finally {
+                await loadVariantManager();
+                checkbox.disabled = false;
             }
         }
 
