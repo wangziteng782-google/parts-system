@@ -612,7 +612,8 @@
 
                     <!-- 备注 -->
                     <div class="sp-card">
-                        <h3>备注</h3>
+                        <h3 style="display:inline;">备注</h3>
+                        <span class="sp-field-hint">仅采购可见</span>
                         <div class="sp-col-item" style="margin-top:12px;">
                             <textarea id="spRemark" placeholder="请输入相关补充说明">${escapeHtml(p.remark || '')}</textarea>
                         </div>

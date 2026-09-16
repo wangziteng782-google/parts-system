@@ -377,7 +377,6 @@ function renderSalesDetailInfo(item, source, sourceLabel, quote = null) {
             ['更新人：', item.updater || item.filler],
             ['更新时间：', quote?.update_time ? formatSalesDate(quote.update_time) : (item.quote_updated_at ? formatSalesDate(item.quote_updated_at) : '')],
             ['运费备注：', quote?.freight_remark, 'wide'],
-            ['规格报价备注：', quote?.quote_remark, 'wide'],
             ['注意事项：', item.precautions, 'full'],
             ['技术参数：', item.technical_params, 'full'],
             ['商品备注：', item.remark, 'wide'],
