@@ -210,8 +210,8 @@ async def list_logs(
         cursor = conn.cursor()
         grouped_select = f"""
             SELECT
-                {PRODUCT_NAME_SQL} AS grouped_product_name,
-                {MODEL_SQL} AS grouped_model,
+                COALESCE(NULLIF(TRIM(p.product_name), ''), CONCAT('配件 #', l.part_id)) AS grouped_product_name,
+                p.model AS grouped_model,
                 MAX(l.id) AS latest_log_id,
                 COUNT(*) AS log_count,
                 GROUP_CONCAT(
@@ -226,7 +226,7 @@ async def list_logs(
                 ) AS module_codes
             {joins}
             WHERE {list_where}
-            GROUP BY {PRODUCT_NAME_SQL}, {MODEL_SQL}
+            GROUP BY l.part_id
         """
 
         cursor.execute(
@@ -264,7 +264,7 @@ async def list_logs(
                 SELECT 1
                 {joins}
                 WHERE {base_where}
-                GROUP BY {PRODUCT_NAME_SQL}, {MODEL_SQL}
+                GROUP BY l.part_id
             ) grouped_logs
             """,
             base_params,
@@ -286,7 +286,7 @@ async def list_logs(
                 SELECT UPPER(l.operation_type) AS operation_type
                 {joins}
                 WHERE {base_where}
-                GROUP BY UPPER(l.operation_type), {PRODUCT_NAME_SQL}, {MODEL_SQL}
+                GROUP BY UPPER(l.operation_type), l.part_id
             ) operation_products
             GROUP BY operation_type
             """,
