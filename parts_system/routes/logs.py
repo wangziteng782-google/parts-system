@@ -203,7 +203,7 @@ async def list_logs(
         )
         joins = """
             FROM employee_operation_logs l
-            LEFT JOIN parts p ON p.id = l.part_id
+            INNER JOIN parts p ON p.id = l.part_id
             LEFT JOIN yh_admin_user u ON u.id = l.user_id
         """
 
@@ -271,6 +271,14 @@ async def list_logs(
         )
         base_group_total = int(cursor.fetchone()["total"])
 
+        # 已完成修改：直接从 parts 表统计（全局当前状态，按 part_id 精确计数）
+        # ponytail: global count, not date-filtered — intentional
+        cursor.execute(
+            "SELECT COUNT(*) AS count FROM parts WHERE modification_completed=1",
+        )
+        complete_count = int(cursor.fetchone()["count"])
+
+        # 其他操作类型：从日志表统计（保持不变）
         cursor.execute(
             f"""
             SELECT operation_type, COUNT(*) AS count
@@ -288,6 +296,7 @@ async def list_logs(
             (row["operation_type"] or "").upper(): row["count"]
             for row in cursor.fetchall()
         }
+        grouped["COMPLETE"] = complete_count
 
         return {
             "items": [_serialize_log_group(row) for row in rows],
