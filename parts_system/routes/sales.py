@@ -248,9 +248,7 @@ def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: li
                    {select_columns},
                    p.display_price_min, p.display_price_max,
                    COALESCE(vc.variant_count, 0) AS variant_count,
-                   CASE WHEN COALESCE(MAX(completion.complete_id),0)
-                                  > COALESCE(MAX(completion.change_id),0)
-                        THEN 1 ELSE 0 END AS modification_completed,
+                   p.modification_completed,
                    COALESCE(
                        NULLIF(
                            (SELECT GROUP_CONCAT(
@@ -290,13 +288,6 @@ def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: li
                 FROM product_variant_prices
                 GROUP BY part_id
             ) vc ON vc.part_id=p.id
-            LEFT JOIN (
-                SELECT part_id,
-                       MAX(CASE WHEN operation_type='COMPLETE' THEN id END) AS complete_id,
-                       MAX(CASE WHEN operation_type IN ('CREATE','UPDATE') THEN id END) AS change_id
-                FROM employee_operation_logs
-                GROUP BY part_id
-            ) completion ON completion.part_id=p.id
             {where_clause}
             GROUP BY p.id
             ORDER BY {order_clause}{limit_sql}""",

@@ -765,8 +765,6 @@ async function init() {
                 const completed = Boolean(result.completed);
                 if (currentData) {
                     currentData.modification_completed = completed;
-                    currentData.modification_completed_by = '';
-                    currentData.modification_completed_at = completed ? new Date().toISOString() : null;
                 }
                 if (button) {
                     button.classList.toggle('completed', completed);

@@ -423,4 +423,19 @@ def ensure_product_variant_tables(conn):
         cursor.execute("ALTER TABLE product_variant_specs ADD UNIQUE KEY uq_variant_spec_value (part_id, spec_name, spec_value)")
         cursor.execute("ALTER TABLE product_variant_specs ADD KEY idx_variant_specs_name (part_id, spec_name)")
         cursor.execute("ALTER TABLE product_variant_specs COMMENT='产品规格字典表：每个规格名和规格值只保存一次'")
+        # 已完成标记：加列 + 回填
+        cursor.execute("SHOW COLUMNS FROM parts LIKE 'modification_completed'")
+        if not cursor.fetchone():
+            cursor.execute(
+                "ALTER TABLE parts ADD COLUMN modification_completed TINYINT(1) NOT NULL DEFAULT 0 COMMENT '修改是否已完成：0否，1是'"
+            )
+            logger.info("[数据库迁移] parts.modification_completed -> TINYINT(1) DEFAULT 0")
+            # 回填：将当前推导为已完成的产品标记为 1
+            cursor.execute(
+                """UPDATE parts p
+                   SET modification_completed = 1
+                   WHERE COALESCE((SELECT MAX(id) FROM employee_operation_logs WHERE part_id=p.id AND operation_type='COMPLETE'),0)
+                       > COALESCE((SELECT MAX(id) FROM employee_operation_logs WHERE part_id=p.id AND operation_type IN ('CREATE','UPDATE')),0)"""
+            )
+            logger.info("[数据库迁移] parts.modification_completed 回填完成")
         conn.commit()

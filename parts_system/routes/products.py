@@ -115,9 +115,7 @@ async def list_products(
             "AND p2.id <> parts.id) THEN 1 ELSE 0 END"
         sql = "SELECT parts.id, parts.sku_code, parts.product_name, parts.model, parts.product_brand, parts.category, parts.product_type, parts.update_time_2, " \
               "(SELECT COUNT(*) FROM sales_product_feedback feedback WHERE feedback.parts_id=parts.id AND feedback.status='pending') AS pending_feedback_count, " \
-              "CASE WHEN COALESCE((SELECT MAX(done_log.id) FROM employee_operation_logs done_log WHERE done_log.part_id=parts.id AND done_log.operation_type='COMPLETE'),0) " \
-              "> COALESCE((SELECT MAX(change_log.id) FROM employee_operation_logs change_log WHERE change_log.part_id=parts.id AND change_log.operation_type IN ('CREATE','UPDATE')),0) " \
-              "THEN 1 ELSE 0 END AS modification_completed, " \
+              "parts.modification_completed, " \
               + duplicate_flag_sql + " AS is_duplicate, " \
               "CASE WHEN dpm.id IS NULL THEN 0 ELSE 1 END AS duplicate_marked " \
               "FROM parts" + duplicate_group_join + \
@@ -148,34 +146,14 @@ async def get_product(product_id: int):
     conn = get_db()
     try:
         cursor = conn.cursor()
-        sql = """SELECT p.*,
-                   agg.complete_id, agg.change_id,
-                   completed_log.created_at AS completed_at,
-                   COALESCE(NULLIF(u.nickname,''), u.username,
-                            CONCAT('用户', completed_log.user_id)) AS operator_name
+        sql = """SELECT p.*
             FROM parts p
-            LEFT JOIN (
-                SELECT part_id,
-                       MAX(CASE WHEN operation_type='COMPLETE' THEN id END) AS complete_id,
-                       MAX(CASE WHEN operation_type IN ('CREATE','UPDATE') THEN id END) AS change_id
-                FROM employee_operation_logs
-                WHERE part_id = %s
-            ) agg ON agg.part_id = p.id
-            LEFT JOIN employee_operation_logs completed_log ON completed_log.id = agg.complete_id
-            LEFT JOIN yh_admin_user u ON u.id = completed_log.user_id
             WHERE p.id = %s"""
-        cursor.execute(sql, (product_id, product_id))
+        cursor.execute(sql, (product_id,))
         row = cursor.fetchone()
         if not row:
             logger.warning(f"[查询] 产品不存在 | product_id={product_id}")
             raise HTTPException(status_code=404, detail="产品不存在")
-        complete_id = int(row.pop("complete_id") or 0)
-        change_id = int(row.pop("change_id") or 0)
-        completed_at = row.pop("completed_at", None)
-        operator_name = row.pop("operator_name", None)
-        row["modification_completed"] = complete_id > change_id
-        row["modification_completed_at"] = completed_at if row["modification_completed"] else None
-        row["modification_completed_by"] = (operator_name or "") if row["modification_completed"] else ""
         logger.info(f"[查询] 产品详情完成 | product_id={product_id}, name={row.get('product_name', 'N/A')}")
         return row
     except HTTPException:
@@ -200,18 +178,12 @@ async def complete_product_modification(product_id: int):
         product = cursor.fetchone()
         if not product:
             raise HTTPException(status_code=404, detail="产品不存在")
-        cursor.execute(
-            """SELECT
-                   MAX(CASE WHEN operation_type='COMPLETE' THEN id END) AS complete_id,
-                   MAX(CASE WHEN operation_type IN ('CREATE','UPDATE') THEN id END) AS change_id
-               FROM employee_operation_logs
-               WHERE part_id=%s""",
-            (product_id,),
-        )
-        state = cursor.fetchone() or {}
-        complete_id = int(state.get("complete_id") or 0)
-        change_id = int(state.get("change_id") or 0)
-        if complete_id > change_id:
+        cursor.execute("SELECT modification_completed FROM parts WHERE id=%s", (product_id,))
+        current = cursor.fetchone()
+        if not current:
+            raise HTTPException(status_code=404, detail="产品不存在")
+        if current["modification_completed"]:
+            cursor.execute("UPDATE parts SET modification_completed=0 WHERE id=%s", (product_id,))
             cursor.execute(
                 "DELETE FROM employee_operation_logs WHERE part_id=%s AND operation_type='COMPLETE'",
                 (product_id,),
@@ -219,6 +191,7 @@ async def complete_product_modification(product_id: int):
             conn.commit()
             logger.info("[撤销修改完成] product_id=%s", product_id)
             return {"message": "已撤销修改完成标记", "completed": False}
+        cursor.execute("UPDATE parts SET modification_completed=1 WHERE id=%s", (product_id,))
         write_operation_log(
             cursor,
             part_id=product_id,
