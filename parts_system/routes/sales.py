@@ -244,7 +244,7 @@ def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: li
     limit_params = [] if limit is None else [limit]
     cursor.execute(
         f"""SELECT p.id, p.product_name, p.model, p.product_brand, p.product_type,
-                   p.nature, p.purchase_cost, p.update_time, p.update_time_2,
+                   p.nature, p.update_time, p.update_time_2,
                    {select_columns},
                    p.display_price_min, p.display_price_max,
                    COALESCE(vc.variant_count, 0) AS variant_count,
@@ -300,7 +300,8 @@ def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dic
     variant_count = row["variant_count"]
     if variant_count == 0:
         display_type = "no_variant"
-        display_price = _display_price(row.get("purchase_cost"), row.get("product_name"), row.get("product_type"))
+        # 无任何报价记录：不对销售兜底采购成本价，前端展示“价格待完善”
+        display_price = None
         display_price_min = None
         display_price_max = None
         special_price = None

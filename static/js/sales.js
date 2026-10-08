@@ -224,7 +224,8 @@ function isEmptyPrice(v) {
 }
 
 function isPricePending(item) {
-    if (!item.has_any_price) return true;
+    // 无任何报价记录时返回 false，交给 formatSalesPrice 展示「价格待完善」
+    if (!item.has_any_price) return false;
     if (!item.has_nonzero_price) return false;
     if (item.display_type === 'multi_variant') {
         return isEmptyPrice(item.display_price_min) && isEmptyPrice(item.display_price_max);
