@@ -348,7 +348,7 @@ def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dic
 
 
 def _fetch_parts_products(keyword: str, sort: str, limit: int):
-    where = ["COALESCE(TRIM(p.product_name), '') <> ''"]
+    where = ["COALESCE(TRIM(p.product_name), '') <> ''", "p.status=1"]
     params = []
     if keyword:
         like_keyword = f"%{keyword}%"
@@ -422,7 +422,7 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
 
             if related_ids:
                 placeholders = ",".join(["%s"] * len(related_ids))
-                related_rows = _fetch_parts_rows(cursor, all_select_columns, f" WHERE p.id IN ({placeholders})", related_ids, "p.id DESC", None)
+                related_rows = _fetch_parts_rows(cursor, all_select_columns, f" WHERE p.id IN ({placeholders}) AND p.status=1", related_ids, "p.id DESC", None)
                 related_prices = _collect_single_prices(cursor, [r["id"] for r in related_rows if r["variant_count"] == 1])
                 for row in related_rows:
                     item = _build_parts_item(row, related_prices.get(row["id"], {}), detail_columns)

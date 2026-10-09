@@ -40,7 +40,7 @@ async def list_product_classifications():
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT product_type, COUNT(*) AS count FROM parts GROUP BY product_type"
+            "SELECT product_type, COUNT(*) AS count FROM parts WHERE status=1 GROUP BY product_type"
         )
         rows = cursor.fetchall()
         raw_counts = {row['product_type']: row['count'] for row in rows}
@@ -50,17 +50,21 @@ async def list_product_classifications():
             if not value or value not in PRODUCT_TYPE_VALUES
         )
         cursor.execute(
-            """SELECT COUNT(DISTINCT parts_id) AS count
-               FROM sales_product_feedback
-               WHERE status='pending' AND parts_id IS NOT NULL"""
+            """SELECT COUNT(DISTINCT feedback.parts_id) AS count
+               FROM sales_product_feedback feedback
+               JOIN parts ON parts.id=feedback.parts_id AND parts.status=1
+               WHERE feedback.status='pending'"""
         )
         correction_count = cursor.fetchone()["count"]
+        cursor.execute("SELECT COUNT(*) AS count FROM parts WHERE status=0")
+        delisted_count = cursor.fetchone()["count"]
         return {
             "tree": PRODUCT_CLASSIFICATION_TREE,
             "values": PRODUCT_TYPE_VALUES,
             "counts": counts,
             "unclassified_count": unclassified_count,
             "correction_count": correction_count,
+            "delisted_count": delisted_count,
         }
     except Exception as e:
         logger.error(f"[查询] 产品分类树失败 | error={e}")

@@ -33,6 +33,7 @@ async def list_products(
     product_type: Optional[str] = None,
     classification_status: Optional[str] = None,
     feedback_status: Optional[str] = None,
+    status: Optional[str] = None,
     duplicates_only: bool = False,
     page: int = 1,
     page_size: int = 30,
@@ -42,6 +43,7 @@ async def list_products(
         f"[查询] 产品列表 | page={page}, page_size={page_size}, keyword={keyword}, "
         f"category={category}, product_type={product_type}, classification_status={classification_status}, "
         f"feedback_status={feedback_status}, "
+        f"status={status}, "
         f"duplicates_only={duplicates_only}"
     )
     conn = get_db()
@@ -100,6 +102,12 @@ async def list_products(
                 " AND EXISTS (SELECT 1 FROM sales_product_feedback feedback"
                 " WHERE feedback.parts_id=parts.id AND feedback.status='pending')"
             )
+
+        # 上架状态：goods 页面默认隐藏已下架产品，「已下架」入口单独查
+        if status == "delisted":
+            where += " AND parts.status = 0"
+        else:
+            where += " AND parts.status = 1"
 
         # 查总数
         count_sql = "SELECT COUNT(*) AS total FROM parts" + duplicate_group_join + where

@@ -33,6 +33,7 @@
         .tree-all,
         .tree-unclassified,
         .tree-correction,
+        .tree-delisted,
         .tree-leaf {
             display: flex;
             align-items: center;
@@ -43,11 +44,12 @@
             transition: background 0.12s;
         }
 
-        .tree-all, .tree-unclassified, .tree-correction { padding: 8px 10px; margin-bottom: 4px; font-size: 13px; font-weight: 500; }
+        .tree-all, .tree-unclassified, .tree-correction, .tree-delisted { padding: 8px 10px; margin-bottom: 4px; font-size: 13px; font-weight: 500; }
         .tree-unclassified { color: #b45309; background: #fffbeb; }
         .tree-correction { color:#b91c1c; background:#fff1f2; }
-        .tree-all:hover, .tree-unclassified:hover, .tree-correction:hover, .tree-leaf:hover { background: var(--sidebar-hover); }
-        .tree-all.active, .tree-unclassified.active, .tree-correction.active, .tree-leaf.active {
+        .tree-delisted { color:#475569; background:#f1f5f9; }
+        .tree-all:hover, .tree-unclassified:hover, .tree-correction:hover, .tree-delisted:hover, .tree-leaf:hover { background: var(--sidebar-hover); }
+        .tree-all.active, .tree-unclassified.active, .tree-correction.active, .tree-delisted.active, .tree-leaf.active {
             color: var(--accent);
             background: var(--sidebar-active);
         }

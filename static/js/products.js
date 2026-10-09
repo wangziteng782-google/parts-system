@@ -326,6 +326,7 @@ async function init() {
             productTypeCounts = data.counts || {};
             unclassifiedProductCount = data.unclassified_count || 0;
             correctionProductCount = data.correction_count || 0;
+            delistedProductCount = data.delisted_count || 0;
             renderClassificationTree();
         }
 
@@ -337,7 +338,7 @@ async function init() {
 
         function renderClassificationTree() {
             const treeEl = document.getElementById('classificationTree');
-            let html = `<div class="tree-all ${!selectedProductType && !showUnclassified && !showCorrection ? 'active' : ''}" onclick="clearProductTypeFilter()">
+            let html = `<div class="tree-all ${!selectedProductType && !showUnclassified && !showCorrection && !showDelisted ? 'active' : ''}" onclick="clearProductTypeFilter()">
                 <span>全部产品</span>
             </div>`;
             html += `<div class="tree-unclassified ${showUnclassified ? 'active' : ''}" onclick="selectUnclassified()">
@@ -345,6 +346,9 @@ async function init() {
             </div>`;
             html += `<div class="tree-correction ${showCorrection ? 'active' : ''}" onclick="selectCorrection()">
                 <span>待改正</span><span class="tree-count">${correctionProductCount}</span>
+            </div>`;
+            html += `<div class="tree-delisted ${showDelisted ? 'active' : ''}" onclick="selectDelisted()">
+                <span>已下架</span><span class="tree-count">${delistedProductCount}</span>
             </div>`;
             classificationTree.forEach(first => {
                 const firstEncoded = encodeURIComponent(first.name);
@@ -454,6 +458,7 @@ async function init() {
             selectedProductType = decodeURIComponent(encodedValue);
             showUnclassified = false;
             showCorrection = false;
+            showDelisted = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
             renderClassificationTree();
@@ -464,9 +469,10 @@ async function init() {
             selectedProductType = '';
             showUnclassified = true;
             showCorrection = false;
+            showDelisted = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
             document.querySelector('.tree-unclassified')?.classList.add('active');
             loadProducts();
         }
@@ -475,10 +481,23 @@ async function init() {
             selectedProductType = '';
             showUnclassified = false;
             showCorrection = true;
+            showDelisted = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
             document.querySelector('.tree-correction')?.classList.add('active');
+            loadProducts();
+        }
+
+        function selectDelisted() {
+            selectedProductType = '';
+            showUnclassified = false;
+            showCorrection = false;
+            showDelisted = true;
+            updateDuplicateFilterState(false);
+            currentPage = 1;
+            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelector('.tree-delisted')?.classList.add('active');
             loadProducts();
         }
 
@@ -486,9 +505,10 @@ async function init() {
             selectedProductType = '';
             showUnclassified = false;
             showCorrection = false;
+            showDelisted = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
             document.querySelector('.tree-all')?.classList.add('active');
             loadProducts();
         }
@@ -502,6 +522,7 @@ async function init() {
             if (selectedProductType) url += `&product_type=${encodeURIComponent(selectedProductType)}`;
             if (showUnclassified) url += `&classification_status=unclassified`;
             if (showCorrection) url += `&feedback_status=pending`;
+            if (showDelisted) url += `&status=delisted`;
             const res = await fetch(url);
             const data = await res.json();
             totalRecords = data.total;
@@ -513,7 +534,7 @@ async function init() {
             countEl.textContent = `显示 ${start}-${end} / 共 ${totalRecords} 条`;
             const classificationLabel = showDuplicatesOnly
                 ? '全部重复产品'
-                : (showCorrection ? '待改正' : (showUnclassified ? '待重新分类' : (selectedProductType || '全部产品')));
+                : (showDelisted ? '已下架' : (showCorrection ? '待改正' : (showUnclassified ? '待重新分类' : (selectedProductType || '全部产品'))));
             document.getElementById('headerSubtitle').textContent = `${classificationLabel} · 共 ${totalRecords} 条 / 每页 ${PAGE_SIZE} 条`;
             const listEl = document.getElementById('productList');
             listEl.innerHTML = products.map((p, idx) => {
@@ -619,11 +640,12 @@ async function init() {
             selectedProductType = '';
             showUnclassified = false;
             showCorrection = false;
+            showDelisted = false;
             const searchInput = document.getElementById('searchInput');
             if (enableDuplicates && searchInput) {
                 searchInput.value = '';
             }
-            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-leaf')
+            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-delisted, .tree-leaf')
                 .forEach(el => el.classList.remove('active'));
             if (!enableDuplicates) document.querySelector('.tree-all')?.classList.add('active');
             loadProducts();
