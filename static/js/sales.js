@@ -365,7 +365,6 @@ function renderSalesDetailInfo(item, source, sourceLabel, quote = null) {
         ? [
             ['商品品牌：', item.product_brand],
             ['产品分类：', item.product_type],
-            ['产品性质：', item.nature],
             ['质保期限：', variantDetailValue(quote, 'warranty_time', item.warranty)],
             ['适用电梯品牌：', item.applicable_elevator_brand],
             ['替代型号：', item.substitute_model],
