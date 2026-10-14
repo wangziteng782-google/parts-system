@@ -54,7 +54,9 @@ def _parse_role_ids(environment_name: str, default_value: str) -> set[int]:
 
 
 ADMIN_ROLE_IDS = _parse_role_ids("PARTS_ADMIN_ROLE_IDS", "1")
+# 销售
 SALES_ROLE_IDS = _parse_role_ids("PARTS_SALES_ROLE_IDS", "3,31,32")
+# 采购
 PURCHASE_ROLE_IDS = _parse_role_ids(
     "PARTS_PURCHASE_ROLE_IDS",
     "4,36,37",

@@ -13,5 +13,8 @@ from .routes import sales as _sales
 from .routes import feedback as _feedback
 from .routes import inquiries as _inquiries
 from .routes import product_relations as _product_relations
+from .routes.oa_api import router as _oa_api_router
+
+app.include_router(_oa_api_router)
 
 __all__ = ["app"]
