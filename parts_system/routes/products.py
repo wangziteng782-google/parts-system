@@ -222,6 +222,43 @@ async def complete_product_modification(product_id: int):
         conn.close()
 
 
+@app.post("/api/products/{product_id}/toggle-status")
+async def toggle_product_status(product_id: int):
+    """切换产品上架/下架状态。"""
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, status, product_name, model FROM parts WHERE id=%s FOR UPDATE", (product_id,))
+        product = cursor.fetchone()
+        if not product:
+            raise HTTPException(status_code=404, detail="产品不存在")
+        new_status = 0 if product["status"] else 1
+        cursor.execute("UPDATE parts SET status=%s WHERE id=%s", (new_status, product_id))
+        write_operation_log(
+            cursor,
+            part_id=product_id,
+            operation_type="UPDATE",
+            module_code="PRODUCT",
+            detail="上架" if new_status == 1 else "下架",
+            product_name=product.get("product_name"),
+            model=product.get("model"),
+        )
+        conn.commit()
+        logger.info("[上下架] product_id=%s → status=%s", product_id, new_status)
+        return {
+            "status": new_status,
+            "message": "已上架" if new_status == 1 else "已下架",
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 class DuplicateMarkRequest(BaseModel):
     marked_by: Optional[str] = "当前员工"
 

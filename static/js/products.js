@@ -813,6 +813,41 @@ async function init() {
             }
         }
 
+        async function toggleProductStatus() {
+            if (!currentProductId) {
+                showToast('请先选择产品', 'error');
+                return;
+            }
+            const button = document.getElementById('productStatusButton');
+            if (button?.disabled) return;
+            const wasListed = currentData?.status != 0;
+            if (button) {
+                button.disabled = true;
+                button.textContent = wasListed ? '正在下架...' : '正在上架...';
+            }
+            try {
+                const res = await fetch(`/api/products/${currentProductId}/toggle-status`, {
+                    method: 'POST',
+                });
+                const result = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(result.detail || '操作失败');
+                const newStatus = Number(result.status ?? (wasListed ? 0 : 1));
+                if (currentData) currentData.status = newStatus;
+                if (button) {
+                    button.textContent = newStatus === 0 ? '已下架' : '已上架';
+                    button.classList.toggle('delisted', newStatus === 0);
+                }
+                showToast(result.message || (newStatus === 0 ? '已下架' : '已上架'), 'success');
+            } catch (error) {
+                if (button) {
+                    button.textContent = currentData?.status === 0 ? '已下架' : '已上架';
+                }
+                showToast(error.message || '操作失败', 'error');
+            } finally {
+                if (button) button.disabled = false;
+            }
+        }
+
         // ========== 渲染详情 ==========
         function renderDetail(data) {
             const main = document.getElementById('mainContent');
@@ -902,6 +937,12 @@ async function init() {
                         <span class="field-value" id="fv-precautions" onclick="editField('precautions')" style="font-size:12px;color:#92400e">${escapeHtml(data.precautions || '暂无，点击添加')}</span>
                     </span>
                     <button class="product-completion-button" style="margin-left:0" onclick="copyProduct()">一键复制</button>
+                    <button type="button" id="productStatusButton"
+                        class="product-completion-button ${data.status == 0 ? 'delisted' : ''}"
+                        style="margin-left:0"
+                        onclick="toggleProductStatus()">
+                        ${data.status == 0 ? '已下架' : '已上架'}
+                    </button>
                     <button type="button" id="productCompletionButton"
                         class="product-completion-button ${data.modification_completed ? 'completed' : ''}"
                         onclick="markProductModificationComplete()">

@@ -148,6 +148,8 @@
         .product-completion-button:hover { background: #2563eb; }
         .product-completion-button.completed { color: #047857; border-color: #86d5b4; background: #eafaf2; box-shadow: none; }
         .product-completion-button.completed:hover { background: #dcfce7; }
+        .product-completion-button.delisted { color: #b91c1c; border-color: #fca5a5; background: #fef2f2; box-shadow: none; }
+        .product-completion-button.delisted:hover { background: #fee2e2; }
         .product-completion-button:disabled { cursor: wait; opacity: .65; }
 
         .product-header .warning-bar-inline {
