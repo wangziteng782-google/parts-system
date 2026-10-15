@@ -31,6 +31,9 @@ async function init() {
             } else {
                 await loadProducts();
             }
+            if (urlParams.get('create') === '1') {
+                openProductCreate();
+            }
         }
 
         function openProductCreate() {
