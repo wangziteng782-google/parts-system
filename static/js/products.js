@@ -536,7 +536,7 @@ async function init() {
                 ? '全部重复产品'
                 : (showDelisted ? '已下架' : (showCorrection ? '待改正' : (showUnclassified ? '待重新分类' : (selectedProductType || '全部产品'))));
             const totalAll = data.total_all ?? totalRecords;
-            document.getElementById('headerSubtitle').textContent = `${classificationLabel} · 共 ${totalRecords} 条 / 全部 ${totalAll} 条 / 每页 ${PAGE_SIZE} 条`;
+            document.getElementById('headerSubtitle').textContent = `${classificationLabel} · 共 ${totalAll} 条 / 每页 ${PAGE_SIZE} 条`;
             const listEl = document.getElementById('productList');
             listEl.innerHTML = products.map((p, idx) => {
                 const seq = (currentPage - 1) * PAGE_SIZE + idx + 1;
