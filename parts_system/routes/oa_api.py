@@ -8,8 +8,10 @@ router = APIRouter(tags=["OA系统接口"])
 
 
 @router.get("/api/oa/products")
-async def oa_list_products(keyword: str = ""):
-    """按产品名称模糊查询，返回产品ID和型号列表。"""
+async def oa_list_products(keyword: str = "", page: int = 1, page_size: int = 30):
+    """按产品名称模糊查询，返回产品ID和型号列表（分页）。"""
+    page = max(1, page)
+    page_size = min(200, max(1, page_size))
     conn = get_db()
     try:
         cursor = conn.cursor()
@@ -19,14 +21,39 @@ async def oa_list_products(keyword: str = ""):
             where += " AND (product_name LIKE %s OR model LIKE %s)"
             pattern = f"%{keyword.strip()}%"
             params.extend([pattern, pattern])
+        cursor.execute(f"SELECT COUNT(*) AS total FROM parts{where}", params)
+        total = cursor.fetchone()["total"]
+        offset = (page - 1) * page_size
         cursor.execute(
             f"""SELECT id, product_name, model, product_brand, product_type
                 FROM parts{where}
                 ORDER BY id DESC
-                LIMIT 200""",
-            params,
+                LIMIT %s OFFSET %s""",
+            [*params, page_size, offset],
         )
-        return {"items": cursor.fetchall()}
+        return {"items": cursor.fetchall(), "total": total, "page": page, "page_size": page_size}
+    finally:
+        conn.close()
+
+
+@router.get("/api/oa/products/by-model")
+async def oa_get_product_by_model(model: str):
+    """按型号精确查询产品ID，供URL跳转定位使用。"""
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT id, product_name, model, product_brand, product_type
+               FROM parts
+               WHERE model=%s AND status=1
+               ORDER BY update_time_2 DESC, id DESC
+               LIMIT 1""",
+            (model.strip(),),
+        )
+        product = cursor.fetchone()
+        if not product:
+            raise HTTPException(status_code=404, detail=f"未找到型号为 {model} 的产品")
+        return product
     finally:
         conn.close()
 

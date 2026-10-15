@@ -10,13 +10,24 @@ async function init() {
             const classificationData = await classificationRes.json();
             if (uploadConfigRes.ok) imageUploadConfig = await uploadConfigRes.json();
             applyClassificationData(classificationData);
-            // 支持从 URL 参数 product_id 自动跳转到指定产品
+            // 支持从 URL 参数 product_id 或 model 自动跳转到指定产品
             const urlParams = new URLSearchParams(window.location.search);
             const targetProductId = urlParams.get('product_id');
+            const targetModel = urlParams.get('model');
             if (targetProductId && Number.isFinite(Number(targetProductId))) {
                 currentProductId = Number(targetProductId);
                 await loadProducts();
                 await selectProduct(currentProductId);
+            } else if (targetModel?.trim()) {
+                const searchInput = document.getElementById('searchInput');
+                if (searchInput) searchInput.value = targetModel.trim();
+                await loadProducts(1);
+                const res = await fetch(`/api/oa/products/by-model?model=${encodeURIComponent(targetModel.trim())}`);
+                const product = await res.json().catch(() => ({}));
+                if (product?.id) {
+                    await selectProduct(product.id);
+                    openSpecManager();
+                }
             } else {
                 await loadProducts();
             }
