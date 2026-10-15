@@ -138,8 +138,11 @@ async def list_products(
         cursor.execute(sql, params)
         items = cursor.fetchall()
 
+        cursor.execute("SELECT COUNT(*) AS total_all FROM parts")
+        total_all = cursor.fetchone()['total_all']
+
         logger.info(f"[查询] 产品列表完成 | 返回 {len(items)} 条, 总计 {total} 条")
-        return {"items": items, "total": total, "page": page, "page_size": page_size}
+        return {"items": items, "total": total, "total_all": total_all, "page": page, "page_size": page_size}
     except Exception as e:
         logger.error(f"[查询] 产品列表失败 | error={e}")
         raise
