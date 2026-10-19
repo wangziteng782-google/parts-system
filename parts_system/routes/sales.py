@@ -114,6 +114,7 @@ def _oa_image(value) -> Optional[str]:
 
 def _record_sales_query(
     keyword: str,
+    has_result: bool = True,
 ) -> None:
     user = get_current_user() or {}
     user_name = user.get("nickname") or user.get("username")
@@ -122,12 +123,13 @@ def _record_sales_query(
         cursor = conn.cursor()
         cursor.execute(
             """INSERT INTO sales_query_logs
-                   (user_id, user_name, query_keyword)
-               VALUES (%s,%s,%s)""",
+                   (user_id, user_name, query_keyword, has_result)
+               VALUES (%s,%s,%s,%s)""",
             (
                 get_current_user_id(),
                 user_name,
                 keyword,
+                1 if has_result else 0,
             ),
         )
         conn.commit()
@@ -786,7 +788,7 @@ async def sales_products(
         "page_size": page_size,
     }
     if keyword:
-        _record_sales_query(keyword)
+        _record_sales_query(keyword, has_result=(parts_total + inquiry_total > 0))
     return response_data
 
 

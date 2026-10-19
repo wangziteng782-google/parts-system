@@ -3,6 +3,20 @@
 from ..config import logger
 
 
+def ensure_sales_query_logs_has_result(conn):
+    """sales_query_logs 新增 has_result 列，标记查询是否命中结果。"""
+    cursor = conn.cursor()
+    cursor.execute("SHOW COLUMNS FROM sales_query_logs LIKE 'has_result'")
+    if not cursor.fetchone():
+        logger.info("[数据库迁移] sales_query_logs 新增 has_result 列")
+        cursor.execute(
+            """ALTER TABLE sales_query_logs
+               ADD COLUMN has_result TINYINT(1) NOT NULL DEFAULT 1
+               COMMENT '是否搜到结果：1=有，0=无'"""
+        )
+        conn.commit()
+
+
 def  ensure_employee_operation_logs_table(conn):
     """创建员工操作日志表，并修复历史数据快照。"""
     cursor = conn.cursor()

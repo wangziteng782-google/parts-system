@@ -7,6 +7,7 @@ from .migration import (
     ensure_employee_operation_logs_table,
     ensure_product_spec_required_rules,
     ensure_product_variant_tables,
+    ensure_sales_query_logs_has_result,
     ensure_technical_params_column,
 )
 
@@ -25,4 +26,5 @@ def get_db():
     ensure_technical_params_column(conn)
     ensure_product_variant_tables(conn)
     ensure_product_spec_required_rules(conn)
+    ensure_sales_query_logs_has_result(conn)
     return conn
