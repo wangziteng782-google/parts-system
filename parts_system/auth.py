@@ -67,6 +67,11 @@ PUBLIC_PATHS = {"/favicon.ico", "/api/health"}
 PROTECTED_PAGES = {"/", "/goods", "/logs", "/sales", "/inquiries"}
 PROTECTED_SCHEMA_PATHS = {"/docs", "/redoc", "/openapi.json"}
 
+# ========== OA接口跨域配置 ==========
+OA_CORS_ORIGIN = os.getenv("OA_CORS_ORIGIN", "*").strip() or "*"
+OA_CORS_METHODS = "GET, POST, PUT, DELETE, OPTIONS"
+OA_CORS_HEADERS = "Authorization, Content-Type, Admin-Token"
+
 _current_user: ContextVar[Optional[dict]] = ContextVar(
     "parts_system_current_user",
     default=None,
@@ -302,10 +307,34 @@ def _is_secure_request(request: Request) -> bool:
     return request.url.scheme == "https" or forwarded_proto.split(",")[0].strip() == "https"
 
 
+def _build_cors_headers(origin: str) -> dict:
+    return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": OA_CORS_METHODS,
+        "Access-Control-Allow-Headers": OA_CORS_HEADERS,
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Max-Age": "600",
+    }
+
+
 async def authentication_middleware(request: Request, call_next):
     path = request.url.path
+    is_oa = path.startswith("/api/oa/")
+
+    # OA接口跨域：预检请求直接返回，不进入认证逻辑
+    if is_oa and request.method == "OPTIONS":
+        return JSONResponse(
+            status_code=200,
+            content={"detail": "ok"},
+            headers=_build_cors_headers(OA_CORS_ORIGIN),
+        )
+
     if not _is_protected_path(path):
-        return await call_next(request)
+        response = await call_next(request)
+        if is_oa:
+            for key, value in _build_cors_headers(OA_CORS_ORIGIN).items():
+                response.headers[key] = value
+        return response
 
     external_token = (
         request.query_params.get(JWT_QUERY_NAME)
@@ -343,6 +372,9 @@ async def authentication_middleware(request: Request, call_next):
         response = _error_response(request, error)
         if session_token and error.status_code == 401:
             response.delete_cookie(SESSION_COOKIE_NAME, path="/")
+        if is_oa:
+            for key, value in _build_cors_headers(OA_CORS_ORIGIN).items():
+                response.headers[key] = value
         return response
 
     if user and path == "/":
@@ -375,4 +407,7 @@ async def authentication_middleware(request: Request, call_next):
             httponly=True,
             samesite="lax",
         )
+    if is_oa:
+        for key, value in _build_cors_headers(OA_CORS_ORIGIN).items():
+            response.headers[key] = value
     return response
