@@ -88,14 +88,24 @@ function oaToken() {
 async function oaRequest(path, options = {}) {
     const token = oaToken();
     if (!token) throw new Error('OA 登录凭证缺失，请从 OA 重新进入本页');
-    // ponytail: 直连 OA，不带 credentials（对方返回 Access-Control-Allow-Origin: *）
-    const response = await fetch(OA_API_BASE + path, {
-        ...options,
-        headers: {
-            'Admin-Token': token,
-            ...(options.headers || {}),
-        },
-    });
+    const url = OA_API_BASE + path;
+    let response;
+    try {
+        // ponytail: 直连 OA，不带 credentials，也不送 Referer（对方允许任意来源，Referer 反而可能被防火墙拦）
+        response = await fetch(url, {
+            ...options,
+            credentials: 'omit',
+            referrerPolicy: 'no-referrer',
+            headers: {
+                'Admin-Token': token,
+                ...(options.headers || {}),
+            },
+        });
+    } catch (error) {
+        // 浏览器拿不到响应时只会给 TypeError: Failed to fetch，看不出断网、证书还是被拦
+        console.error('[OA] 请求失败', url, error);
+        throw new Error('连接 OA 失败，请确认当前网络能直接打开 oa.yixiuti.com');
+    }
     let payload = null;
     try {
         payload = await response.json();
