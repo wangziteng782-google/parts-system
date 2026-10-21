@@ -103,11 +103,9 @@ async def list_products(
                 " WHERE feedback.parts_id=parts.id AND feedback.status='pending')"
             )
 
-        # 上架状态：goods 页面默认隐藏已下架产品，「已下架」入口单独查
-        if status == "delisted":
-            where += " AND parts.status = 0"
-        else:
-            where += " AND parts.status = 1"
+        # 上架状态：重复筛选不限制状态；goods 页面默认隐藏已下架产品
+        if not duplicates_only:
+            where += " AND parts.status = 0" if status == "delisted" else " AND parts.status = 1"
 
         # 查总数
         count_sql = "SELECT COUNT(*) AS total FROM parts" + duplicate_group_join + where
