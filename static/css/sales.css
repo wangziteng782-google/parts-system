@@ -93,11 +93,15 @@ button { cursor: pointer; }
 .sales-loading { display: flex; min-height: 330px; align-items: center; justify-content: center; gap: 11px; color: var(--sales-muted); }
 .loading-spinner { width: 24px; height: 24px; border: 3px solid #e1eafe; border-top-color: var(--sales-blue); border-radius: 50%; animation: sales-spin .8s linear infinite; }
 @keyframes sales-spin { to { transform: rotate(360deg); } }
-.sales-empty { min-height: 330px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--sales-muted); }
+.sales-empty { min-height: 360px; display: flex; align-items: center; justify-content: center; padding: 24px 12px; }
 .sales-empty[hidden] { display: none; }
-.sales-empty img { width: 68px; height: 68px; margin-bottom: 15px; border-radius: 15px; opacity: .6; }
-.sales-empty strong { margin-bottom: 7px; color: #526078; font-size: 15px; }
-.sales-empty span { font-size: 12px; }
+.sales-empty-inner { display: flex; align-items: center; gap: 54px; max-width: 880px; }
+.sales-empty-img { width: 250px; height: auto; flex: 0 0 auto; display: block; }
+.sales-empty-body strong { display: block; margin-bottom: 20px; color: #303133; font-size: 20px; font-weight: 700; }
+.sales-empty-tip { margin: 0 0 6px; color: #606266; font-size: 14px; font-weight: 500; }
+.sales-empty-list { margin: 0; padding-left: 18px; color: #909399; font-size: 13px; font-weight: 400; line-height: 2.2; }
+.sales-empty-action { padding: 0; color: var(--sales-blue); border: 0; background: none; font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.sales-empty-action:hover { color: var(--sales-blue-dark); }
 
 .goods-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; padding-top: 18px; }
 .goods-card { position: relative; overflow: hidden; display: flex; min-width: 0; flex-direction: column; border: 1px solid var(--sales-border); border-radius: 10px; background: #fff; transition: transform .2s, box-shadow .2s, border-color .2s; }
@@ -125,6 +129,7 @@ button { cursor: pointer; }
 .goods-list-wrap { display: none; padding-top: 16px; overflow-x: auto; }
 body.sales-list-view .goods-grid { display: none; }
 body.sales-list-view .goods-list-wrap { display: block; }
+.goods-grid[hidden], .goods-list-wrap[hidden] { display: none !important; }
 .goods-list { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--sales-border); border-radius: 9px; overflow: hidden; font-size: 13px; }
 .goods-list th { padding: 11px 12px; color: #526078; border-bottom: 1px solid var(--sales-border); background: var(--sales-blue-pale); text-align: left; font-weight: 700; white-space: nowrap; }
 .goods-list td { padding: 12px; color: #5e6b80; border-bottom: 1px solid #edf1f6; vertical-align: middle; }
@@ -337,4 +342,150 @@ body.sales-list-view .goods-list-wrap { display: block; }
     .sales-feedback-entry { justify-content: center; }
     .sales-feedback-entry .sales-feedback-open { width: 100%; }
     .sales-feedback-types { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+
+/* ---------- 新建询价记录（OA 的灰阶与密度 + 本站的圆角与渐变） ---------- */
+.sales-inquiry-overlay { position: fixed; inset: 0; z-index: 6500; display: none; align-items: center; justify-content: center; padding: 40px; background: rgba(0,0,0,.5); }
+.sales-inquiry-overlay.show { display: flex; }
+.sales-inquiry-overlay.picker { z-index: 6600; }
+.sales-inquiry-modal.inquiry-client-picker { width: min(790px, 96vw); }
+.inquiry-client-picker .sales-inquiry-body { padding-bottom: 16px; }
+.sales-inquiry-modal { width: min(1280px, 96vw); max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #e3eaf3; border-radius: 10px; background: #fff; box-shadow: 0 24px 64px rgba(7,18,35,.28); font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; }
+.sales-inquiry-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 20px 13px; border-bottom: 1px solid #e9eef5; }
+.sales-inquiry-header h2 { margin: 0; color: #303133; font-size: 17px; font-weight: 600; line-height: 24px; }
+.sales-inquiry-header p { margin: 4px 0 0; color: #909399; font-size: 12px; line-height: 18px; }
+.sales-inquiry-close { width: 26px; height: 26px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; padding: 0; color: #909399; border: 0; border-radius: 8px; background: transparent; font-size: 18px; line-height: 1; cursor: pointer; transition: .18s; }
+.sales-inquiry-close:hover { color: var(--sales-blue); background: var(--sales-blue-soft); }
+
+.sales-inquiry-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px 4px; }
+.inquiry-block { margin-bottom: 16px; }
+.inquiry-layout { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 18px; align-items: stretch; }
+.inquiry-col-goods, .inquiry-col-chat { margin-bottom: 0; }
+.inquiry-col-chat { display: flex; flex-direction: column; height: 100%; min-height: 420px; }
+.inquiry-block-title { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #303133; font-size: 14px; font-weight: 600; }
+.inquiry-block-title b { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; color: var(--sales-blue); border-radius: 50%; background: var(--sales-blue-soft); font-size: 11px; font-weight: 700; }
+
+.inquiry-client-search { display: flex; gap: 8px; }
+.inquiry-client-search input, .inquiry-field input, .inquiry-field select, .inquiry-block textarea { color: #606266; border: 1px solid #dcdfe6; border-radius: 8px; background: #fff; outline: none; font: inherit; font-size: 13px; transition: border-color .18s, box-shadow .18s; }
+.inquiry-client-search input, .inquiry-field input, .inquiry-field select { height: 30px; padding: 0 10px; }
+.inquiry-client-search input:focus, .inquiry-field input:focus, .inquiry-field select:focus, .inquiry-block textarea:focus { border-color: var(--sales-blue); box-shadow: 0 0 0 3px rgba(57,120,246,.12); }
+.inquiry-client-search input::placeholder, .inquiry-field input::placeholder, .inquiry-block textarea::placeholder { color: #a8abb2; }
+.inquiry-client-search input { flex: 1; }
+.inquiry-client-search button { min-width: 64px; height: 30px; padding: 0 12px; color: #606266; border: 1px solid #dcdfe6; border-radius: 8px; background: #fff; font-size: 13px; cursor: pointer; transition: .18s; }
+.inquiry-client-search button:hover:not(:disabled) { color: var(--sales-blue); border-color: #c6e2ff; background: var(--sales-blue-soft); }
+.inquiry-client-search button:disabled { cursor: wait; opacity: .6; }
+
+.inquiry-client-table-wrap { margin-top: 10px; max-height: 420px; overflow: auto; border: 1px solid #e4e7ed; border-radius: 8px; }
+.inquiry-client-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.inquiry-client-table th { position: sticky; top: 0; z-index: 1; padding: 8px 10px; color: #606266; background: #f5f7fa; border-bottom: 1px solid #e4e7ed; font-weight: 600; text-align: left; white-space: nowrap; }
+.inquiry-client-table td { max-width: 190px; padding: 7px 10px; overflow: hidden; color: #606266; border-bottom: 1px solid #f0f2f5; text-overflow: ellipsis; white-space: nowrap; }
+.inquiry-client-table tbody tr { cursor: pointer; transition: background .18s; }
+.inquiry-client-table tbody tr:hover { background: var(--sales-blue-soft); }
+.inquiry-client-table td strong { color: #303133; font-weight: 600; }
+.inquiry-client-empty-row td { padding: 16px 10px; color: #909399; text-align: center; cursor: default; }
+.inquiry-client-empty-row:hover { background: transparent; }
+.inquiry-client-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px; color: #606266; font-size: 12px; }
+.inquiry-client-pager button { height: 26px; padding: 0 10px; color: #606266; border: 1px solid #dcdfe6; border-radius: 6px; background: #fff; font-size: 12px; cursor: pointer; transition: .18s; }
+.inquiry-client-pager button:hover:not(:disabled) { color: var(--sales-blue); border-color: #c6e2ff; background: var(--sales-blue-soft); }
+.inquiry-client-pager button:disabled { cursor: not-allowed; opacity: .5; }
+
+.inquiry-client-selected { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 8px 10px; border: 1px solid #d9ecff; border-radius: 8px; background: #ecf5ff; font-size: 13px; }
+.inquiry-client-selected[hidden] { display: none; }
+.inquiry-client-selected strong { color: #303133; }
+.inquiry-client-selected span { color: #606266; }
+.inquiry-client-selected em { flex: 1; overflow: hidden; color: #909399; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.inquiry-client-change { height: 24px; padding: 0 9px; color: var(--sales-blue); border: 1px solid #c6e2ff; border-radius: 6px; background: #fff; font-size: 12px; cursor: pointer; }
+.inquiry-client-change:hover { color: #fff; border-color: var(--sales-blue); background: var(--sales-blue); }
+
+.inquiry-goods-rows { display: flex; flex-direction: column; gap: 10px; }
+.inquiry-goods-card { border: 1px solid #e4e7ed; border-radius: 8px; background: #fff; }
+.inquiry-goods-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid #f0f2f5; background: #fafbfc; }
+.inquiry-goods-head strong { flex: 1; min-width: 0; overflow: hidden; color: #303133; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.inquiry-goods-head span { color: #909399; font-size: 12px; }
+.inquiry-goods-head button { height: 24px; padding: 0 9px; color: #909399; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; transition: .18s; }
+.inquiry-goods-head button:hover:not(:disabled) { color: #f56c6c; border-color: #fbc4c4; background: #fef0f0; }
+.inquiry-goods-head button:disabled { cursor: not-allowed; opacity: .45; }
+.inquiry-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px 12px; padding: 9px; }
+.inquiry-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.inquiry-field.span-2 { grid-column: span 2; }
+.inquiry-field.span-3 { grid-column: 1 / -1; }
+.inquiry-field-label { flex: 0 0 86px; color: #606266; font-size: 12px; text-align: right; line-height: 1.5; white-space: nowrap; }
+.inquiry-field-label i { color: #f56c6c; font-style: normal; }
+.inquiry-field-tip { width: 13px; height: 13px; display: inline-flex; align-items: center; justify-content: center; color: #909399 !important; border: 1px solid #cfd6e0; border-radius: 50%; font-size: 10px; cursor: help; }
+.inquiry-radios { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.inquiry-radio { display: inline-flex; align-items: center; gap: 4px; color: #606266; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.inquiry-radio input { width: 13px; height: 13px; margin: 0; accent-color: var(--sales-blue); cursor: pointer; }
+.inquiry-field textarea { min-height: 52px; }
+.inquiry-field-suffix { flex: 0 0 auto; color: #909399; font-size: 12px; }
+.inquiry-field input.is-readonly { color: #a8abb2; background: #f5f7fa; border-color: #e4e7ed; cursor: not-allowed; }
+.inquiry-field input, .inquiry-field select, .inquiry-field textarea { flex: 1; min-width: 0; }
+.inquiry-field textarea { padding: 5px 10px; line-height: 1.6; resize: vertical; }
+.inquiry-field-images { align-items: flex-start; }
+.inquiry-field-images .inquiry-field-label { padding-top: 25px; }
+/* 图片区照 OA 的 YxfUpload（Element Plus picture-card）：68px 方块、悬停遮罩、满额隐藏上传位 */
+.inquiry-goods-media { flex: 1; display: flex; align-items: flex-start; gap: 10px; min-width: 0; overflow-x: auto; padding-bottom: 2px; }
+/* 边框和底色用 Element Plus 的默认值：item 用 --el-border-color，上传位用 --el-border-color-darker */
+.inquiry-upload-item { position: relative; flex: 0 0 auto; width: 68px; height: 68px; overflow: hidden; border: 1px solid #dcdfe6; border-radius: 6px; background: #fff; }
+.inquiry-upload-item img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.inquiry-upload-actions { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: #fff; background: rgba(0,0,0,.5); opacity: 0; transition: opacity .3s; }
+.inquiry-upload-actions button { display: inline-flex; padding: 0; color: #fff; border: 0; background: none; line-height: 1; cursor: pointer; }
+.inquiry-upload-item:hover .inquiry-upload-actions { opacity: 1; }
+.inquiry-upload-plus { flex: 0 0 auto; width: 68px; height: 68px; display: flex; align-items: center; justify-content: center; color: #8c939d; border: 1px dashed #cdd0d6; border-radius: 6px; background: #fff; font-size: 26px; line-height: 1; cursor: pointer; transition: .18s; }
+.inquiry-upload-plus:hover, .inquiry-upload-plus.is-drag { color: var(--sales-blue); border-color: var(--sales-blue); }
+.inquiry-goods-media.is-hide .inquiry-upload-plus { display: none; }
+.inquiry-paste-menu { position: fixed; z-index: 6700; min-width: 80px; padding: 6px 12px; color: #606266; border: 1px solid #ddd; border-radius: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.15); font-size: 13px; cursor: pointer; }
+.inquiry-paste-menu:hover { background: #f5f5f5; }
+
+/* 图片预览，照着 el-image-viewer 做的 */
+.inquiry-viewer { position: fixed; inset: 0; z-index: 6800; display: none; background: rgba(0,0,0,.6); }
+.inquiry-viewer.show { display: block; }
+.inquiry-viewer-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.inquiry-viewer-stage img { max-width: 100%; max-height: 100%; transition: transform .3s; cursor: grab; }
+.inquiry-viewer-close { position: absolute; top: 24px; right: 30px; color: #fff; font-size: 22px; line-height: 1; cursor: pointer; }
+.inquiry-viewer-arrow { position: absolute; top: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 30px; line-height: 1; transform: translateY(-50%); cursor: pointer; user-select: none; }
+.inquiry-viewer-arrow.prev { left: 24px; }
+.inquiry-viewer-arrow.next { right: 24px; }
+.inquiry-viewer-arrow[hidden] { display: none; }
+.inquiry-viewer-bar { position: absolute; right: 0; bottom: 0; left: 0; height: 48px; display: flex; align-items: center; justify-content: center; gap: 20px; color: #fff; background: rgba(0,0,0,.5); font-size: 13px; }
+.inquiry-viewer-bar button { display: inline-flex; padding: 2px; color: #fff; border: 0; background: none; font-size: 18px; line-height: 1; cursor: pointer; }
+.inquiry-add-goods { margin-top: 8px; height: 30px; padding: 0 12px; color: var(--sales-blue); border: 1px dashed #a8c9f6; border-radius: 8px; background: #f7fbff; font-size: 13px; cursor: pointer; }
+.inquiry-add-goods:hover { border-style: solid; background: #eef6ff; }
+
+.inquiry-block > textarea { width: 100%; min-height: 72px; display: block; resize: vertical; padding: 6px 10px; line-height: 1.7; }
+.inquiry-chat-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 9px; }
+.inquiry-chat-types { display: flex; gap: 6px; }
+.inquiry-chat-types button { width: 28px; height: 26px; padding: 0; color: #606266; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; transition: .18s; }
+.inquiry-chat-types button:hover { color: var(--sales-blue); border-color: #c6e2ff; }
+.inquiry-chat-types button.active { color: #fff; border-color: var(--sales-blue); background: var(--sales-blue); }
+.inquiry-chat-item { display: inline-flex; align-items: center; gap: 6px; color: #606266; font-size: 12px; }
+.inquiry-chat-item input, .inquiry-chat-item select { height: 26px; padding: 0 8px; color: #606266; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; outline: none; font: inherit; font-size: 12px; }
+.inquiry-chat-item input { width: 84px; }
+.inquiry-chat-item input:focus, .inquiry-chat-item select:focus { border-color: var(--sales-blue); }
+.inquiry-chat-item span { color: #909399; }
+.inquiry-chat-check { display: inline-flex; align-items: center; gap: 5px; color: #606266; font-size: 12px; cursor: pointer; }
+.inquiry-hint { display: block; margin-top: 6px; color: #909399; font-size: 12px; }
+.inquiry-col-chat > textarea { flex: 1; min-height: 180px; }
+
+.sales-inquiry-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; border-top: 1px solid #e9eef5; background: #fbfcfe; }
+.sales-inquiry-footer > div { display: flex; gap: 8px; }
+.inquiry-error { flex: 1; overflow: hidden; color: #f56c6c; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.inquiry-cancel, .inquiry-submit { min-width: 80px; height: 32px; padding: 0 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; transition: .18s; }
+.inquiry-cancel { color: #606266; border: 1px solid #dcdfe6; background: #fff; }
+.inquiry-cancel:hover { color: var(--sales-blue); border-color: #c6e2ff; background: var(--sales-blue-soft); }
+.inquiry-submit { color: #fff; border: 0; background: linear-gradient(135deg, #2878f0, #4d96ff); box-shadow: 0 5px 14px rgba(40,120,240,.24); }
+.inquiry-submit:hover:not(:disabled) { background: linear-gradient(135deg, #1768dc, #3788fa); }
+.inquiry-submit:disabled { cursor: wait; opacity: .6; box-shadow: none; }
+
+@media (max-width: 720px) {
+    .sales-inquiry-overlay { padding: 12px; }
+    .sales-empty-inner { flex-direction: column; gap: 18px; }
+    .sales-empty-img { width: 180px; }
+    .inquiry-client-table-wrap { max-height: 320px; }
+    .inquiry-client-table th, .inquiry-client-table td { padding: 6px 8px; }
+    .inquiry-layout { grid-template-columns: 1fr; }
+    .inquiry-col-chat { min-height: 0; }
+    .inquiry-col-chat > textarea { min-height: 120px; }
+    .inquiry-fields { grid-template-columns: 1fr; }
+    .inquiry-field.span-2, .inquiry-field.span-3 { grid-column: auto; }
+    .inquiry-field-label { flex-basis: 86px; }
 }

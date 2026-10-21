@@ -407,6 +407,21 @@ async def authentication_middleware(request: Request, call_next):
             httponly=True,
             samesite="lax",
         )
+    # OA token 写入非 httponly cookie，供前端直连 OA 接口使用
+    if external_token:
+        response.set_cookie(
+            key="oa_token",
+            value=external_token,
+            max_age=max(1, session_expires_at - int(time.time())),
+            expires=datetime.fromtimestamp(
+                session_expires_at,
+                tz=timezone.utc,
+            ),
+            path="/",
+            secure=_is_secure_request(request),
+            httponly=False,
+            samesite="lax",
+        )
     if is_oa:
         for key, value in _build_cors_headers(OA_CORS_ORIGIN).items():
             response.headers[key] = value

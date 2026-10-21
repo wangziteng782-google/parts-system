@@ -19,6 +19,7 @@ const salesEls = {
     empty: document.getElementById('salesEmpty'),
     grid: document.getElementById('salesGoodsGrid'),
     list: document.getElementById('salesGoodsList'),
+    listWrap: document.getElementById('salesGoodsListWrap'),
     pagination: document.getElementById('salesPagination'),
     gridButton: document.getElementById('salesGridButton'),
     listButton: document.getElementById('salesListButton'),
@@ -197,8 +198,11 @@ function renderSalesProducts() {
     const end = Math.min(salesState.page * salesState.pageSize, salesState.total);
     salesEls.resultRange.textContent = `显示 ${start}-${end} / 共 ${salesState.total.toLocaleString('zh-CN')} 条`;
 
-    salesEls.empty.hidden = salesState.items.length > 0;
-    if (!salesState.items.length) return;
+    const isEmpty = !salesState.items.length;
+    salesEls.empty.hidden = !isEmpty;
+    salesEls.grid.hidden = isEmpty;
+    salesEls.listWrap.hidden = isEmpty;
+    if (isEmpty) return;
     salesEls.grid.innerHTML = salesState.items.map(renderSalesCard).join('');
     salesEls.list.innerHTML = salesState.items.map(renderSalesListRow).join('');
     salesEls.list.querySelectorAll('[data-sales-preview-index]').forEach(button => {

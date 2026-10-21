@@ -6,7 +6,8 @@
     <title>销售商品查询</title>
     <link rel="icon" href="/static/img/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="/static/img/site-logo.png">
-    <link rel="stylesheet" href="/static/css/sales.css?v=20260811-2">
+    <link rel="stylesheet" href="/static/css/sales.css?v=20261021-19">
+    <link rel="preconnect" href="https://oa.yixiuti.com">
 </head>
 <body data-user-name="{{ sales_user_name }}">
     <header>
@@ -77,9 +78,20 @@
                 <span class="loading-spinner"></span><span>正在查询商品...</span>
             </div>
             <div class="sales-empty" id="salesEmpty" hidden>
-                <img src="/static/img/site-logo.png" alt="暂无商品">
-                <strong>没有找到匹配的商品</strong>
-                <span>请更换产品名称、品牌、型号或规格后重新搜索</span>
+                <div class="sales-empty-inner">
+                    <img class="sales-empty-img" src="/static/img/no-data.png" alt="" aria-hidden="true">
+                    <div class="sales-empty-body">
+                        <strong>抱歉，没有找到与关键词相关的商品</strong>
+                        <p class="sales-empty-tip">建议您：</p>
+                        <ol class="sales-empty-list">
+                            <li>尝试其他关键词</li>
+                            <li>适当减少筛选条件</li>
+                            <li>找不到想要的配件，可以
+                                <button type="button" class="sales-empty-action" id="salesInquiryEntry">>>一键询价</button>
+                            </li>
+                        </ol>
+                    </div>
+                </div>
             </div>
             <div class="goods-grid" id="salesGoodsGrid"></div>
             <div class="goods-list-wrap" id="salesGoodsListWrap">
@@ -233,7 +245,120 @@
         </form>
     </div>
 
+    <div class="sales-inquiry-overlay picker" id="salesInquiryClientOverlay" aria-hidden="true">
+        <section class="sales-inquiry-modal inquiry-client-picker" role="dialog" aria-modal="true" aria-labelledby="salesInquiryClientTitle">
+            <header class="sales-inquiry-header">
+                <div>
+                    <h2 id="salesInquiryClientTitle">选择客户</h2>
+                    <p>按姓名或手机号搜索，选中后填写沟通记录和关联商品</p>
+                </div>
+                <button type="button" class="sales-inquiry-close" id="salesInquiryPickerClose" aria-label="关闭">×</button>
+            </header>
+
+            <div class="sales-inquiry-body">
+                <div class="inquiry-client-search">
+                    <input type="text" id="salesInquiryClientKeyword" placeholder="输入客户姓名或手机号" autocomplete="off">
+                    <button type="button" id="salesInquiryClientSearch">搜索</button>
+                </div>
+                <div class="inquiry-client-table-wrap">
+                    <table class="inquiry-client-table">
+                        <thead>
+                            <tr>
+                                <th>客户</th>
+                                <th>电话</th>
+                                <th>公司</th>
+                                <th>类型</th>
+                                <th>直梯</th>
+                                <th>扶梯</th>
+                                <th>销售员</th>
+                            </tr>
+                        </thead>
+                        <tbody id="salesInquiryClientList"></tbody>
+                    </table>
+                </div>
+                <div class="inquiry-client-pager">
+                    <span id="salesInquiryClientCount">共 0 条</span>
+                    <button type="button" id="salesInquiryClientPrev">上一页</button>
+                    <span id="salesInquiryClientPage">1/1</span>
+                    <button type="button" id="salesInquiryClientNext">下一页</button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div class="sales-inquiry-overlay" id="salesInquiryOverlay" aria-hidden="true">
+        <section class="sales-inquiry-modal" role="dialog" aria-modal="true" aria-labelledby="salesInquiryTitle">
+            <header class="sales-inquiry-header">
+                <div>
+                    <h2 id="salesInquiryTitle">新建询价记录</h2>
+                    <p>提交后按沟通记录生成 OA 询价单，商品挂在该单下</p>
+                </div>
+                <button type="button" class="sales-inquiry-close" id="salesInquiryClose" aria-label="关闭">×</button>
+            </header>
+
+            <div class="sales-inquiry-body">
+                <div class="inquiry-client-selected" id="salesInquiryClientSelected" hidden></div>
+
+                <div class="inquiry-layout">
+                    <section class="inquiry-block inquiry-col-goods">
+                        <div class="inquiry-block-title"><b>1</b> 关联商品</div>
+                        <div class="inquiry-goods-rows" id="salesInquiryGoodsRows"></div>
+                        <button type="button" class="inquiry-add-goods" id="salesInquiryAddGoods">＋ 增加商品</button>
+                    </section>
+
+                    <section class="inquiry-block inquiry-col-chat">
+                        <div class="inquiry-block-title"><b>2</b> 沟通记录</div>
+                        <textarea id="salesInquiryContent" rows="3" maxlength="500" placeholder="请输入本次询价内容"></textarea>
+                        <div class="inquiry-chat-row">
+                            <div class="inquiry-chat-types" id="salesInquiryChatTypes">
+                                <button type="button" data-chat-type="主">主</button>
+                                <button type="button" data-chat-type="电">电</button>
+                                <button type="button" data-chat-type="改">改</button>
+                            </div>
+                            <label class="inquiry-chat-item">通话时长
+                                <input type="number" id="salesInquiryTalkTime" min="0" step="1" placeholder="0">
+                                <span>分钟</span>
+                            </label>
+                            <label class="inquiry-chat-check">
+                                <input type="checkbox" id="salesInquiryGaizao"> 改造客户
+                            </label>
+                        </div>
+                        <div class="inquiry-chat-row">
+                            <label class="inquiry-chat-item">客户类型
+                                <select id="salesInquiryCategory">
+                                    <option value="">请选择</option>
+                                    <option value="A类">A类</option>
+                                    <option value="B类">B类</option>
+                                    <option value="C类">C类</option>
+                                    <option value="D类">D类</option>
+                                </select>
+                            </label>
+                        </div>
+                        <div class="inquiry-chat-row">
+                            <label class="inquiry-chat-item">直梯台量
+                                <input type="number" id="salesInquiryZhiTi" min="0" step="1">
+                            </label>
+                            <label class="inquiry-chat-item">扶梯台量
+                                <input type="number" id="salesInquiryFuTi" min="0" step="1">
+                            </label>
+                        </div>
+                        <small class="inquiry-hint">OA 靠这条沟通记录生成询价单，内容必填</small>
+                    </section>
+                </div>
+            </div>
+
+            <footer class="sales-inquiry-footer">
+                <span class="inquiry-error" id="salesInquiryError"></span>
+                <div>
+                    <button type="button" class="inquiry-cancel" id="salesInquiryCancel">取消</button>
+                    <button type="button" class="inquiry-submit" id="salesInquirySubmit"><span>提交询价</span></button>
+                </div>
+            </footer>
+        </section>
+    </div>
+
     <div class="sales-toast" id="salesToast"></div>
-    <script src="/static/js/sales.js?v=20260811-3"></script>
+    <script src="/static/js/sales.js?v=20261021-2"></script>
+    <script src="/static/js/sales-inquiry.js?v=20261021-19"></script>
 </body>
 </html>
