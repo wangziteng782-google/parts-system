@@ -20,7 +20,7 @@ const INVOICE_COMPANIES = [
     {value: 5, label: '溧阳个体户'}, {value: 6, label: '易梯供应链'}, {value: 7, label: '圆保'}, {value: 8, label: '佑梯'},
 ];
 const ELE_SCENES = ['新梯验收', '新梯加装', '旧梯更换 - 无线换无线', '旧梯更换 - 有线换无线'];
-const GOODS_SOURCES = ['采购', '表格', '售后'];
+const GOODS_SOURCES = ['采购', '销售', '工具箱'];
 const CHAT_TYPES = ['主', '电', '改'];
 const CLIENT_CATEGORIES = ['A类', 'B类', 'C类', 'D类'];
 
@@ -60,6 +60,7 @@ const inquiryEls = {
     talkTime: document.getElementById('salesInquiryTalkTime'),
     gaizao: document.getElementById('salesInquiryGaizao'),
     category: document.getElementById('salesInquiryCategory'),
+    quoteSource: document.getElementById('salesInquiryQuoteSource'),
     zhiTi: document.getElementById('salesInquiryZhiTi'),
     fuTi: document.getElementById('salesInquiryFuTi'),
     error: document.getElementById('salesInquiryError'),
@@ -175,6 +176,7 @@ async function openInquiry() {
     inquiryEls.talkTime.value = '';
     inquiryEls.gaizao.checked = false;
     inquiryEls.category.value = '';
+    inquiryEls.quoteSource.value = '';
     inquiryEls.zhiTi.value = '';
     inquiryEls.fuTi.value = '';
     inquiryEls.error.textContent = '';
@@ -183,8 +185,16 @@ async function openInquiry() {
     await ensureOaConfig();
 }
 
+// 关掉询价表单时回到「选择客户」这一步，别把整个流程关掉
+function backToClientPicker() {
+    if (inquiryState.submitting) return;
+    inquiryEls.overlay.classList.remove('show');
+    inquiryEls.overlay.setAttribute('aria-hidden', 'true');
+    openPicker();
+}
+
+// 整段流程都关掉，回到商品列表（提交成功用）
 function closeInquiry(force = false) {
-    // 提交中不允许用户手动关，但提交成功后要能关掉
     if (inquiryState.submitting && !force) return;
     inquiryEls.overlay.classList.remove('show');
     inquiryEls.overlay.setAttribute('aria-hidden', 'true');
@@ -310,7 +320,12 @@ function addGoodsRow(prefill = {}) {
     renderGoodsRows();
     const cards = inquiryEls.goodsRows.querySelectorAll('[data-goods-index]');
     const last = cards[cards.length - 1];
-    if (last) last.querySelector('[data-field="goods_name"]').focus();
+    const nameInput = last?.querySelector('[data-field="goods_name"]');
+    if (nameInput) {
+        nameInput.focus();
+        // 带上搜索词时把光标放到末尾，接着打字就行
+        nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length);
+    }
 }
 
 function fieldBox(label, control, span = 1) {
@@ -319,6 +334,11 @@ function fieldBox(label, control, span = 1) {
     const text = label.replace(/<i[^>]*>[^<]*<\/i>/g, '').trim();
     const prefix = marks.length ? `${marks.join('')} ` : '';
     return `<label class="inquiry-field${span > 1 ? ` span-${span}` : ''}"><span class="inquiry-field-label">${prefix}${text}</span>${control}</label>`;
+}
+
+// 售价和含税售价二选一，填了其中一个，另一个的必填星号就隐藏（元素常驻，方便来回切换）
+function requiredStar(name, show) {
+    return ` <i data-star="${name}"${show ? '' : ' hidden'}>*</i>`;
 }
 
 function textInput(field, value, placeholder, type = 'text') {
@@ -342,19 +362,28 @@ function radioGroup(field, items, value, groupName) {
         </label>`).join('')}</span>`;
 }
 
-function optionSelect(field, items, value, placeholder = '请选择') {
-    const options = items.map(item => `<option value="${escapeSalesHtml(item.value)}"${String(item.value) === String(value) ? ' selected' : ''}>${escapeSalesHtml(item.label)}</option>`).join('');
-    return `<select data-field="${field}"><option value="">${placeholder}</option>${options}</select>`;
+// OA 表单里这些字段都是 el-select，统一做成可输入筛选的下拉
+function optionSelect(field, items, value, placeholder = '请选择', allowCreate = false) {
+    const list = items.map(item => ({value: String(item.value), label: String(item.label)}));
+    const selected = list.find(item => item.value === String(value));
+    const label = selected ? selected.label : '';
+    const options = list.map(item => `<li data-value="${escapeSalesHtml(item.value)}">${escapeSalesHtml(item.label)}</li>`).join('');
+    return `<span class="inquiry-select" data-select${allowCreate ? ' data-create' : ''}>
+        <input type="text" class="inquiry-select-input" value="${escapeSalesHtml(label)}" data-label="${escapeSalesHtml(label)}" placeholder="${placeholder}" autocomplete="off">
+        <input type="hidden" data-field="${field}" value="${selected ? escapeSalesHtml(selected.value) : ''}">
+        <ul class="inquiry-select-options" hidden>${options}</ul>
+    </span>`;
 }
 
 function configSelect(field, value) {
     const items = (inquiryState.config?.[field] || []).map(item => ({value: item.id, label: item.name}));
-    return optionSelect(field, items, value, items.length ? '请选择' : '加载中…');
+    return optionSelect(field, items, value, items.length ? '其他请输入后选择' : '加载中…');
 }
 
 // 图标取自 OA 前端 bundle 里 YxfUpload 用的 Element Plus 图标
 const ICON_ZOOM_IN = '<svg viewBox="0 0 1024 1024" width="16" height="16" fill="currentColor"><path d="m795.904 750.72 124.992 124.928a32 32 0 0 1-45.248 45.248L750.656 795.904a416 416 0 1 1 45.248-45.248zM480 832a352 352 0 1 0 0-704 352 352 0 0 0 0 704zm-32-384v-96a32 32 0 0 1 64 0v96h96a32 32 0 0 1 0 64h-96v96a32 32 0 0 1-64 0v-96h-96a32 32 0 0 1 0-64h96z"/></svg>';
 const ICON_DELETE = '<svg viewBox="0 0 1024 1024" width="16" height="16" fill="currentColor"><path d="M160 256H96a32 32 0 0 1 0-64h256V95.936a32 32 0 0 1 32-32h256a32 32 0 0 1 32 32V192h256a32 32 0 1 1 0 64h-64v672a32 32 0 0 1-32 32H192a32 32 0 0 1-32-32V256zm448-64v-64H416v64h192zM224 896h576V256H224v640zm192-128a32 32 0 0 1-32-32V416a32 32 0 0 1 64 0v320a32 32 0 0 1-32 32zm192 0a32 32 0 0 1-32-32V416a32 32 0 0 1 64 0v320a32 32 0 0 1-32 32z"/></svg>';
+const ICON_LOCATION = '<svg viewBox="0 0 1024 1024" width="14" height="14" fill="currentColor"><path d="M512 128c-176 0-320 144-320 320 0 240 320 448 320 448s320-208 320-448c0-176-144-320-320-320zm0 448a128 128 0 1 1 0-256 128 128 0 0 1 0 256z"/></svg>';
 
 function renderGoodsRows() {
     inquiryEls.goodsRows.innerHTML = inquiryState.goods.map((good, index) => {
@@ -389,17 +418,17 @@ function renderGoodsRows() {
                 ${fieldBox('报价来源 <i>*</i>', optionSelect('source', GOODS_SOURCES.map(x => ({value: x, label: x})), good.source))}
                 ${fieldBox('客户询价日期 <i>*</i>', textInput('inquiry_time', good.inquiry_time, '', 'date'))}
                 ${fieldBox('商品名称 <i>*</i>', textInput('goods_name', good.goods_name, '请输入商品名称'), 2)}
-                ${fieldBox('电梯场景', optionSelect('ele_scene', ELE_SCENES.map(x => ({value: x, label: x})), good.ele_scene))}
+                ${fieldBox('电梯场景', optionSelect('ele_scene', ELE_SCENES.map(x => ({value: x, label: x})), good.ele_scene, '请选择', true))}
                 ${fieldBox('规格型号 <i>*</i>', textInput('goods_spec', good.goods_spec, '请输入规格型号'))}
-                ${fieldBox('商品品牌 <i>*</i>', configSelect('factory', good.factory))}
+                ${fieldBox('商品品牌', configSelect('factory', good.factory))}
                 ${fieldBox('电梯品牌 <i>*</i>', configSelect('ele_brand', good.ele_brand))}
                 ${fieldBox('明目 <i>*</i>', configSelect('names', good.names))}
                 ${fieldBox('发票类型 <i>*</i>', optionSelect('invoice', INVOICE_TYPES, good.invoice))}
                 ${fieldBox('开票单位 <i>*</i>', optionSelect('invoice_company', INVOICE_COMPANIES, good.invoice_company))}
-                ${fieldBox('售价 <i>*</i>', textInput('goods_price', good.goods_price, '请输入售价'))}
+                ${fieldBox(`售价${requiredStar('goods_price', !good.goods_price_tax)}`, textInput('goods_price', good.goods_price, '请输入售价'))}
                 ${fieldBox('商品税率', suffixInput('tax_rate', good.tax_rate, '请输入商品税率', '%'))}
                 ${fieldBox('商品税费', readonlyInput())}
-                ${fieldBox('含税售价 <i>*</i>', textInput('goods_price_tax', good.goods_price_tax, '请输入含税售价'))}
+                ${fieldBox(`含税售价${requiredStar('goods_price_tax', !good.goods_price)}`, textInput('goods_price_tax', good.goods_price_tax, '请输入含税售价'))}
                 ${fieldBox('数量 <i>*</i>', textInput('goods_num', good.goods_num, '1', 'number'))}
                 ${fieldBox('单位', textInput('goods_unit', good.goods_unit, '请输入单位'))}
                 ${fieldBox('运费', textInput('post_fee', good.post_fee, '请输入运费'))}
@@ -418,7 +447,7 @@ function renderGoodsRows() {
                 ${fieldBox('询价描述 <i class="inquiry-field-tip" title="补充该商品的询价信息">?</i>', `<textarea rows="2" data-field="goods_describe" placeholder="请输入询价描述">${escapeSalesHtml(good.goods_describe)}</textarea>`)}
                 ${fieldBox('实收备注', textInput('total_amount_sign_remark', good.total_amount_sign_remark, '请输入实收备注'))}
                 ${fieldBox('商品备注', `<textarea rows="2" data-field="post_fee_describe" placeholder="快递公司、邮寄方式等">${escapeSalesHtml(good.post_fee_describe)}</textarea>`)}
-                ${fieldBox('收货地址', `<textarea rows="2" data-field="send_address" placeholder="请输入收货地址">${escapeSalesHtml(good.send_address)}</textarea>`, 2)}
+                ${fieldBox(`<span class="inquiry-address-link" data-address-pick title="点击选择客户的收货地址">${ICON_LOCATION}收货地址</span>`, `<textarea rows="2" data-field="send_address" placeholder="请输入收货地址">${escapeSalesHtml(good.send_address)}</textarea>`, 2)}
             </div>
         </article>`;
     }).join('');
@@ -598,6 +627,175 @@ inquiryEls.goodsRows?.addEventListener('contextmenu', event => {
     document.addEventListener('click', closePasteMenu, {once: true});
 });
 
+/* ---------------- 收货地址：弹窗列出客户历史地址 ---------------- */
+
+const OA_CLIENT_ADDRESS = '/admin/Client/client_address';
+let addressDialogEl = null;
+let addressTarget = null;
+let addressPage = 1;
+let addressPages = 1;
+let addressLimit = 50;
+
+function ensureAddressDialog() {
+    if (addressDialogEl) return addressDialogEl;
+    const overlay = document.createElement('div');
+    overlay.className = 'sales-inquiry-overlay address';
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.innerHTML = `
+        <section class="sales-inquiry-modal inquiry-address-modal" role="dialog" aria-label="客户历史收货地址">
+            <header class="inquiry-address-head">
+                <h3>客户历史收货地址</h3>
+                <button type="button" class="inquiry-address-close" data-address-close aria-label="关闭">×</button>
+            </header>
+            <div class="inquiry-address-body">
+                <table>
+                    <thead><tr><th class="col-idx">序号</th><th>历史收货地址</th><th class="col-ops">操作</th></tr></thead>
+                    <tbody data-address-body></tbody>
+                </table>
+            </div>
+            <footer class="inquiry-address-foot">
+                <div class="inquiry-address-pager">
+                    <button type="button" data-address-page="first" title="首页">«</button>
+                    <button type="button" data-address-page="prev" title="上一页">‹</button>
+                    <span class="inquiry-address-page-box" data-address-page-now>1</span>
+                    <span class="inquiry-address-page-total" data-address-page-total>/ 1</span>
+                    <button type="button" data-address-page="next" title="下一页">›</button>
+                    <button type="button" data-address-page="last" title="末页">»</button>
+                    <select class="inquiry-address-limit" data-address-limit>
+                        <option value="20">20条/页</option>
+                        <option value="50" selected>50条/页</option>
+                        <option value="100">100条/页</option>
+                    </select>
+                    <span data-address-count>共 0 条记录</span>
+                </div>
+            </footer>
+            <div class="inquiry-address-actions">
+                <button type="button" class="inquiry-address-closebtn" data-address-close>关闭</button>
+            </div>
+        </section>`;
+    overlay.addEventListener('click', event => {
+        if (event.target === overlay || event.target.closest('[data-address-close]')) {
+            closeAddressDialog();
+            return;
+        }
+        const pageBtn = event.target.closest('[data-address-page]');
+        if (pageBtn) {
+            turnAddressPage(pageBtn.dataset.addressPage);
+            return;
+        }
+        const fill = event.target.closest('[data-address-fill]');
+        if (fill) {
+            fillAddress(fill.dataset.addressFill);
+            return;
+        }
+        const copy = event.target.closest('[data-address-copy]');
+        if (copy) copyAddress(copy.dataset.addressCopy);
+    });
+    overlay.addEventListener('change', event => {
+        if (!event.target.closest('[data-address-limit]')) return;
+        addressLimit = Number(event.target.value) || 50;
+        loadAddressPage(1);
+    });
+    document.body.appendChild(overlay);
+    addressDialogEl = overlay;
+    return overlay;
+}
+
+function openAddressDialog(card) {
+    const textarea = card?.querySelector('[data-field="send_address"]');
+    if (!textarea) return;
+    addressTarget = textarea;
+    ensureAddressDialog();
+    addressDialogEl.classList.add('show');
+    addressDialogEl.setAttribute('aria-hidden', 'false');
+    loadAddressPage(1);
+}
+
+function closeAddressDialog() {
+    addressDialogEl?.classList.remove('show');
+    addressDialogEl?.setAttribute('aria-hidden', 'true');
+    addressTarget = null;
+}
+
+async function loadAddressPage(page) {
+    const clientId = inquiryState.client?.id;
+    const body = addressDialogEl.querySelector('[data-address-body]');
+    if (!clientId) {
+        body.innerHTML = '<tr><td colspan="3" class="inquiry-address-empty">请先选择客户</td></tr>';
+        return;
+    }
+    body.innerHTML = '<tr><td colspan="3" class="inquiry-address-empty">加载中…</td></tr>';
+    try {
+        // 接口要的是客户 id，参数名是 id 不是 client_id
+        const data = await oaRequest(`${OA_CLIENT_ADDRESS}?id=${clientId}&page=${page}&limit=${addressLimit}`);
+        const list = data?.list || [];
+        const count = Number(data?.count || 0);
+        addressPage = page;
+        addressPages = Math.max(1, Math.ceil(count / addressLimit));
+        if (!list.length) {
+            body.innerHTML = '<tr><td colspan="3" class="inquiry-address-empty">该客户还没有收货地址</td></tr>';
+        } else {
+            body.innerHTML = list.map((item, index) => {
+                const text = item.send_address || '';
+                return `
+                <tr>
+                    <td class="col-idx">${(page - 1) * addressLimit + index + 1}</td>
+                    <td>${escapeSalesHtml(text)}</td>
+                    <td class="col-ops">
+                        <button type="button" data-address-fill="${escapeSalesHtml(text)}">一键填写</button>
+                        <button type="button" data-address-copy="${escapeSalesHtml(text)}">复制</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+        updateAddressPager(count);
+    } catch (error) {
+        body.innerHTML = `<tr><td colspan="3" class="inquiry-address-empty">${escapeSalesHtml(error.message)}</td></tr>`;
+    }
+}
+
+function updateAddressPager(count) {
+    addressDialogEl.querySelector('[data-address-page-now]').textContent = String(addressPage);
+    addressDialogEl.querySelector('[data-address-page-total]').textContent = `/ ${addressPages}`;
+    addressDialogEl.querySelector('[data-address-count]').textContent = `共 ${count} 条记录`;
+    addressDialogEl.querySelectorAll('[data-address-page]').forEach(button => {
+        const direction = button.dataset.addressPage;
+        button.disabled = (direction === 'first' || direction === 'prev')
+            ? addressPage <= 1
+            : addressPage >= addressPages;
+    });
+}
+
+function turnAddressPage(direction) {
+    const target = {first: 1, prev: addressPage - 1, next: addressPage + 1, last: addressPages}[direction];
+    if (!target || target < 1 || target > addressPages) return;
+    loadAddressPage(target);
+}
+
+function fillAddress(text) {
+    if (!addressTarget) return;
+    addressTarget.value = text;
+    addressTarget.dispatchEvent(new Event('input', {bubbles: true}));
+    closeAddressDialog();
+    showSalesToast('已填写收货地址');
+}
+
+async function copyAddress(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        showSalesToast('已复制到剪贴板');
+    } catch {
+        showSalesToast('复制失败，请手动复制');
+    }
+}
+
+inquiryEls.goodsRows?.addEventListener('click', event => {
+    const pick = event.target.closest('[data-address-pick]');
+    if (!pick) return;
+    event.preventDefault();
+    openAddressDialog(pick.closest('[data-goods-index]'));
+});
+
 /* ---------------- 提交 ---------------- */
 
 // ponytail: 图片随提交一起上传，失败时该商品还没创建，不会留下半条数据
@@ -690,6 +888,7 @@ function collectChat() {
         talk_time: inquiryEls.talkTime.value.trim(),
         is_gai_zao_ke_hu: inquiryEls.gaizao.checked ? '1' : '0',
         category: inquiryEls.category.value,
+        quote_source: inquiryEls.quoteSource.value,
         zhi_ti_num: inquiryEls.zhiTi.value.trim(),
         fu_ti_num: inquiryEls.fuTi.value.trim(),
     };
@@ -759,8 +958,9 @@ async function submitInquiry() {
 /* ---------------- 事件 ---------------- */
 
 inquiryEls.entry?.addEventListener('click', openInquiry);
-inquiryEls.close?.addEventListener('click', closeInquiry);
-inquiryEls.cancel?.addEventListener('click', closeInquiry);
+// 关掉询价表单回到选择客户，只有选择客户上的叉才整段退出
+inquiryEls.close?.addEventListener('click', backToClientPicker);
+inquiryEls.cancel?.addEventListener('click', backToClientPicker);
 inquiryEls.pickerClose?.addEventListener('click', closePicker);
 inquiryEls.clientSearch?.addEventListener('click', () => searchClients(1));
 inquiryEls.clientKeyword?.addEventListener('keydown', event => {
@@ -768,12 +968,6 @@ inquiryEls.clientKeyword?.addEventListener('keydown', event => {
         event.preventDefault();
         searchClients(1);
     }
-});
-// ESC 关闭弹窗
-document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape') return;
-    if (inquiryEls.picker?.classList.contains('show')) closePicker();
-    else if (inquiryEls.overlay?.classList.contains('show')) closeInquiry();
 });
 inquiryEls.clientPrev?.addEventListener('click', () => {
     if (inquiryState.clientPage > 1) searchClients(inquiryState.clientPage - 1);
@@ -802,7 +996,21 @@ function syncGoodsField(event) {
     if (good) good[field] = event.target.value;
 }
 
-inquiryEls.goodsRows?.addEventListener('input', syncGoodsField);
+// 售价、含税售价互为替代，实时切换必填星号
+function syncPriceStars(card) {
+    if (!card) return;
+    const price = card.querySelector('[data-field="goods_price"]')?.value.trim();
+    const tax = card.querySelector('[data-field="goods_price_tax"]')?.value.trim();
+    const priceStar = card.querySelector('[data-star="goods_price"]');
+    const taxStar = card.querySelector('[data-star="goods_price_tax"]');
+    if (priceStar) priceStar.hidden = Boolean(tax);
+    if (taxStar) taxStar.hidden = Boolean(price);
+}
+
+inquiryEls.goodsRows?.addEventListener('input', event => {
+    syncGoodsField(event);
+    syncPriceStars(event.target.closest('[data-goods-index]'));
+});
 inquiryEls.goodsRows?.addEventListener('change', event => {
     const input = event.target.closest('[data-image-input]');
     if (!input) {
@@ -813,6 +1021,167 @@ inquiryEls.goodsRows?.addEventListener('change', event => {
     appendImageFiles(inquiryState.goods[Number(card?.dataset.goodsIndex)], Array.from(input.files));
     // 清空才能重复选择同一张图
     input.value = '';
+});
+
+/* ---------------- 可输入筛选的下拉 ---------------- */
+
+function closeSelect(box) {
+    if (!box) return;
+    const input = box.querySelector('.inquiry-select-input');
+    // 没选就走人，输入框恢复成上一个已选的值
+    input.value = input.dataset.label || '';
+    input.dataset.hint = '0';
+    input.classList.remove('is-hint');
+    box.classList.remove('is-open');
+    box.querySelector('.inquiry-select-options').hidden = true;
+}
+
+function ensureSelectItem(panel, className, defaultText = '') {
+    let item = panel.querySelector(`li.${className}`);
+    if (!item) {
+        item = document.createElement('li');
+        item.className = className;
+        item.textContent = defaultText;
+        panel.appendChild(item);
+    }
+    return item;
+}
+
+function filterSelect(box, keyword) {
+    const panel = box.querySelector('.inquiry-select-options');
+    const items = Array.from(panel.querySelectorAll('li:not(.is-empty):not(.is-create)'));
+    const word = keyword.trim().toLowerCase();
+    const current = box.querySelector('[data-field]')?.value || '';
+    let visible = 0;
+    items.forEach(item => {
+        const hit = !word || item.textContent.toLowerCase().includes(word);
+        item.hidden = !hit;
+        item.classList.remove('is-active');
+        // 当前选中的那条高亮，跟 OA 的下拉一致
+        item.classList.toggle('is-selected', Boolean(current) && item.dataset.value === current);
+        if (hit) visible += 1;
+    });
+    const create = ensureSelectItem(panel, 'is-create');
+    const empty = ensureSelectItem(panel, 'is-empty', '没有匹配的选项');
+    create.hidden = true;
+    empty.hidden = true;
+    if (visible) return;
+    // 允许自定义值的字段，把输入的内容当成一个可选项
+    if (box.hasAttribute('data-create') && keyword.trim()) {
+        const text = keyword.trim();
+        create.hidden = false;
+        create.dataset.value = text;
+        create.dataset.label = text;
+        create.textContent = `使用“${text}”`;
+    } else {
+        empty.hidden = false;
+    }
+}
+
+function openSelect(box) {
+    inquiryEls.goodsRows.querySelectorAll('[data-select].is-open').forEach(other => {
+        if (other !== box) closeSelect(other);
+    });
+    const input = box.querySelector('.inquiry-select-input');
+    const label = input.dataset.label || '';
+    box.classList.add('is-open');
+    box.querySelector('.inquiry-select-options').hidden = false;
+    // 已选文案变成灰字提示，光标停在末尾，不整段选中
+    input.value = label;
+    input.dataset.hint = label ? '1' : '0';
+    input.classList.toggle('is-hint', Boolean(label));
+    filterSelect(box, '');
+    input.setSelectionRange(input.value.length, input.value.length);
+}
+
+function pickSelect(item) {
+    const box = item.closest('[data-select]');
+    const input = box.querySelector('.inquiry-select-input');
+    const hidden = box.querySelector('[data-field]');
+    const text = item.dataset.label || item.textContent;
+    input.value = text;
+    input.dataset.label = text;
+    input.dataset.hint = '0';
+    input.classList.remove('is-hint');
+    hidden.value = item.dataset.value || text;
+    box.classList.remove('is-open');
+    box.querySelector('.inquiry-select-options').hidden = true;
+    hidden.dispatchEvent(new Event('change', {bubbles: true}));
+}
+
+inquiryEls.goodsRows?.addEventListener('focusin', event => {
+    const box = event.target.closest?.('[data-select]');
+    if (box && event.target.classList.contains('inquiry-select-input')) openSelect(box);
+});
+
+inquiryEls.goodsRows?.addEventListener('input', event => {
+    const box = event.target.closest('[data-select]');
+    if (!box || !event.target.classList.contains('inquiry-select-input')) return;
+    const input = event.target;
+    // 灰字状态下开始打字，用输入的内容整段替换掉已选文案
+    if (input.dataset.hint === '1') {
+        const label = input.dataset.label || '';
+        if (label && input.value.startsWith(label)) input.value = input.value.slice(label.length);
+        input.dataset.hint = '0';
+        input.classList.remove('is-hint');
+    }
+    box.querySelector('.inquiry-select-options').hidden = false;
+    filterSelect(box, input.value);
+});
+
+inquiryEls.goodsRows?.addEventListener('mousedown', event => {
+    // 点面板时别让输入框失焦，否则面板会先被关掉
+    if (event.target.closest('.inquiry-select-options')) event.preventDefault();
+});
+
+inquiryEls.goodsRows?.addEventListener('focusout', event => {
+    const box = event.target.closest?.('[data-select]');
+    if (box && !box.contains(event.relatedTarget)) closeSelect(box);
+});
+
+inquiryEls.goodsRows?.addEventListener('click', event => {
+    const input = event.target.closest('.inquiry-select-input');
+    if (input) openSelect(input.closest('[data-select]'));
+    const item = event.target.closest('.inquiry-select-options li');
+    if (item && !item.classList.contains('is-empty')) pickSelect(item);
+});
+
+inquiryEls.goodsRows?.addEventListener('keydown', event => {
+    const box = event.target.closest?.('[data-select]');
+    if (!box) return;
+    const items = Array.from(box.querySelectorAll('.inquiry-select-options li'))
+        .filter(item => !item.hidden && !item.classList.contains('is-empty'));
+    if (event.key === 'Escape') {
+        event.stopPropagation();
+        closeSelect(box);
+        return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (box.querySelector('.inquiry-select-options').hidden) {
+            openSelect(box);
+            return;
+        }
+        const active = box.querySelector('li.is-active');
+        const index = active ? items.indexOf(active) : -1;
+        const next = event.key === 'ArrowDown'
+            ? Math.min(items.length - 1, index + 1)
+            : Math.max(0, index - 1);
+        items.forEach(item => item.classList.remove('is-active'));
+        items[next]?.classList.add('is-active');
+        return;
+    }
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        const active = box.querySelector('li.is-active') || items[0];
+        if (active) pickSelect(active);
+    }
+});
+
+document.addEventListener('mousedown', event => {
+    if (!event.target.closest?.('[data-select]')) {
+        inquiryEls.goodsRows?.querySelectorAll('[data-select].is-open').forEach(closeSelect);
+    }
 });
 
 inquiryEls.goodsRows?.addEventListener('dragover', event => {
@@ -897,10 +1266,14 @@ document.addEventListener('keydown', event => {
         return;
     }
     if (event.key !== 'Escape') return;
+    if (addressDialogEl?.classList.contains('show')) {
+        closeAddressDialog();
+        return;
+    }
     if (inquiryEls.picker?.classList.contains('show')) {
         closePicker();
         return;
     }
-    if (inquiryEls.overlay?.classList.contains('show')) closeInquiry();
+    if (inquiryEls.overlay?.classList.contains('show')) backToClientPicker();
 });
 

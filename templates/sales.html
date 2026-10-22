@@ -6,7 +6,7 @@
     <title>销售商品查询</title>
     <link rel="icon" href="/static/img/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="/static/img/site-logo.png">
-    <link rel="stylesheet" href="/static/css/sales.css?v=20261021-20">
+    <link rel="stylesheet" href="/static/css/sales.css?v=20261022-29">
     <link rel="preconnect" href="https://oa.yixiuti.com">
 </head>
 <body data-user-name="{{ sales_user_name }}">
@@ -333,6 +333,14 @@
                                     <option value="D类">D类</option>
                                 </select>
                             </label>
+                            <label class="inquiry-chat-item">报价来源
+                                <select id="salesInquiryQuoteSource">
+                                    <option value="">请选择</option>
+                                    <option value="采购">采购</option>
+                                    <option value="销售">销售</option>
+                                    <option value="工具箱">工具箱</option>
+                                </select>
+                            </label>
                         </div>
                         <div class="inquiry-chat-row">
                             <label class="inquiry-chat-item">直梯台量
@@ -359,6 +367,6 @@
 
     <div class="sales-toast" id="salesToast"></div>
     <script src="/static/js/sales.js?v=20261021-2"></script>
-    <script src="/static/js/sales-inquiry.js?v=20261021-20"></script>
+    <script src="/static/js/sales-inquiry.js?v=20261022-29"></script>
 </body>
 </html>
