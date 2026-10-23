@@ -679,7 +679,7 @@ async function submitSalesFeedback(event) {
                 description,
             }),
         });
-        showSalesToast('反馈提交成功，感谢你的帮助');
+        showSalesToast('反馈提交成功，感谢你的帮助', 'success');
         closeSalesFeedback();
     } catch (error) {
         showSalesToast(error.message || '反馈提交失败，请稍后重试', 'error');

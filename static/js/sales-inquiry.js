@@ -588,13 +588,24 @@ function zoomViewer(step) {
 
 /* ---------------- 右键粘贴（OA 上传位上的右键菜单） ---------------- */
 
-let pasteMenuEl = null;
+// Ctrl+V 粘贴图片：直接监听 paste 事件，从剪贴板数据提取图片
+inquiryEls.goodsRows?.addEventListener('paste', event => {
+    const zone = event.target.closest('[data-drop-zone]');
+    if (!zone) return;
+    const files = imagesFromTransfer(event.clipboardData);
+    if (!files.length) return;
+    event.preventDefault();
+    const card = zone.closest('[data-goods-index]');
+    const good = inquiryState.goods[Number(card?.dataset.goodsIndex)];
+    if (good) appendImageFiles(good, files);
+});
 
+// 右键菜单：粘贴图片
+let pasteMenuEl = null;
 function closePasteMenu() {
     pasteMenuEl?.remove();
     pasteMenuEl = null;
 }
-
 inquiryEls.goodsRows?.addEventListener('contextmenu', event => {
     const zone = event.target.closest('[data-drop-zone]');
     if (!zone) return;
@@ -603,7 +614,7 @@ inquiryEls.goodsRows?.addEventListener('contextmenu', event => {
     const card = zone.closest('[data-goods-index]');
     pasteMenuEl = document.createElement('div');
     pasteMenuEl.className = 'inquiry-paste-menu';
-    pasteMenuEl.textContent = '粘贴';
+    pasteMenuEl.textContent = '粘贴图片';
     pasteMenuEl.style.left = `${event.clientX}px`;
     pasteMenuEl.style.top = `${event.clientY}px`;
     pasteMenuEl.addEventListener('click', async () => {
@@ -612,7 +623,7 @@ inquiryEls.goodsRows?.addEventListener('contextmenu', event => {
         try {
             const files = [];
             for (const item of await navigator.clipboard.read()) {
-                for (const type of item.types.filter(type => type.startsWith('image/'))) {
+                for (const type of item.types.filter(t => t.startsWith('image/'))) {
                     const blob = await item.getType(type);
                     files.push(new File([blob], `paste_${Date.now()}.png`, {type}));
                 }
@@ -620,7 +631,7 @@ inquiryEls.goodsRows?.addEventListener('contextmenu', event => {
             if (!files.length) throw new Error('剪贴板里没有图片');
             appendImageFiles(good, files);
         } catch {
-            showSalesToast('请按 Ctrl + V 粘贴图片');
+            showSalesToast('粘贴失败，请按 Ctrl + V 粘贴图片', 'error');
         }
     });
     document.body.appendChild(pasteMenuEl);
@@ -777,15 +788,28 @@ function fillAddress(text) {
     addressTarget.value = text;
     addressTarget.dispatchEvent(new Event('input', {bubbles: true}));
     closeAddressDialog();
-    showSalesToast('已填写收货地址');
+    showSalesToast('已填写收货地址', 'success');
 }
 
 async function copyAddress(text) {
     try {
         await navigator.clipboard.writeText(text);
-        showSalesToast('已复制到剪贴板');
+        showSalesToast('已复制到剪贴板', 'success');
     } catch {
-        showSalesToast('复制失败，请手动复制');
+        // 兜底：用 execCommand 复制
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showSalesToast('已复制到剪贴板', 'success');
+        } catch {
+            showSalesToast('复制失败，请手动复制');
+        }
     }
 }
 
@@ -937,7 +961,7 @@ async function submitInquiry() {
             if (!goodsId) throw new Error('创建询价商品失败');
             createdIds.push(goodsId);
         }
-        showSalesToast(`询价单已生成，含 ${goods.length} 个商品`);
+        showSalesToast(`询价单已生成，含 ${goods.length} 个商品`, 'success');
         closeInquiry(true);
         loadSalesProducts();
     } catch (error) {
