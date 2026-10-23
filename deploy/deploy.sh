@@ -12,12 +12,12 @@ STAMP=$(date +%Y%m%d_%H%M%S)
 
 echo "=== 开始部署 $STAMP (分支: $BRANCH) ==="
 
-# 1. 拉取最新代码
+# 1. 拉取最新代码（部署目录以远端为准，服务器上的本地改动一律丢弃）
 echo "[1/5] 拉取代码..."
 cd "$APP_DIR"
 git fetch origin
 git checkout "$BRANCH"
-git pull origin "$BRANCH"
+git reset --hard "origin/$BRANCH"
 
 # 2. 安装依赖
 echo "[2/5] 检查依赖..."
