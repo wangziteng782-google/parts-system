@@ -600,7 +600,7 @@ inquiryEls.goodsRows?.addEventListener('paste', event => {
     if (good) appendImageFiles(good, files);
 });
 
-// 右键菜单：粘贴图片（navigator.clipboard.read，失败时提示用 Ctrl+V）
+// 右键菜单：粘贴图片。真正去读剪贴板，读不了再退回 Ctrl+V
 let pasteMenuEl = null;
 function closePasteMenu() {
     pasteMenuEl?.remove();
@@ -619,25 +619,29 @@ inquiryEls.goodsRows?.addEventListener('contextmenu', event => {
     pasteMenuEl.style.top = `${event.clientY}px`;
     pasteMenuEl.addEventListener('click', async () => {
         closePasteMenu();
+        const good = inquiryState.goods[Number(card?.dataset.goodsIndex)];
+        if (!good) return;
+        // navigator.clipboard 只在 HTTPS 或 localhost 下存在，Firefox 也不支持读图片
         if (!navigator.clipboard?.read) {
-            showSalesToast('浏览器不支持，请按 Ctrl + V 粘贴', 'error');
+            showSalesToast('当前环境读不了剪贴板，请点一下上传位后按 Ctrl + V');
             return;
         }
-        const good = inquiryState.goods[Number(card?.dataset.goodsIndex)];
         try {
             const files = [];
-            const items = await navigator.clipboard.read();
-            for (const item of items) {
-                for (const type of item.types.filter(t => t.startsWith('image/'))) {
+            for (const item of await navigator.clipboard.read()) {
+                for (const type of item.types.filter(type => type.startsWith('image/'))) {
                     const blob = await item.getType(type);
-                    files.push(new File([blob], `paste_${Date.now()}_${files.length}.png`, {type}));
+                    files.push(new File([blob], `paste_${Date.now()}.${type.split('/')[1]}`, {type}));
                 }
             }
-            if (!files.length) throw new Error('剪贴板里没有图片');
+            if (!files.length) {
+                showSalesToast('剪贴板里没有图片');
+                return;
+            }
             appendImageFiles(good, files);
-            showSalesToast(`已粘贴 ${files.length} 张图片`, 'success');
         } catch {
-            showSalesToast('粘贴失败：浏览器未授权剪贴板访问，请按 Ctrl + V', 'error');
+            // 多数是没点「允许」或权限被拒
+            showSalesToast('未获得剪贴板权限，请点一下上传位后按 Ctrl + V');
         }
     });
     document.body.appendChild(pasteMenuEl);
