@@ -600,7 +600,7 @@ inquiryEls.goodsRows?.addEventListener('paste', event => {
     if (good) appendImageFiles(good, files);
 });
 
-// 右键菜单：提示用 Ctrl+V 粘贴（navigator.clipboard.read 线上不可靠）
+// 右键菜单：粘贴图片（navigator.clipboard.read，失败时提示用 Ctrl+V）
 let pasteMenuEl = null;
 function closePasteMenu() {
     pasteMenuEl?.remove();
@@ -611,11 +611,35 @@ inquiryEls.goodsRows?.addEventListener('contextmenu', event => {
     if (!zone) return;
     event.preventDefault();
     closePasteMenu();
+    const card = zone.closest('[data-goods-index]');
     pasteMenuEl = document.createElement('div');
     pasteMenuEl.className = 'inquiry-paste-menu';
-    pasteMenuEl.textContent = 'Ctrl + V 粘贴图片';
+    pasteMenuEl.textContent = '粘贴图片';
     pasteMenuEl.style.left = `${event.clientX}px`;
     pasteMenuEl.style.top = `${event.clientY}px`;
+    pasteMenuEl.addEventListener('click', async () => {
+        closePasteMenu();
+        if (!navigator.clipboard?.read) {
+            showSalesToast('浏览器不支持，请按 Ctrl + V 粘贴', 'error');
+            return;
+        }
+        const good = inquiryState.goods[Number(card?.dataset.goodsIndex)];
+        try {
+            const files = [];
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+                for (const type of item.types.filter(t => t.startsWith('image/'))) {
+                    const blob = await item.getType(type);
+                    files.push(new File([blob], `paste_${Date.now()}_${files.length}.png`, {type}));
+                }
+            }
+            if (!files.length) throw new Error('剪贴板里没有图片');
+            appendImageFiles(good, files);
+            showSalesToast(`已粘贴 ${files.length} 张图片`, 'success');
+        } catch {
+            showSalesToast('粘贴失败：浏览器未授权剪贴板访问，请按 Ctrl + V', 'error');
+        }
+    });
     document.body.appendChild(pasteMenuEl);
     document.addEventListener('click', closePasteMenu, {once: true});
 });
