@@ -278,7 +278,8 @@ function selectClient(client) {
     inquiryEls.overlay.classList.add('show');
     inquiryEls.overlay.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
-    if (!inquiryState.goods.length) addGoodsRow({goods_name: salesState.keyword || ''});
+    const keyword = document.getElementById('salesSearchInput')?.value?.trim() || salesState.keyword || '';
+    if (!inquiryState.goods.length) addGoodsRow({goods_spec: keyword});
 }
 
 /* ---------------- 产品 ---------------- */
@@ -287,7 +288,7 @@ function addGoodsRow(prefill = {}) {
     inquiryState.goods.push({
         goods_name: prefill.goods_name || '',
         ele_type: '',
-        goods_spec: '',
+        goods_spec: prefill.goods_spec || '',
         goods_type: 1,
         source: '采购',
         inquiry_time: today(),
