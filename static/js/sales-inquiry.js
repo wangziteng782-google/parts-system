@@ -600,7 +600,7 @@ inquiryEls.goodsRows?.addEventListener('paste', event => {
     if (good) appendImageFiles(good, files);
 });
 
-// 右键菜单：粘贴图片
+// 右键菜单：提示用 Ctrl+V 粘贴（navigator.clipboard.read 线上不可靠）
 let pasteMenuEl = null;
 function closePasteMenu() {
     pasteMenuEl?.remove();
@@ -611,29 +611,11 @@ inquiryEls.goodsRows?.addEventListener('contextmenu', event => {
     if (!zone) return;
     event.preventDefault();
     closePasteMenu();
-    const card = zone.closest('[data-goods-index]');
     pasteMenuEl = document.createElement('div');
     pasteMenuEl.className = 'inquiry-paste-menu';
-    pasteMenuEl.textContent = '粘贴图片';
+    pasteMenuEl.textContent = 'Ctrl + V 粘贴图片';
     pasteMenuEl.style.left = `${event.clientX}px`;
     pasteMenuEl.style.top = `${event.clientY}px`;
-    pasteMenuEl.addEventListener('click', async () => {
-        closePasteMenu();
-        const good = inquiryState.goods[Number(card?.dataset.goodsIndex)];
-        try {
-            const files = [];
-            for (const item of await navigator.clipboard.read()) {
-                for (const type of item.types.filter(t => t.startsWith('image/'))) {
-                    const blob = await item.getType(type);
-                    files.push(new File([blob], `paste_${Date.now()}.png`, {type}));
-                }
-            }
-            if (!files.length) throw new Error('剪贴板里没有图片');
-            appendImageFiles(good, files);
-        } catch {
-            showSalesToast('粘贴失败，请按 Ctrl + V 粘贴图片', 'error');
-        }
-    });
     document.body.appendChild(pasteMenuEl);
     document.addEventListener('click', closePasteMenu, {once: true});
 });
