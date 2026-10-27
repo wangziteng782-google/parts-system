@@ -1,3 +1,9 @@
+"""产品规格与供应商价格模块
+
+负责产品规格字典（spec_name / spec_value）、规格组合（variant_group）、
+供应商价格（product_variant_prices）的增删改查，以及对外展示标记的切换。
+同时提供 OA 供应商列表查询接口。
+"""
 import datetime
 import uuid
 import time

@@ -1,3 +1,9 @@
+"""产品关联模块
+
+负责产品（SPU）之间的关联关系（product_relations 表）：
+查询某产品的所有关联产品、新增关联、删除关联。
+用于配件维护页展示产品之间的替代/配套/关联关系。
+"""
 from fastapi import HTTPException
 
 from ..bootstrap import app

@@ -1,3 +1,9 @@
+"""产品历史参数模块（Legacy）
+
+product_params 表的 CRUD，存产品的键值对参数（型号描述、安装尺寸等）。
+逐步被 product_variant_specs / product_variant_groups 新规格体系替代，
+但旧数据仍在此表中，接口保留供前端兼容使用。
+"""
 from typing import Optional
 
 from fastapi import HTTPException

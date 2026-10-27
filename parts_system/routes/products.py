@@ -1,3 +1,8 @@
+"""产品（SPU）CRUD 模块
+
+负责配件库产品的增删改查、图片上传、重复标记管理、完成状态切换，
+以及配件维护页（/goods）的 HTML 渲染入口。
+"""
 import json
 import mimetypes
 import uuid

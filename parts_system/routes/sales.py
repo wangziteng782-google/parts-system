@@ -1,4 +1,9 @@
-"""销售商品查询：只读返回商品、规格和换算后的销售展示价格。"""
+"""销售查询模块
+
+销售端首页（/sales）数据源：并列展示配件库产品与 OA 询价记录，
+提供换算后的销售展示价、询价沟通记录查询、产品关联询价报价查询，
+以及待改正反馈的提交接口。
+"""
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from datetime import date, datetime

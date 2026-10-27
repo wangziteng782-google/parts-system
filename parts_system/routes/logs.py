@@ -1,3 +1,8 @@
+"""操作日志模块
+
+employee_operation_logs 表的查询接口：按用户、模块、日期范围筛选，
+支持分页和单条详情查看，为日志审计页（/logs）提供数据源。
+"""
 from datetime import date
 from typing import Optional
 

@@ -1,3 +1,8 @@
+"""HTML 页面入口模块
+
+负责所有前端页面的路由入口（首页、销售页、favicon 等），
+不处理数据逻辑，只渲染 templates 目录下的模板。
+"""
 from fastapi import Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 

@@ -1,4 +1,8 @@
-"""Inquiry listing controls for purchase/admin users."""
+"""OA 询价管理模块
+
+采购/管理员视角：从 OA 只读拉取已完成询价任务（mission_type=1, mission_status=4），
+配合本地的上架/隐藏状态表和反馈表，构成询价管理台（/inquiries）的数据源。
+"""
 
 from math import ceil
 from typing import Optional

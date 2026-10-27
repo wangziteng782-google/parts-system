@@ -1,3 +1,8 @@
+"""健康检查模块
+
+返回系统运行状态、数据库连接状态、版本号等基本信息，
+供 Nginx / systemd / 监控系统定时探测使用。
+"""
 from datetime import datetime
 
 from fastapi import HTTPException

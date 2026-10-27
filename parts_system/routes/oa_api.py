@@ -1,4 +1,8 @@
-"""OA系统回调接口：仅供OA外部调用，按产品名查型号、按ID查规格。"""
+"""OA 系统外部接口（APIRouter，未挂主 app）
+
+供 OA 系统反向调用：按产品名查型号列表、按产品 ID 查规格详情。
+使用独立的 APIRouter，当前未在 bootstrap.py 中挂载到主 app（待启用）。
+"""
 
 from fastapi import APIRouter, HTTPException
 

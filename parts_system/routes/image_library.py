@@ -1,3 +1,8 @@
+"""图片库模块
+
+提供按分类列出图片、按产品列出图片的接口，
+供配件维护页的图片浏览器和产品关联图片展示使用。
+"""
 from typing import Optional
 
 from pydantic import BaseModel

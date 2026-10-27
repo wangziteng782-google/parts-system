@@ -1,3 +1,9 @@
+"""产品分类与字段标签模块
+
+提供产品分类（categories / product_classifications）的增删改查，
+以及产品必填字段标签（field_labels）的读取接口，
+为配件维护页的表单下拉和校验规则提供数据字典。
+"""
 from typing import Optional
 
 from fastapi import HTTPException
