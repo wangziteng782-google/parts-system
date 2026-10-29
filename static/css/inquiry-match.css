@@ -60,6 +60,30 @@ body {
     padding: 8px 11px;
 }
 
+.im-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.im-back {
+    flex: 0 0 auto;
+    padding: 8px 13px;
+    font-size: 12px;
+    color: #4e5d76;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    text-decoration: none;
+    white-space: nowrap;
+    box-shadow: 0 3px 12px rgba(39, 60, 93, .04);
+}
+
+.im-back:hover {
+    background: #f5f8fc;
+    color: var(--text);
+}
+
 .im-workspace {
     flex: 1;
     min-height: 0;

@@ -1,4 +1,4 @@
-// 询价记录匹配：四栏联动，规格弹窗复用 variants.js 的 openSpecManager
+// 产品关联：四栏联动，规格弹窗复用 variants.js 的 openSpecManager
 
 const imState = {
     records: [],
