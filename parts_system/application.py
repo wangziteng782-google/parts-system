@@ -12,6 +12,7 @@ from .routes import health as _health
 from .routes import sales as _sales
 from .routes import feedback as _feedback
 from .routes import inquiries as _inquiries
+from .routes import inquiry_match as _inquiry_match
 from .routes import product_relations as _product_relations
 from .routes.oa_api import router as _oa_api_router
 

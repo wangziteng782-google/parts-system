@@ -64,7 +64,7 @@ PURCHASE_ROLE_IDS = _parse_role_ids(
 INTERNAL_ROLE_IDS = ADMIN_ROLE_IDS | SALES_ROLE_IDS | PURCHASE_ROLE_IDS
 
 PUBLIC_PATHS = {"/favicon.ico", "/api/health"}
-PROTECTED_PAGES = {"/", "/goods", "/logs", "/sales", "/inquiries"}
+PROTECTED_PAGES = {"/", "/goods", "/logs", "/sales", "/inquiries", "/inquiry-match"}
 PROTECTED_SCHEMA_PATHS = {"/docs", "/redoc", "/openapi.json"}
 
 # ========== OA接口跨域配置 ==========

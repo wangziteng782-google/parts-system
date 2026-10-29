@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>询价记录匹配</title>
+    <link rel="icon" href="/static/img/favicon.ico" sizes="any">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/product-detail.css">
+    <link rel="stylesheet" href="/static/css/inquiry-match.css?v=20261028-1">
+</head>
+<body>
+<div class="im-app">
+    <header class="im-head">
+        <div class="im-brand">
+            <img class="site-brand-logo" src="/static/img/site-logo.png" alt="电梯配件管理系统">
+            <div>
+                <h1>询价记录匹配</h1>
+                <p>从 OA 询价记录查找产品，匹配到对应的 SKU 规格组合</p>
+            </div>
+        </div>
+        <div class="im-flow">① 询价记录　›　② 产品分类　›　③ 产品型号　›　④ SKU 匹配</div>
+    </header>
+
+    <main class="im-workspace">
+        <section class="im-panel">
+            <div class="im-panel-head">
+                <div class="im-title">询价记录 <span class="im-count" id="recordCount">0</span></div>
+                <span class="im-muted">OA 同步</span>
+            </div>
+            <div class="im-search">
+                <input id="recordSearch" placeholder="搜索名称或规格型号">
+                <button id="recordSearchBtn" class="im-btn">查询</button>
+            </div>
+            <div class="im-tabs" id="recordTabs">
+                <button class="im-tab active" data-status="all">全部 <span id="statAll">0</span></button>
+                <button class="im-tab" data-status="pending">待匹配 <span id="statPending">0</span></button>
+                <button class="im-tab" data-status="matched">已匹配 <span id="statMatched">0</span></button>
+            </div>
+            <div class="im-list" id="recordList"></div>
+            <div class="im-foot">
+                <span class="im-muted" id="recordPageInfo">-</span>
+                <div class="im-actions">
+                    <button id="recordPrev" class="im-btn im-btn-sm">上一页</button>
+                    <button id="recordNext" class="im-btn im-btn-sm">下一页</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="im-panel">
+            <div class="im-panel-head">
+                <div class="im-title">产品分类 <span class="im-count" id="categoryCount">-</span></div>
+            </div>
+            <div class="im-body">
+                <div class="im-tree" id="categoryTree"></div>
+            </div>
+        </section>
+
+        <section class="im-panel">
+            <div class="im-panel-head">
+                <div class="im-title">产品型号 <span class="im-count" id="productCount">请先选分类</span></div>
+                <button id="createProductBtn" class="im-btn im-btn-sm" title="跳转到产品管理页新增产品">新增产品</button>
+            </div>
+            <div class="im-search">
+                <input id="productSearch" placeholder="输入型号/名称/品牌，不选分类也能搜">
+                <button id="productSearchBtn" class="im-btn">查询</button>
+            </div>
+            <div class="im-list" id="productList"></div>
+        </section>
+
+        <section class="im-panel">
+            <div class="im-panel-head">
+                <div class="im-title">SKU 规格 &amp; 配置组合</div>
+                <button id="openSpecBtn" class="im-btn im-btn-sm" disabled>新增规格</button>
+            </div>
+            <div class="im-body" id="skuBody">
+                <div class="im-empty">请先在左侧选择产品型号</div>
+            </div>
+            <div class="im-foot">
+                <span class="im-muted" id="matchSummary">尚未完成选择</span>
+                <div class="im-actions">
+                    <button id="clearMatch" class="im-btn im-btn-sm" disabled>取消匹配</button>
+                    <button id="saveMatch" class="im-btn im-btn-sm im-btn-primary" disabled>保存匹配</button>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<div class="im-detail-overlay" id="detailOverlay" aria-hidden="true">
+    <section class="im-detail-modal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+        <header class="im-detail-header">
+            <div>
+                <h2 id="detailTitle">询价商品详情</h2>
+                <span class="im-badge">来自询价记录</span>
+            </div>
+            <button type="button" class="im-detail-close" id="detailClose" aria-label="关闭详情">×</button>
+        </header>
+        <div class="im-detail-scroll">
+            <div class="im-detail-card">
+                <div class="im-detail-row">
+                    <div class="im-detail-image">
+                        <img id="detailImage" src="/static/img/site-logo.png" alt="商品图片"
+                             onerror="this.src='/static/img/site-logo.png';this.onerror=null">
+                    </div>
+                    <div class="im-detail-summary" id="detailSummary"></div>
+                </div>
+                <div class="im-detail-strip" id="detailStrip"></div>
+                <div class="im-detail-title">询价信息</div>
+                <div class="im-detail-grid" id="detailGrid"></div>
+
+                <div class="im-detail-chat" id="detailChat" hidden>
+                    <div class="im-detail-title">
+                        <span>沟通记录</span>
+                        <span class="im-muted" id="detailChatCount"></span>
+                    </div>
+                    <div class="im-detail-table-wrap">
+                        <table class="im-detail-table">
+                            <thead>
+                            <tr>
+                                <th>序号</th>
+                                <th>沟通内容</th>
+                                <th>附件</th>
+                                <th>创建人</th>
+                                <th>创建时间</th>
+                            </tr>
+                            </thead>
+                            <tbody id="detailChatBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<div class="im-image-overlay" id="imageOverlay" hidden>
+    <img id="imagePreview" alt="商品图片">
+</div>
+
+<div class="im-toast" id="toast"></div>
+
+<script src="/static/js/state.js"></script>
+<script src="/static/js/variants.js"></script>
+<script src="/static/js/inquiry-match.js?v=20261029-4"></script>
+</body>
+</html>

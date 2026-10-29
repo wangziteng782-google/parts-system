@@ -1,0 +1,80 @@
+2026-10-29 08:59:57 | INFO    | parts_system | ============================================================
+2026-10-29 08:59:57 | INFO    | parts_system | 电梯配件管理系统启动 | 日志输出方式=仅控制台 | 级别=DEBUG
+2026-10-29 08:59:57 | INFO    | parts_system | ============================================================
+INFO:     Started server process [21476]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8123 (Press CTRL+C to quit)
+2026-10-29 09:00:03 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?category=&keyword=&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:03 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?category=&keyword=&limit=2000 | status=200 | elapsed=4.7ms | bytes=39
+2026-10-29 09:00:03 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?category=&keyword=100*10&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:03 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?category=&keyword=100*10&limit=2000 | status=200 | elapsed=61.0ms | bytes=22
+2026-10-29 09:00:03 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?category=电路板与功能模块&keyword=&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:03 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?category=电路板与功能模块&keyword=&limit=2000 | status=200 | elapsed=98.8ms | bytes=132058
+2026-10-29 09:00:03 | INFO    | parts_system | [请求] GET /api/inquiry-match/records?status=pending&page_size=12 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:04 | INFO    | parts_system | [响应] GET /api/inquiry-match/records?status=pending&page_size=12 | status=200 | elapsed=382.2ms | bytes=6579
+2026-10-29 09:00:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=ZDGZ-205&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:04 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=ZDGZ-205&limit=2000 | status=200 | elapsed=76.6ms | bytes=195
+2026-10-29 09:00:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=限速器&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:04 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=限速器&limit=2000 | status=200 | elapsed=61.3ms | bytes=10342
+2026-10-29 09:00:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=HCB-SL-VAR09&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:04 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=HCB-SL-VAR09&limit=2000 | status=200 | elapsed=81.1ms | bytes=22
+2026-10-29 09:00:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=板子&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:04 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=板子&limit=2000 | status=200 | elapsed=73.5ms | bytes=604
+2026-10-29 09:00:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=MCTC-HCB-H-FSJG&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:04 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=MCTC-HCB-H-FSJG&limit=2000 | status=200 | elapsed=81.4ms | bytes=22
+2026-10-29 09:00:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=外呼板&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:04 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=外呼板&limit=2000 | status=200 | elapsed=82.2ms | bytes=10898
+2026-10-29 09:00:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=3TH8040-0XM0（AC220）4NO&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:04 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=3TH8040-0XM0（AC220）4NO&limit=2000 | status=200 | elapsed=73.8ms | bytes=22
+2026-10-29 09:00:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=接触器&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:04 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=接触器&limit=2000 | status=200 | elapsed=68.9ms | bytes=76029
+2026-10-29 09:00:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=TAA633H151&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:04 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=TAA633H151&limit=2000 | status=200 | elapsed=68.8ms | bytes=22
+2026-10-29 09:00:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=编码器&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:04 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=编码器&limit=2000 | status=200 | elapsed=60.8ms | bytes=30827
+2026-10-29 09:00:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=HAA25300P2&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:04 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=HAA25300P2&limit=2000 | status=200 | elapsed=53.5ms | bytes=22
+2026-10-29 09:00:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=对讲&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=对讲&limit=2000 | status=200 | elapsed=68.6ms | bytes=12193
+2026-10-29 09:00:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=100*10&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=100*10&limit=2000 | status=200 | elapsed=79.3ms | bytes=22
+2026-10-29 09:00:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=靴衬&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=靴衬&limit=2000 | status=200 | elapsed=77.0ms | bytes=1033
+2026-10-29 09:00:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=BL3000-STB-V5&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=BL3000-STB-V5&limit=2000 | status=200 | elapsed=75.9ms | bytes=22
+2026-10-29 09:00:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=主板&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=主板&limit=2000 | status=200 | elapsed=63.3ms | bytes=50915
+2026-10-29 09:00:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=RVVP 4*0.75mm\xb2&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=RVVP 4*0.75mm\xb2&limit=2000 | status=200 | elapsed=76.4ms | bytes=22
+2026-10-29 09:00:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=屏蔽线&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=屏蔽线&limit=2000 | status=200 | elapsed=75.3ms | bytes=22
+2026-10-29 09:00:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=DES-100     AEG06C045*A&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=DES-100     AEG06C045*A&limit=2000 | status=200 | elapsed=79.8ms | bytes=22
+2026-10-29 09:00:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=无机房电梯救援主板&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=无机房电梯救援主板&limit=2000 | status=200 | elapsed=73.3ms | bytes=22
+2026-10-29 09:00:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=RKP220/24H&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=RKP220/24H&limit=2000 | status=200 | elapsed=59.9ms | bytes=22
+2026-10-29 09:00:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=电源&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=电源&limit=2000 | status=200 | elapsed=87.4ms | bytes=54994
+2026-10-29 09:00:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=梳齿板&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=梳齿板&limit=2000 | status=200 | elapsed=64.7ms | bytes=948
+2026-10-29 09:00:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=ZDGZ-205&limit=2000 | client=127.0.0.1:61587 | http=1.1
+2026-10-29 09:00:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=ZDGZ-205&limit=2000 | status=200 | elapsed=77.6ms | bytes=195
+2026-10-29 09:00:17 | INFO    | parts_system | [请求] GET /inquiry-match | client=127.0.0.1:61625 | http=1.1
+2026-10-29 09:00:17 | INFO    | parts_system | [响应] GET /inquiry-match | status=200 | elapsed=3.4ms | bytes=6548
+2026-10-29 09:00:17 | INFO    | parts_system | [请求] GET /api/inquiry-match/products?keyword=限速器&limit=50 | client=127.0.0.1:61625 | http=1.1
+2026-10-29 09:00:17 | INFO    | parts_system | [响应] GET /api/inquiry-match/products?keyword=限速器&limit=50 | status=200 | elapsed=77.3ms | bytes=8927
+2026-10-29 09:21:07 | INFO    | parts_system | [请求] GET /inquiry-match | client=127.0.0.1:62186 | http=1.1
+2026-10-29 09:21:07 | INFO    | parts_system | [响应] GET /inquiry-match | status=200 | elapsed=2.6ms | bytes=6554
+2026-10-29 10:07:27 | INFO    | parts_system | [请求] GET /inquiry-match | client=127.0.0.1:63501 | http=1.1
+2026-10-29 10:07:27 | INFO    | parts_system | [响应] GET /inquiry-match | status=200 | elapsed=4.0ms | bytes=6692
+2026-10-29 10:07:27 | INFO    | parts_system | [请求] GET /goods?create=1 | client=127.0.0.1:63501 | http=1.1
+2026-10-29 10:07:27 | INFO    | parts_system | [响应] GET /goods?create=1 | status=200 | elapsed=3.0ms | bytes=6274
+2026-10-29 10:09:34 | INFO    | parts_system | [请求] GET /inquiry-match | client=127.0.0.1:63655 | http=1.1
+2026-10-29 10:09:34 | INFO    | parts_system | [响应] GET /inquiry-match | status=200 | elapsed=3.2ms | bytes=6692
+2026-10-29 10:09:34 | INFO    | parts_system | [请求] GET /static/js/inquiry-match.js?v=20261029-4 | client=127.0.0.1:63655 | http=1.1
+2026-10-29 10:09:34 | INFO    | parts_system | [响应] GET /static/js/inquiry-match.js?v=20261029-4 | status=200 | elapsed=44.7ms | bytes=31209
+2026-10-29 10:34:55 | INFO    | parts_system | [请求] GET /inquiry-match?t=*** | client=127.0.0.1:64350 | http=1.1
+2026-10-29 10:34:55 | WARNING | parts_system | [认证失败] path=/inquiry-match | status=503 | reason=JWT认证密钥尚未配置
+2026-10-29 10:34:55 | INFO    | parts_system | [响应] GET /inquiry-match?t=*** | status=503 | elapsed=1.4ms | bytes=573

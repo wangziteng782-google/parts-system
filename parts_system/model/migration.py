@@ -464,3 +464,24 @@ def ensure_product_variant_tables(conn):
         )
         logger.info("[数据库迁移] parts.status -> TINYINT(1) DEFAULT 1")
         conn.commit()
+
+
+def ensure_part_inquiries_table(conn):
+    """确保询价与SPU/SKU的匹配表存在；只建表，不改动产品与询价数据。"""
+    cursor = conn.cursor()
+    cursor.execute(
+        """CREATE TABLE IF NOT EXISTS part_inquiries (
+            id BIGINT NOT NULL AUTO_INCREMENT COMMENT '关联ID',
+            inquiry_mission_id INT NOT NULL COMMENT 'OA询价任务ID，对应yh_query_goods_mission.id',
+            part_id INT NULL COMMENT '关联SPU，对应parts.id；NULL表示未关联',
+            variant_group_id VARCHAR(64) NULL COMMENT '关联SKU，对应product_variant_group_specs.variant_group_id',
+            matched_by VARCHAR(100) NULL COMMENT '核对的员工',
+            matched_at DATETIME NULL COMMENT '核对时间',
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_inquiry (inquiry_mission_id),
+            KEY idx_part_sku (part_id, variant_group_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='询价记录与SPU/SKU的匹配关系'"""
+    )
+    conn.commit()
