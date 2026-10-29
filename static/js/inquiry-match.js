@@ -711,7 +711,11 @@ function bindEvents() {
 
     document.getElementById('productSearchBtn').onclick = () => loadProducts();
     document.getElementById('createProductBtn').onclick = () => {
-        window.open('/goods?create=1', '_blank');
+        const missionId = imState.selectedMissionId;
+        const url = missionId
+            ? `/goods?create=1&from_inquiry=${encodeURIComponent(missionId)}`
+            : '/goods?create=1';
+        window.open(url, '_blank');
     };
 
     // 从新增产品窗口切回本页时刷新产品列表，新加的产品才会出现

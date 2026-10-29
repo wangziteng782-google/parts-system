@@ -33,6 +33,8 @@ async function init() {
             }
             if (urlParams.get('create') === '1') {
                 openProductCreate();
+                const fromInquiry = urlParams.get('from_inquiry');
+                if (fromInquiry) await prefillCreateFromInquiry(fromInquiry);
             }
         }
 
@@ -61,6 +63,54 @@ async function init() {
             renderCreateImageSection();
             document.getElementById('productCreateOverlay').classList.add('open');
             setTimeout(() => document.getElementById('create-product_name')?.focus(), 80);
+        }
+
+        // 从询价匹配页带过来的产品信息，只做预填，用户可以改
+        async function prefillCreateFromInquiry(inquiryMissionId) {
+            if (!/^\d+$/.test(String(inquiryMissionId || ''))) return;
+            let data;
+            try {
+                const res = await fetch('/api/inquiry-match/detail/' + inquiryMissionId);
+                if (!res.ok) return;
+                data = await res.json();
+            } catch (e) {
+                return;
+            }
+            const setField = (field, value) => {
+                const el = document.getElementById('create-' + field);
+                const text = String(value == null ? '' : value).trim();
+                if (el && text) el.value = text;
+            };
+            setField('product_name', data.product_name);
+            setField('model', data.ele_type || data.specification);
+            setField('product_brand', data.product_brand);
+            setField('purchase_cost', data.purchase_price);
+
+            const guess = guessProductTypeByName(data.product_name);
+            if (guess) {
+                const hidden = document.getElementById('create-product_type');
+                const search = document.getElementById('create-product_type-search');
+                if (hidden) hidden.value = guess;
+                if (search) search.value = guess;
+            }
+
+            if (data.image) {
+                pendingCreateLibraryUrls['key_part_images'] = [data.image];
+                renderCreateImageSection();
+            }
+            showToast(guess
+                ? '已带入询价记录信息，请核对分类和价格'
+                : '已带入询价记录信息，产品分类未识别，请手动选择');
+        }
+
+        // 询价名称套三级分类名，和匹配页同一个思路；猜不中返回空，让用户手选
+        function guessProductTypeByName(name) {
+            const text = String(name || '').trim();
+            if (!text) return '';
+            if (productTypeValues.includes(text)) return text;
+            const hits = productTypeValues.filter(value => text.includes(value));
+            hits.sort((a, b) => b.length - a.length);
+            return hits[0] || '';
         }
 
         function renderProductCreateField(field, label, type) {
