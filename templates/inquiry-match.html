@@ -61,14 +61,21 @@
 
         <section class="im-panel">
             <div class="im-panel-head">
-                <div class="im-title">产品型号 <span class="im-count" id="productCount">请先选分类</span></div>
+                <div class="im-title">产品型号 <span class="im-count" id="productCount">加载中…</span></div>
                 <button id="createProductBtn" class="im-btn im-btn-sm" title="跳转到产品管理页新增产品">新增产品</button>
             </div>
             <div class="im-search">
-                <input id="productSearch" placeholder="输入型号/名称/品牌，不选分类也能搜">
+                <input id="productSearch" placeholder="输入型号/名称/品牌，输入即搜索" autocomplete="off">
                 <button id="productSearchBtn" class="im-btn">查询</button>
             </div>
             <div class="im-list" id="productList"></div>
+            <div class="im-foot">
+                <span class="im-muted" id="productPageInfo">-</span>
+                <div class="im-actions">
+                    <button id="productPrev" class="im-btn im-btn-sm">上一页</button>
+                    <button id="productNext" class="im-btn im-btn-sm">下一页</button>
+                </div>
+            </div>
         </section>
 
         <section class="im-panel">
@@ -145,6 +152,6 @@
 
 <script src="/static/js/state.js"></script>
 <script src="/static/js/variants.js"></script>
-<script src="/static/js/inquiry-match.js?v=20261029-6"></script>
+<script src="/static/js/inquiry-match.js?v=20261030-1"></script>
 </body>
 </html>

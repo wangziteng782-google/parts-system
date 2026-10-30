@@ -95,7 +95,7 @@ async function init() {
             }
 
             if (data.image) {
-                pendingCreateLibraryUrls['key_part_images'] = [data.image];
+                pendingCreateLibraryUrls['actual_photos'] = [data.image];
                 renderCreateImageSection();
             }
             showToast(guess

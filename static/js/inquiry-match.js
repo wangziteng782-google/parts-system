@@ -11,6 +11,10 @@ const imState = {
     leaves: [],
     selectedCategory: '',
     products: [],
+    productPage: 1,
+    productPageSize: 30,
+    productPages: 1,
+    productTotal: 0,
     selectedPartId: null,
     specs: [],
     combinations: [],
@@ -147,6 +151,7 @@ function selectRecord(missionId) {
         imState.selectedGroupId = record.variant_group_id || '';
         resetSkuPanel();
         renderTree();
+        imState.productPage = 1;
         loadProducts().then(() => ensureProductSelected(record));
         return;
     }
@@ -171,16 +176,18 @@ async function autoFilterByRecord(record) {
 
     if (!tries.length) {
         input.value = '';
+        imState.productPage = 1;
         await loadProducts();
         return;
     }
 
     for (const attempt of tries) {
         input.value = attempt.value;
+        imState.productPage = 1;
         await loadProducts();
-        if (imState.products.length) {
+        if (imState.productTotal) {
             document.getElementById('productCount').textContent =
-                `${imState.products.length} 个型号（按${attempt.label}自动筛选）`;
+                `共 ${imState.productTotal} 个型号（按${attempt.label}自动筛选）`;
             return;
         }
     }
@@ -270,6 +277,7 @@ function renderTree() {
                 node.classList.toggle('active', node === el);
             });
             resetSkuPanel();
+            imState.productPage = 1;
             loadProducts();
         };
     });
@@ -282,18 +290,20 @@ function renderTree() {
 function loadProducts() {
     const list = document.getElementById('productList');
     const keyword = document.getElementById('productSearch').value.trim();
-    if (!imState.selectedCategory && !keyword) {
-        list.innerHTML = '<div class="im-empty">请先在第二列选择产品分类，或直接输入关键词搜索</div>';
-        document.getElementById('productCount').textContent = '请先选分类';
-        return Promise.resolve();
-    }
-    const params = new URLSearchParams({ category: imState.selectedCategory, keyword, limit: 2000 });
+    const params = new URLSearchParams({
+        category: imState.selectedCategory,
+        keyword,
+        page: imState.productPage,
+        page_size: imState.productPageSize,
+    });
     return imFetch('/api/inquiry-match/products?' + params).then(data => {
         imState.products = data.items;
-        const shown = data.items.length;
-        const total = data.total || shown;
-        document.getElementById('productCount').textContent =
-            total > shown ? `已显示 ${shown} / 共 ${total} 个型号` : `${shown} 个型号`;
+        imState.productPage = data.page;
+        imState.productPages = data.pages || 1;
+        imState.productTotal = data.total || 0;
+        document.getElementById('productCount').textContent = `共 ${imState.productTotal} 个型号`;
+        document.getElementById('productPageInfo').textContent =
+            `第 ${imState.productPage} / ${imState.productPages} 页`;
         renderProducts();
     }).catch(error => {
         list.innerHTML = `<div class="im-empty">${escapeHtml(error.message)}</div>`;
@@ -303,7 +313,7 @@ function loadProducts() {
 function renderProducts() {
     const list = document.getElementById('productList');
     if (!imState.products.length) {
-        list.innerHTML = '<div class="im-empty">该分类下没有产品</div>';
+        list.innerHTML = '<div class="im-empty">没有找到产品，可换关键词试试</div>';
         return;
     }
     list.innerHTML = imState.products.map((item, index) => `
@@ -709,7 +719,31 @@ function bindEvents() {
         }
     };
 
-    document.getElementById('productSearchBtn').onclick = () => loadProducts();
+    document.getElementById('productSearchBtn').onclick = () => {
+        imState.productPage = 1;
+        loadProducts();
+    };
+    // 输入即搜（300ms 防抖），清空自动恢复完整列表，参考 goods 页产品列表
+    let productSearchTimer;
+    document.getElementById('productSearch').addEventListener('input', () => {
+        clearTimeout(productSearchTimer);
+        productSearchTimer = setTimeout(() => {
+            imState.productPage = 1;
+            loadProducts();
+        }, 300);
+    });
+    document.getElementById('productPrev').onclick = () => {
+        if (imState.productPage > 1) {
+            imState.productPage -= 1;
+            loadProducts();
+        }
+    };
+    document.getElementById('productNext').onclick = () => {
+        if (imState.productPage < imState.productPages) {
+            imState.productPage += 1;
+            loadProducts();
+        }
+    };
     document.getElementById('createProductBtn').onclick = () => {
         const missionId = imState.selectedMissionId;
         const url = missionId
@@ -721,11 +755,14 @@ function bindEvents() {
     // 从新增产品窗口切回本页时刷新产品列表，新加的产品才会出现
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) return;
-        if (!imState.selectedCategory && !document.getElementById('productSearch').value.trim()) return;
         loadProducts();
     });
     document.getElementById('productSearch').addEventListener('keydown', event => {
-        if (event.key === 'Enter') loadProducts();
+        if (event.key === 'Enter') {
+            clearTimeout(productSearchTimer);
+            imState.productPage = 1;
+            loadProducts();
+        }
     });
 
     document.getElementById('openSpecBtn').onclick = openSpecEditor;
@@ -753,6 +790,7 @@ async function initInquiryMatch() {
     bindEvents();
     await loadCategories();
     await loadRecords();
+    loadProducts();
     updateSummary();
 }
 

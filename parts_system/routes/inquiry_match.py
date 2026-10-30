@@ -244,11 +244,8 @@ async def list_match_categories():
 
 
 @app.get("/api/inquiry-match/products")
-async def list_match_products(category: str = "", keyword: str = "", limit: int = 500):
-    """按三级分类查产品，带 SKU 数和已关联询价数；只给关键词时跨分类搜。"""
-    if not category and not keyword:
-        return {"items": [], "total": 0, "sku_matched": {}}
-
+async def list_match_products(category: str = "", keyword: str = "", page: int = 1, page_size: int = 30):
+    """产品列表：默认展示全部产品，可选分类过滤或关键词跨分类搜，分页返回。"""
     where: list = []
     params: list = []
     if category:
@@ -262,6 +259,9 @@ async def list_match_products(category: str = "", keyword: str = "", limit: int 
         params.extend([like, like, like])
 
     where_sql = " AND ".join(where) or "1=1"
+    page = max(1, page)
+    page_size = max(1, min(100, page_size))
+    offset = (page - 1) * page_size
     conn = get_db()
     try:
         cursor = conn.cursor()
@@ -276,8 +276,8 @@ async def list_match_products(category: str = "", keyword: str = "", limit: int 
                FROM parts p
                WHERE {where_sql}
                ORDER BY p.id DESC
-               LIMIT {max(1, min(2000, limit))}""",
-            params,
+               LIMIT %s OFFSET %s""",
+            [*params, page_size, offset],
         )
         items = list(cursor.fetchall())
 
@@ -299,6 +299,9 @@ async def list_match_products(category: str = "", keyword: str = "", limit: int 
 
     return {
         "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": (total + page_size - 1) // page_size,
         "items": [
             {
                 "id": int(item["id"]),
