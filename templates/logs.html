@@ -6,7 +6,7 @@
     <title>数据操作日志</title>
     <link rel="icon" href="/static/img/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="/static/img/site-logo.png">
-    <link rel="stylesheet" href="/static/css/logs.css?v=20260810-2">
+    <link rel="stylesheet" href="/static/css/logs.css?v=20261030-2">
 </head>
 <body>
     <main class="log-page">
@@ -44,6 +44,9 @@
                 <button class="operation-tab corrected" data-operation="CORRECTED">
                     已改正 <span id="statCorrected">0</span>
                 </button>
+                <button class="operation-tab inquiry" data-operation="INQUIRY">
+                    产品关联 <span id="statInquiry">0</span>
+                </button>
             </div>
 
             <form class="filter-form" id="filterForm">
@@ -67,6 +70,7 @@
                         <option value="IMAGE">图片资料</option>
                         <option value="CLASSIFICATION">产品分类</option>
                         <option value="WORKFLOW">完成标记</option>
+                        <option value="INQUIRY">询价关联</option>
                     </select>
                 </label>
                 <label class="field date-field">
@@ -144,6 +148,6 @@
     </aside>
 
     <div class="toast" id="toast"></div>
-    <script src="/static/js/logs.js?v=20260810-2"></script>
+    <script src="/static/js/logs.js?v=20261030-1"></script>
 </body>
 </html>

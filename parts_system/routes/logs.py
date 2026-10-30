@@ -22,6 +22,7 @@ OPERATION_LABELS = {
     "DELETE": "删除",
     "COMPLETE": "已修改",
     "CORRECTED": "已改正",
+    "INQUIRY": "产品关联",
 }
 
 MODULE_LABELS = {
@@ -31,6 +32,7 @@ MODULE_LABELS = {
     "IMAGE": "图片资料",
     "CLASSIFICATION": "产品分类",
     "WORKFLOW": "完成标记",
+    "INQUIRY": "询价关联",
 }
 
 PRODUCT_NAME_SQL = (
@@ -213,54 +215,81 @@ async def list_logs(
         """
 
         cursor = conn.cursor()
-        grouped_select = f"""
-            SELECT
-                COALESCE(NULLIF(TRIM(p.product_name), ''), CONCAT('配件 #', l.part_id)) AS grouped_product_name,
-                p.model AS grouped_model,
-                MAX(l.id) AS latest_log_id,
-                COUNT(*) AS log_count,
-                GROUP_CONCAT(
-                    DISTINCT UPPER(l.operation_type)
-                    ORDER BY FIELD(UPPER(l.operation_type),'CREATE','UPDATE','DELETE','COMPLETE','CORRECTED')
-                    SEPARATOR ','
-                ) AS operation_types,
-                GROUP_CONCAT(
-                    DISTINCT UPPER(l.module_code)
-                    ORDER BY FIELD(UPPER(l.module_code),'PRODUCT','IMAGE','SPEC','PRICE','CLASSIFICATION')
-                    SEPARATOR ','
-                ) AS module_codes
-            {joins}
-            WHERE {list_where}
-            GROUP BY l.part_id
-        """
-
-        cursor.execute(
-            f"SELECT COUNT(*) AS total FROM ({grouped_select}) grouped_logs",
-            list_params,
-        )
-        total = int(cursor.fetchone()["total"])
-
         image_columns = ", ".join(f"p.{field}" for field in IMAGE_FIELDS)
-        cursor.execute(
-            f"""
-            SELECT
-                l.id, l.user_id, l.part_id, l.operation_type, l.module_code,
-                l.detail, l.created_at,
-                u.username, u.nickname, u.avatar,
-                grouped.grouped_product_name AS product_name,
-                grouped.grouped_model AS model,
-                p.sku_code, p.product_brand, p.product_type, {image_columns},
-                grouped.log_count, grouped.operation_types, grouped.module_codes
-            FROM ({grouped_select}) grouped
-            JOIN employee_operation_logs l ON l.id=grouped.latest_log_id
-            LEFT JOIN parts p ON p.id=l.part_id
-            LEFT JOIN yh_admin_user u ON u.id=l.user_id
-            ORDER BY l.created_at DESC, l.id DESC
-            LIMIT %s OFFSET %s
-            """,
-            [*list_params, page_size, (page - 1) * page_size],
-        )
-        rows = cursor.fetchall()
+
+        # 产品关联按关联记录逐条展示，不能像其他模块那样按产品折叠
+        if operation_type == "INQUIRY":
+            cursor.execute(
+                f"SELECT COUNT(*) AS total {joins} WHERE {list_where}",
+                list_params,
+            )
+            total = int(cursor.fetchone()["total"])
+            cursor.execute(
+                f"""
+                SELECT
+                    l.id, l.user_id, l.part_id, l.operation_type, l.module_code,
+                    l.detail, l.created_at,
+                    u.username, u.nickname, u.avatar,
+                    {PRODUCT_NAME_SQL} AS product_name,
+                    {MODEL_SQL} AS model,
+                    p.sku_code, p.product_brand, p.product_type, {image_columns},
+                    1 AS log_count
+                {joins}
+                WHERE {list_where}
+                ORDER BY l.created_at DESC, l.id DESC
+                LIMIT %s OFFSET %s
+                """,
+                [*list_params, page_size, (page - 1) * page_size],
+            )
+            rows = cursor.fetchall()
+        else:
+            grouped_select = f"""
+                SELECT
+                    COALESCE(NULLIF(TRIM(p.product_name), ''), CONCAT('配件 #', l.part_id)) AS grouped_product_name,
+                    p.model AS grouped_model,
+                    MAX(l.id) AS latest_log_id,
+                    COUNT(*) AS log_count,
+                    GROUP_CONCAT(
+                        DISTINCT UPPER(l.operation_type)
+                        ORDER BY FIELD(UPPER(l.operation_type),'CREATE','UPDATE','DELETE','COMPLETE','CORRECTED')
+                        SEPARATOR ','
+                    ) AS operation_types,
+                    GROUP_CONCAT(
+                        DISTINCT UPPER(l.module_code)
+                        ORDER BY FIELD(UPPER(l.module_code),'PRODUCT','IMAGE','SPEC','PRICE','CLASSIFICATION')
+                        SEPARATOR ','
+                    ) AS module_codes
+                {joins}
+                WHERE {list_where}
+                GROUP BY l.part_id
+            """
+
+            cursor.execute(
+                f"SELECT COUNT(*) AS total FROM ({grouped_select}) grouped_logs",
+                list_params,
+            )
+            total = int(cursor.fetchone()["total"])
+
+            cursor.execute(
+                f"""
+                SELECT
+                    l.id, l.user_id, l.part_id, l.operation_type, l.module_code,
+                    l.detail, l.created_at,
+                    u.username, u.nickname, u.avatar,
+                    grouped.grouped_product_name AS product_name,
+                    grouped.grouped_model AS model,
+                    p.sku_code, p.product_brand, p.product_type, {image_columns},
+                    grouped.log_count, grouped.operation_types, grouped.module_codes
+                FROM ({grouped_select}) grouped
+                JOIN employee_operation_logs l ON l.id=grouped.latest_log_id
+                LEFT JOIN parts p ON p.id=l.part_id
+                LEFT JOIN yh_admin_user u ON u.id=l.user_id
+                ORDER BY l.created_at DESC, l.id DESC
+                LIMIT %s OFFSET %s
+                """,
+                [*list_params, page_size, (page - 1) * page_size],
+            )
+            rows = cursor.fetchall()
 
         cursor.execute(
             f"""
@@ -286,9 +315,10 @@ async def list_logs(
         # 其他操作类型：从日志表统计（保持不变）
         cursor.execute(
             f"""
-            SELECT operation_type, COUNT(*) AS count
+            SELECT operation_type, COUNT(*) AS product_count, SUM(cnt) AS log_count
             FROM (
-                SELECT UPPER(l.operation_type) AS operation_type
+                SELECT UPPER(l.operation_type) AS operation_type, l.part_id,
+                       COUNT(*) AS cnt
                 {joins}
                 WHERE {base_where}
                 GROUP BY UPPER(l.operation_type), l.part_id
@@ -298,10 +328,15 @@ async def list_logs(
             base_params,
         )
         grouped = {
-            (row["operation_type"] or "").upper(): row["count"]
+            (row["operation_type"] or "").upper(): row
             for row in cursor.fetchall()
         }
-        grouped["COMPLETE"] = complete_count
+
+        def _stat(operation: str) -> int:
+            return int((grouped.get(operation) or {}).get("product_count") or 0)
+
+        # 产品关联 Tab 显示关联记录条数，与逐条列表对得上；其他 Tab 仍是产品数
+        inquiry_count = int((grouped.get("INQUIRY") or {}).get("log_count") or 0)
 
         return {
             "items": [_serialize_log_group(row) for row in rows],
@@ -311,11 +346,12 @@ async def list_logs(
             "pages": max(1, (total + page_size - 1) // page_size),
             "stats": {
                 "all": base_group_total,
-                "create": grouped.get("CREATE", 0),
-                "update": grouped.get("UPDATE", 0),
-                "delete": grouped.get("DELETE", 0),
-                "complete": grouped.get("COMPLETE", 0),
-                "corrected": grouped.get("CORRECTED", 0),
+                "create": _stat("CREATE"),
+                "update": _stat("UPDATE"),
+                "delete": _stat("DELETE"),
+                "complete": complete_count,
+                "corrected": _stat("CORRECTED"),
+                "inquiry": inquiry_count,
             },
         }
     finally:

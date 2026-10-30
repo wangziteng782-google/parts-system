@@ -66,6 +66,7 @@
             DELETE: "delete",
             COMPLETE: "complete",
             CORRECTED: "corrected",
+            INQUIRY: "inquiry",
         })[type] || "update";
     }
 
@@ -120,7 +121,12 @@
             return;
         }
         hideTableState();
-        el.body.innerHTML = items.map((item, index) => `
+        el.body.innerHTML = items.map((item, index) => {
+            // 产品关联是逐条记录，没有"多条变更汇总"这一说
+            const isInquiry = state.operation === "INQUIRY";
+            const summary = isInquiry ? "" : `
+                    <div class="change-summary-count">共 ${Number(item.log_count) || 1} 条变更</div>`;
+            return `
             <tr>
                 <td class="seq-cell">${(state.page - 1) * state.pageSize + index + 1}</td>
                 <td>${imageHtml(item)}</td>
@@ -132,9 +138,8 @@
                 </td>
                 <td><div class="badge-list">${operationBadges(item)}</div></td>
                 <td><div class="badge-list">${moduleBadges(item)}</div></td>
-                <td>
-                    <div class="change-summary-count">共 ${Number(item.log_count) || 1} 条变更</div>
-                    <div class="detail-text" title="${escapeHtml(item.detail)}">最近：${escapeHtml(item.detail)}</div>
+                <td>${summary}
+                    <div class="detail-text" title="${escapeHtml(item.detail)}">${isInquiry ? "" : "最近："}${escapeHtml(item.detail)}</div>
                 </td>
                 <td>
                     <div class="operator">${avatarHtml(item)}<span>${escapeHtml(item.operator_name)}</span></div>
@@ -142,7 +147,8 @@
                 <td><div class="time-text">${formatTime(item.created_at)}</div></td>
                 <td><button class="view-button" type="button" data-log-id="${item.id}">查看</button></td>
             </tr>
-        `).join("");
+        `;
+        }).join("");
     }
 
     function renderStats(stats) {
@@ -152,6 +158,7 @@
         document.getElementById("statDelete").textContent = stats.delete || 0;
         document.getElementById("statComplete").textContent = stats.complete || 0;
         document.getElementById("statCorrected").textContent = stats.corrected || 0;
+        document.getElementById("statInquiry").textContent = stats.inquiry || 0;
     }
 
     async function loadLogs() {

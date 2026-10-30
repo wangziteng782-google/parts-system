@@ -141,6 +141,8 @@ button { cursor: pointer; }
 .operation-tab.complete.active::after { background: #2563eb; }
 .operation-tab.corrected.active { color: #059669; }
 .operation-tab.corrected.active::after { background: #059669; }
+.operation-tab.inquiry.active { color: #6d28d9; }
+.operation-tab.inquiry.active::after { background: #6d28d9; }
 
 .filter-form {
     display: grid;
@@ -217,7 +219,7 @@ td {
 tbody tr:hover { background: #fafcff; }
 .seq-col { width: 62px; text-align: center; }
 .image-col { width: 92px; }
-.operation-col { width: 86px; }
+.operation-col { width: 112px; }
 .detail-col { width: 20%; }
 .view-col { width: 72px; }
 .seq-cell { color: #9aa5b5; text-align: center; }
@@ -242,18 +244,21 @@ tbody tr:hover { background: #fafcff; }
 
 .operation-badge, .module-badge {
     display: inline-flex;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: center;
     padding: 5px 10px;
     border-radius: 5px;
     font-size: 12px;
     font-weight: 700;
+    white-space: nowrap;
 }
 .operation-badge.create { color: var(--green); background: var(--green-soft); }
 .operation-badge.update { color: var(--orange); background: var(--orange-soft); }
 .operation-badge.delete { color: var(--red); background: var(--red-soft); }
 .operation-badge.complete { color: #2563eb; background: #eaf2ff; }
 .operation-badge.corrected { color: #047857; background: #dcfce7; }
+.operation-badge.inquiry { color: #6d28d9; background: #f1ebff; }
 .module-badge { color: #557096; background: #f0f4f9; font-weight: 500; }
 .badge-list { display: flex; flex-wrap: wrap; gap: 5px; }
 .change-summary-count { margin-bottom: 5px; color: #334763; font-size: 12px; font-weight: 700; }

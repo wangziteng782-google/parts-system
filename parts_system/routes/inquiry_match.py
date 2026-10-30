@@ -11,6 +11,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from ..audit import write_operation_log
 from ..auth import get_current_user
 from ..bootstrap import app, templates
 from ..config.constants import PRODUCT_CLASSIFICATION_TREE
@@ -23,6 +24,106 @@ class MatchSaveRequest(BaseModel):
     inquiry_mission_id: int
     part_id: int
     variant_group_id: Optional[str] = None
+
+
+def _load_inquiry_brief(inquiry_mission_id: int):
+    """从 OA 读取询价商品名和型号；记录不存在返回 None。"""
+    conn = get_oa_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT g.goods_name, g.goods_spec, g.ele_type
+               FROM yh_query_goods_mission m
+               LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
+               WHERE m.id=%s LIMIT 1""",
+            (inquiry_mission_id,),
+        )
+        row = cursor.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return None
+    # OA 的型号基本填在 goods_spec 里，ele_type 只有测试数据在用
+    return (
+        str(row.get("goods_name") or "").strip(),
+        str(row.get("goods_spec") or row.get("ele_type") or "").strip(),
+    )
+
+
+def _inquiry_label(goods_name, inquiry_model) -> str:
+    """日志摘要里的商品标识，如（外呼显示板 MCTC-HCB-D631S-NTSY）。"""
+    title = " ".join(x for x in (goods_name, inquiry_model) if x)
+    return f"（{title}）" if title else ""
+
+
+def _group_spec_text(cursor, part_id, group_id) -> str:
+    """规格组合的可读文本，如 载重=1000kg/速度=1.0m/s。"""
+    if not part_id or not group_id:
+        return ""
+    cursor.execute(
+        """SELECT GROUP_CONCAT(CONCAT(s.spec_name,'=',s.spec_value)
+                                ORDER BY l.sort_order, l.id SEPARATOR '/') AS text
+           FROM product_variant_group_specs l
+           JOIN product_variant_specs s ON s.id=l.spec_id
+           WHERE l.part_id=%s AND l.variant_group_id=%s""",
+        (part_id, group_id),
+    )
+    row = cursor.fetchone()
+    return (row or {}).get("text") or ""
+
+
+def _log_match_change(
+    cursor,
+    *,
+    user_id,
+    goods_name: str,
+    inquiry_model: str,
+    previous,
+    part_id: int,
+    group_id: str,
+):
+    """关联变更写日志：换产品时旧产品记取消、新产品记关联，值没变不写。"""
+    old_part_id = int(previous["part_id"]) if previous and previous.get("part_id") else None
+    old_group_id = (previous.get("variant_group_id") or "") if previous else ""
+    new_group_id = group_id or ""
+    if previous and old_part_id == part_id and old_group_id == new_group_id:
+        return
+
+    # 摘要只写商品名称和型号，不带询价记录 ID
+    label = _inquiry_label(goods_name, inquiry_model)
+    new_spec = _group_spec_text(cursor, part_id, new_group_id)
+
+    if old_part_id and old_part_id != part_id:
+        old_spec = _group_spec_text(cursor, old_part_id, old_group_id)
+        write_operation_log(
+            cursor,
+            part_id=old_part_id,
+            operation_type="INQUIRY",
+            module_code="INQUIRY",
+            user_id=user_id,
+            detail=f"取消关联询价{label}"
+            + (f"，规格 {old_spec}" if old_spec else ""),
+        )
+
+    if old_part_id == part_id and old_group_id and new_group_id and old_group_id != new_group_id:
+        old_spec = _group_spec_text(cursor, part_id, old_group_id) or old_group_id
+        detail = (
+            f"关联询价{label}"
+            f"，规格 {old_spec} → {new_spec or new_group_id}"
+        )
+    else:
+        detail = f"关联询价{label}" + (
+            f"，规格 {new_spec}" if new_spec else ""
+        )
+
+    write_operation_log(
+        cursor,
+        part_id=part_id,
+        operation_type="INQUIRY",
+        module_code="INQUIRY",
+        user_id=user_id,
+        detail=detail,
+    )
 
 
 def _match_map() -> dict[int, dict]:
@@ -221,18 +322,10 @@ async def save_match(req: MatchSaveRequest):
         raise HTTPException(status_code=400, detail="请先选择产品")
 
     # 询价记录在 OA 库，本地没有外键，写入前确认任务存在，避免留孤儿匹配
-    oa_conn = get_oa_db()
-    try:
-        oa_cursor = oa_conn.cursor()
-        oa_cursor.execute(
-            "SELECT 1 FROM yh_query_goods_mission WHERE id=%s LIMIT 1",
-            (req.inquiry_mission_id,),
-        )
-        exists = oa_cursor.fetchone()
-    finally:
-        oa_conn.close()
-    if not exists:
+    brief = _load_inquiry_brief(req.inquiry_mission_id)
+    if not brief:
         raise HTTPException(status_code=404, detail="询价记录不存在")
+    goods_name, inquiry_model = brief
 
     group_id = (req.variant_group_id or "").strip()
     conn = get_db()
@@ -257,6 +350,13 @@ async def save_match(req: MatchSaveRequest):
             user.get("nickname") or user.get("username") or str(user.get("id") or "")
         )
         cursor.execute(
+            "SELECT part_id, variant_group_id FROM part_inquiries "
+            "WHERE inquiry_mission_id=%s",
+            (req.inquiry_mission_id,),
+        )
+        previous = cursor.fetchone()
+
+        cursor.execute(
             """INSERT INTO part_inquiries
                    (inquiry_mission_id, part_id, variant_group_id, matched_by, matched_at)
                VALUES (%s,%s,%s,%s,NOW())
@@ -266,6 +366,15 @@ async def save_match(req: MatchSaveRequest):
                    matched_by=VALUES(matched_by),
                    matched_at=NOW()""",
             (req.inquiry_mission_id, req.part_id, group_id or None, matched_by),
+        )
+        _log_match_change(
+            cursor,
+            user_id=user.get("id"),
+            goods_name=goods_name,
+            inquiry_model=inquiry_model,
+            previous=previous,
+            part_id=req.part_id,
+            group_id=group_id,
         )
         conn.commit()
     except HTTPException:
@@ -339,15 +448,38 @@ async def inquiry_match_detail(inquiry_mission_id: int):
 
 @app.delete("/api/inquiry-match/{inquiry_mission_id}")
 async def clear_match(inquiry_mission_id: int):
+    goods_name, inquiry_model = _load_inquiry_brief(inquiry_mission_id) or ("", "")
     conn = get_db()
     try:
         cursor = conn.cursor()
         cursor.execute(
+            "SELECT part_id, variant_group_id FROM part_inquiries "
+            "WHERE inquiry_mission_id=%s",
+            (inquiry_mission_id,),
+        )
+        previous = cursor.fetchone()
+        cursor.execute(
             "DELETE FROM part_inquiries WHERE inquiry_mission_id=%s",
             (inquiry_mission_id,),
         )
-        conn.commit()
         deleted = cursor.rowcount
+        if previous and previous.get("part_id"):
+            part_id = int(previous["part_id"])
+            spec_text = _group_spec_text(
+                cursor, part_id, previous.get("variant_group_id")
+            )
+            write_operation_log(
+                cursor,
+                part_id=part_id,
+                operation_type="INQUIRY",
+                module_code="INQUIRY",
+                detail=f"取消关联询价{_inquiry_label(goods_name, inquiry_model)}"
+                + (f"，规格 {spec_text}" if spec_text else ""),
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
     return {"message": "已清除", "deleted": deleted}

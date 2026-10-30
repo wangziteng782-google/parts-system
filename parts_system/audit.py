@@ -21,7 +21,7 @@ def write_operation_log(
 ):
     normalized_operation = (operation_type or "").strip().upper()
     if normalized_operation not in {
-        "CREATE", "UPDATE", "DELETE", "COMPLETE", "CORRECTED"
+        "CREATE", "UPDATE", "DELETE", "COMPLETE", "CORRECTED", "INQUIRY"
     }:
         raise ValueError(f"不支持的日志操作类型：{operation_type}")
 
