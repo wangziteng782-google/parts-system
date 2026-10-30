@@ -51,7 +51,7 @@ def main():
         base = """
             FROM yh_query_goods_mission m
             LEFT JOIN yh_query_order_goods g ON g.id = m.order_goods_id
-            WHERE m.mission_type=1 AND m.mission_status=4
+            WHERE m.mission_type IN (1,3) AND m.mission_status=4
               AND (m.delete_time IS NULL OR m.delete_time='' OR m.delete_time='0000-00-00 00:00:00')
         """
         print("已完成询价          :", fetch_one(oc, "SELECT COUNT(*) c " + base)["c"])

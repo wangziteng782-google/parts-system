@@ -1,6 +1,6 @@
 """OA 询价管理模块
 
-采购/管理员视角：从 OA 只读拉取已完成询价任务（mission_type=1, mission_status=4），
+采购/管理员视角：从 OA 只读拉取已完成询价任务（mission_type IN (1,3), mission_status=4），
 配合本地的上架/隐藏状态表和反馈表，构成询价管理台（/inquiries）的数据源。
 """
 
@@ -95,8 +95,9 @@ def _feedback_map() -> dict[int, dict]:
 
 
 def _fetch_oa_inquiries(keyword: str) -> list[dict]:
+    """按报价时间倒序拉取，不设条数上限：上架状态和反馈在本地表，只能全量取回再过滤分页。"""
     where = [
-        "m.mission_type=1",
+        "m.mission_type IN (1,3)",
         "m.mission_status=4",
         "m.delete_time IS NULL",
     ]
@@ -124,8 +125,7 @@ def _fetch_oa_inquiries(keyword: str) -> list[dict]:
                 LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
                 LEFT JOIN yh_factory f ON f.id=g.factory AND f.delete_time IS NULL
                 WHERE {" AND ".join(where)}
-                ORDER BY quote_updated_at DESC, m.id DESC
-                LIMIT 6000""",
+                ORDER BY quote_updated_at DESC, m.id DESC""",
             params,
         )
         return cursor.fetchall()

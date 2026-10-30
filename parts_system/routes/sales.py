@@ -480,7 +480,7 @@ def _fetch_variant_combinations(part_ids: list[int]) -> dict[int, list[dict]]:
 
 def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
     where = [
-        "m.mission_type=1",
+        "m.mission_type IN (1,3)",
         "m.mission_status=4",
         "m.delete_time IS NULL",
     ]

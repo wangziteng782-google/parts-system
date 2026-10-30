@@ -49,7 +49,7 @@ INQUIRY_SQL = """
     SELECT m.id AS mission_id, m.order_goods_id, g.goods_spec, g.goods_name, g.factory
     FROM yh_query_goods_mission m
     JOIN yh_query_order_goods g ON g.id = m.order_goods_id
-    WHERE m.mission_type = 1 AND m.mission_status = 4
+    WHERE m.mission_type IN (1,3) AND m.mission_status = 4
       AND (m.delete_time IS NULL OR YEAR(m.delete_time) = 0)
     ORDER BY m.id
 """

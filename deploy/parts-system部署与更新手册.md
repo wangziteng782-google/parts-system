@@ -241,7 +241,7 @@ systemctl restart parts-system
 - `SALES_PRICE_MARKUP_RATE=0.20` 表示销售展示价增加20%；调整比例后需要重启后端服务。
 - OA数据库用于读取 `yh_query_goods_mission`、`yh_query_order_goods` 和 `yh_factory`；应用不会通过该连接修改OA数据。
 - 正式环境建议为本系统单独创建OA只读账号，仅授予上述三张表的 `SELECT` 权限，不使用OA数据库管理账号。
-- “来自询价记录”查询 `mission_type=1 AND delete_time IS NULL` 的全部询价任务，不限制任务状态；“来自配件库”读取 `parts_database.parts`。
+- “来自询价记录”查询 OA 中 `mission_type IN (1,3)`、`mission_status=4`（已完成询价）且未删除的任务；`mission_type=1` 为询价单商品，`3` 为询价单商品+运费。“来自配件库”读取 `parts_database.parts`。
 - OA询价记录直接展示历史报价；配件库价格按照 `SALES_PRICE_MARKUP_RATE` 从成本价换算，两种来源的价格口径不要混淆。
 - 本系统应用日志会隐藏`t`，Nginx也必须关闭该站点访问日志或使用不记录查询字符串的日志格式。
 - 超级管理员角色1和采购角色4、36、37可以访问三个页面及现有业务API。
