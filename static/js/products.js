@@ -1287,7 +1287,7 @@ async function init() {
             modal.classList.add('show');
             const searchInput = document.getElementById('relationSearch');
             searchInput.focus();
-            // 有替代型号 → 用替代型号搜索；无替代型号 → 展示全部
+            // 搜索范围是全库；有替代型号时代入搜索框，清空即可看全部
             const keyword = (substituteModel || '').split('\n').map(s => s.trim()).filter(Boolean).join(' ');
             if (keyword) {
                 searchInput.value = keyword;
@@ -1346,7 +1346,8 @@ async function init() {
             const keyword = keywordOverride !== undefined ? keywordOverride : document.getElementById('relationSearch').value.trim();
             const resultEl = document.getElementById('relationSearchResults');
             try {
-                const res = await fetch(`/api/products?keyword=${encodeURIComponent(keyword)}&page=${relationCurrentPage}&page_size=${relationPageSize}`);
+                // status=all：关联弹窗搜全库，不受上下架和分类筛选影响
+                const res = await fetch(`/api/products?keyword=${encodeURIComponent(keyword)}&status=all&page=${relationCurrentPage}&page_size=${relationPageSize}`);
                 const data = await res.json();
                 const products = (data.items || []).filter(p => p.id !== currentRelationProductId);
                 if (!products.length) {

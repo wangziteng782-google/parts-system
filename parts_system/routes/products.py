@@ -109,8 +109,12 @@ async def list_products(
             )
 
         # 上架状态：重复筛选不限制状态；goods 页面默认隐藏已下架产品
+        # status=all 供关联产品弹窗使用，搜索范围是全库
         if not duplicates_only:
-            where += " AND parts.status = 0" if status == "delisted" else " AND parts.status = 1"
+            if status == "delisted":
+                where += " AND parts.status = 0"
+            elif status != "all":
+                where += " AND parts.status = 1"
 
         # 查总数
         count_sql = "SELECT COUNT(*) AS total FROM parts" + duplicate_group_join + where
