@@ -78,3 +78,297 @@ INFO:     Uvicorn running on http://127.0.0.1:8123 (Press CTRL+C to quit)
 2026-10-29 10:34:55 | INFO    | parts_system | [请求] GET /inquiry-match?t=*** | client=127.0.0.1:64350 | http=1.1
 2026-10-29 10:34:55 | WARNING | parts_system | [认证失败] path=/inquiry-match | status=503 | reason=JWT认证密钥尚未配置
 2026-10-29 10:34:55 | INFO    | parts_system | [响应] GET /inquiry-match?t=*** | status=503 | elapsed=1.4ms | bytes=573
+2026-10-29 13:54:02 | INFO    | parts_system | [请求] GET /goods | client=127.0.0.1:56529 | http=1.1
+2026-10-29 13:54:02 | INFO    | parts_system | [响应] GET /goods | status=200 | elapsed=12.4ms | bytes=6357
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /goods | client=127.0.0.1:56695 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /goods | status=200 | elapsed=7.0ms | bytes=6353
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /static/css/sidebar.css?v=20261029-2 | client=127.0.0.1:56695 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /static/css/base.css | client=127.0.0.1:56696 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /static/css/product-detail.css?v=20260820-1 | client=127.0.0.1:56697 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /static/img/site-logo.png | client=127.0.0.1:56698 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /static/css/dialogs.css?v=20260819-6 | client=127.0.0.1:56699 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /static/js/state.js?v=20260810-1 | client=127.0.0.1:56700 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /static/css/sidebar.css?v=20261029-2 | status=200 | elapsed=14.6ms | bytes=12859
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /static/css/base.css | status=200 | elapsed=14.8ms | bytes=1098
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /static/css/product-detail.css?v=20260820-1 | status=200 | elapsed=12.4ms | bytes=52438
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /static/img/site-logo.png | status=200 | elapsed=9.4ms | bytes=9583
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /static/css/dialogs.css?v=20260819-6 | status=200 | elapsed=8.9ms | bytes=25827
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /static/js/state.js?v=20260810-1 | status=200 | elapsed=8.0ms | bytes=3102
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /static/js/products.js?v=20260819-2 | client=127.0.0.1:56696 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /static/js/product-copy.js?v=20260819-1 | client=127.0.0.1:56695 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /static/js/variants.js?v=20260820-1 | client=127.0.0.1:56700 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /static/js/images.js?v=20260731-1 | client=127.0.0.1:56699 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /static/js/product-copy.js?v=20260819-1 | status=200 | elapsed=7.6ms | bytes=1400
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /static/js/products.js?v=20260819-2 | status=200 | elapsed=9.3ms | bytes=79392
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /static/js/images.js?v=20260731-1 | status=200 | elapsed=5.4ms | bytes=60571
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /static/js/variants.js?v=20260820-1 | status=200 | elapsed=7.5ms | bytes=92057
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /api/field-labels | client=127.0.0.1:56700 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /api/product-classifications | client=127.0.0.1:56696 | http=1.1
+2026-10-29 13:56:35 | DEBUG   | parts_system | [查询] 字段标签映射
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /api/image-upload/config | client=127.0.0.1:56699 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [查询] 产品分类树
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /api/field-labels | status=200 | elapsed=99.3ms | bytes=1393
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /api/product-classifications | status=200 | elapsed=99.3ms | bytes=6541
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /api/image-upload/config | status=200 | elapsed=95.3ms | bytes=96
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /api/field-labels | client=127.0.0.1:56695 | http=1.1
+2026-10-29 13:56:35 | DEBUG   | parts_system | [查询] 字段标签映射
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /api/field-labels | status=200 | elapsed=2.8ms | bytes=1393
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /static/img/favicon.ico | client=127.0.0.1:56695 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /static/img/favicon.ico | status=200 | elapsed=2.8ms | bytes=4286
+2026-10-29 13:56:35 | INFO    | parts_system | [请求] GET /api/products?page=1&page_size=30 | client=127.0.0.1:56695 | http=1.1
+2026-10-29 13:56:35 | INFO    | parts_system | [查询] 产品列表 | page=1, page_size=30, keyword=None, category=None, product_type=None, classification_status=None, feedback_status=None, status=None, duplicates_only=False
+2026-10-29 13:56:35 | DEBUG   | parts_system | [SQL] SELECT COUNT(*) AS total FROM parts WHERE 1=1 AND parts.status = 1 | params=[]
+2026-10-29 13:56:35 | DEBUG   | parts_system | [SQL] SELECT parts.id, parts.sku_code, parts.product_name, parts.model, parts.product_brand, parts.category, parts.product_type, parts.update_time_2, (SELECT COUNT(*) FROM sales_product_feedback feedback WHERE feedback.parts_id=parts.id AND feedback.status='pending') AS pending_feedback_count, parts.modification_completed, CASE WHEN COALESCE(TRIM(parts.model), '') <> '' AND EXISTS (SELECT 1 FROM parts p2 WHERE p2.model = parts.model AND p2.id <> parts.id) THEN 1 ELSE 0 END AS is_duplicate, CASE WHEN dpm.id IS NULL THEN 0 ELSE 1 END AS duplicate_marked FROM parts LEFT JOIN duplicate_product_marks dpm ON dpm.product_id = parts.id WHERE 1=1 AND parts.status = 1 ORDER BY parts.id LIMIT %s OFFSET %s | params=[30, 0]
+2026-10-29 13:56:35 | INFO    | parts_system | [查询] 产品列表完成 | 返回 30 条, 总计 5314 条
+2026-10-29 13:56:35 | INFO    | parts_system | [响应] GET /api/products?page=1&page_size=30 | status=200 | elapsed=234.6ms | bytes=9288
+2026-10-29 14:04:20 | INFO    | parts_system | [请求] GET /goods | client=127.0.0.1:56959 | http=1.1
+2026-10-29 14:04:20 | INFO    | parts_system | [响应] GET /goods | status=200 | elapsed=2.5ms | bytes=6353
+2026-10-29 14:04:20 | INFO    | parts_system | [请求] GET /inquiry-match | client=127.0.0.1:56959 | http=1.1
+2026-10-29 14:04:20 | INFO    | parts_system | [响应] GET /inquiry-match | status=200 | elapsed=2.4ms | bytes=6680
+2026-10-29 14:06:21 | INFO    | parts_system | [请求] GET /inquiry-match | client=127.0.0.1:57092 | http=1.1
+2026-10-29 14:06:21 | INFO    | parts_system | [响应] GET /inquiry-match | status=200 | elapsed=4.3ms | bytes=6809
+2026-10-29 14:06:21 | INFO    | parts_system | [请求] GET /static/css/base.css | client=127.0.0.1:57092 | http=1.1
+2026-10-29 14:06:21 | INFO    | parts_system | [请求] GET /static/img/site-logo.png | client=127.0.0.1:57093 | http=1.1
+2026-10-29 14:06:21 | INFO    | parts_system | [请求] GET /static/js/state.js | client=127.0.0.1:57094 | http=1.1
+2026-10-29 14:06:21 | INFO    | parts_system | [请求] GET /static/js/variants.js | client=127.0.0.1:57095 | http=1.1
+2026-10-29 14:06:21 | INFO    | parts_system | [请求] GET /static/css/inquiry-match.css?v=20261029-1 | client=127.0.0.1:57096 | http=1.1
+2026-10-29 14:06:21 | INFO    | parts_system | [请求] GET /static/css/product-detail.css | client=127.0.0.1:57097 | http=1.1
+2026-10-29 14:06:21 | INFO    | parts_system | [响应] GET /static/css/base.css | status=200 | elapsed=17.6ms | bytes=1098
+2026-10-29 14:06:21 | INFO    | parts_system | [响应] GET /static/img/site-logo.png | status=200 | elapsed=19.6ms | bytes=9583
+2026-10-29 14:06:21 | INFO    | parts_system | [响应] GET /static/js/state.js | status=200 | elapsed=17.1ms | bytes=3102
+2026-10-29 14:06:21 | INFO    | parts_system | [响应] GET /static/js/variants.js | status=200 | elapsed=16.7ms | bytes=92057
+2026-10-29 14:06:21 | INFO    | parts_system | [响应] GET /static/css/inquiry-match.css?v=20261029-1 | status=200 | elapsed=18.2ms | bytes=19024
+2026-10-29 14:06:21 | INFO    | parts_system | [响应] GET /static/css/product-detail.css | status=200 | elapsed=25.9ms | bytes=52438
+2026-10-29 14:06:21 | INFO    | parts_system | [请求] GET /static/js/inquiry-match.js?v=20261029-5 | client=127.0.0.1:57096 | http=1.1
+2026-10-29 14:06:21 | INFO    | parts_system | [响应] GET /static/js/inquiry-match.js?v=20261029-5 | status=200 | elapsed=10.2ms | bytes=31203
+2026-10-29 14:06:21 | INFO    | parts_system | [请求] GET /api/inquiry-match/categories | client=127.0.0.1:57096 | http=1.1
+2026-10-29 14:06:21 | INFO    | parts_system | [请求] GET /static/img/favicon.ico | client=127.0.0.1:57097 | http=1.1
+2026-10-29 14:06:21 | INFO    | parts_system | [响应] GET /api/inquiry-match/categories | status=200 | elapsed=116.1ms | bytes=4993
+2026-10-29 14:06:21 | INFO    | parts_system | [响应] GET /static/img/favicon.ico | status=200 | elapsed=6.4ms | bytes=4286
+2026-10-29 14:06:21 | INFO    | parts_system | [请求] GET /api/inquiry-match/records?keyword=&status=all&page=1&page_size=30 | client=127.0.0.1:57097 | http=1.1
+2026-10-29 14:06:22 | INFO    | parts_system | [响应] GET /api/inquiry-match/records?keyword=&status=all&page=1&page_size=30 | status=200 | elapsed=491.5ms | bytes=16152
+2026-10-29 14:28:12 | INFO    | parts_system | [请求] GET /api/inquiry-match/categories | client=127.0.0.1:58004 | http=1.1
+2026-10-29 14:28:12 | INFO    | parts_system | [响应] GET /api/inquiry-match/categories | status=200 | elapsed=57.2ms | bytes=4993
+2026-10-29 14:28:12 | INFO    | parts_system | [请求] GET /api/inquiry-match/records?status=pending&page_size=40 | client=127.0.0.1:58004 | http=1.1
+2026-10-29 14:28:17 | ERROR   | parts_system | [响应异常] GET /api/inquiry-match/records?status=pending&page_size=40 | client=127.0.0.1:58004 | elapsed=5025.4ms
+Traceback (most recent call last):
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\pymysql\connections.py", line 682, in connect
+    sock = socket.create_connection(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python311\Lib\socket.py", line 851, in create_connection
+    raise exceptions[0]
+  File "C:\Program Files\Python311\Lib\socket.py", line 836, in create_connection
+    sock.connect(sa)
+TimeoutError: timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\wzt_WorkFile\project\parts-system\parts_system\bootstrap.py", line 39, in log_requests
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\wzt_WorkFile\project\parts-system\parts_system\auth.py", line 392, in authentication_middleware
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\routing.py", line 660, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\routing.py", line 2531, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\routing.py", line 1241, in handle
+    await super().handle(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\routing.py", line 276, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\routing.py", line 150, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\routing.py", line 136, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\routing.py", line 690, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\routing.py", line 344, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\wzt_WorkFile\project\parts-system\parts_system\routes\inquiry_match.py", line 66, in list_match_records
+    rows = _fetch_oa_inquiries(keyword)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\wzt_WorkFile\project\parts-system\parts_system\routes\inquiries.py", line 111, in _fetch_oa_inquiries
+    conn = get_oa_db()
+           ^^^^^^^^^^^
+  File "C:\wzt_WorkFile\project\parts-system\parts_system\model\database.py", line 20, in get_oa_db
+    return pymysql.connect(**OA_DB_CONFIG)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\pymysql\connections.py", line 372, in __init__
+    self.connect()
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\pymysql\connections.py", line 744, in connect
+    raise exc
+pymysql.err.OperationalError: (2003, "Can't connect to MySQL server on '120.46.152.222' (timed out)")
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\pymysql\connections.py", line 682, in connect
+    sock = socket.create_connection(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python311\Lib\socket.py", line 851, in create_connection
+    raise exceptions[0]
+  File "C:\Program Files\Python311\Lib\socket.py", line 836, in create_connection
+    sock.connect(sa)
+TimeoutError: timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\uvicorn\protocols\http\httptools_impl.py", line 421, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\uvicorn\middleware\proxy_headers.py", line 62, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\applications.py", line 90, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\wzt_WorkFile\project\parts-system\parts_system\bootstrap.py", line 39, in log_requests
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\wzt_WorkFile\project\parts-system\parts_system\auth.py", line 392, in authentication_middleware
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\routing.py", line 660, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\routing.py", line 2531, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\routing.py", line 1241, in handle
+    await super().handle(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\routing.py", line 276, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\routing.py", line 150, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\routing.py", line 136, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\routing.py", line 690, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\fastapi\routing.py", line 344, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\wzt_WorkFile\project\parts-system\parts_system\routes\inquiry_match.py", line 66, in list_match_records
+    rows = _fetch_oa_inquiries(keyword)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\wzt_WorkFile\project\parts-system\parts_system\routes\inquiries.py", line 111, in _fetch_oa_inquiries
+    conn = get_oa_db()
+           ^^^^^^^^^^^
+  File "C:\wzt_WorkFile\project\parts-system\parts_system\model\database.py", line 20, in get_oa_db
+    return pymysql.connect(**OA_DB_CONFIG)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\pymysql\connections.py", line 372, in __init__
+    self.connect()
+  File "C:\Users\yiti\AppData\Roaming\Python\Python311\site-packages\pymysql\connections.py", line 744, in connect
+    raise exc
+pymysql.err.OperationalError: (2003, "Can't connect to MySQL server on '120.46.152.222' (timed out)")
+2026-10-29 14:28:23 | INFO    | parts_system | [请求] GET /api/inquiry-match/records?status=pending&page_size=40 | client=127.0.0.1:58015 | http=1.1
+2026-10-29 14:28:39 | INFO    | parts_system | [响应] GET /api/inquiry-match/records?status=pending&page_size=40 | status=200 | elapsed=16288.4ms | bytes=21532
+2026-10-29 14:28:49 | INFO    | parts_system | [请求] GET /api/inquiry-match/categories | client=127.0.0.1:58055 | http=1.1
+2026-10-29 14:28:49 | INFO    | parts_system | [响应] GET /api/inquiry-match/categories | status=200 | elapsed=57.4ms | bytes=4993
+2026-10-29 14:28:49 | INFO    | parts_system | [请求] GET /api/inquiry-match/records?status=pending&page_size=40 | client=127.0.0.1:58055 | http=1.1
+2026-10-29 14:28:51 | INFO    | parts_system | [响应] GET /api/inquiry-match/records?status=pending&page_size=40 | status=200 | elapsed=2083.4ms | bytes=21532
+2026-10-29 14:38:04 | INFO    | parts_system | [请求] GET /api/inquiry-match/records?status=pending&page_size=5 | client=127.0.0.1:58395 | http=1.1
+2026-10-29 14:38:05 | INFO    | parts_system | [响应] GET /api/inquiry-match/records?status=pending&page_size=5 | status=200 | elapsed=665.5ms | bytes=2705
+2026-10-29 14:38:05 | INFO    | parts_system | [请求] GET /api/inquiry-match/detail/16868 | client=127.0.0.1:58395 | http=1.1
+2026-10-29 14:38:06 | INFO    | parts_system | [响应] GET /api/inquiry-match/detail/16868 | status=200 | elapsed=1107.3ms | bytes=716
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /goods?create=1&from_inquiry=16868 | client=127.0.0.1:58421 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /goods?create=1&from_inquiry=16868 | status=200 | elapsed=3.4ms | bytes=6353
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /static/css/sidebar.css?v=20261029-2 | client=127.0.0.1:58421 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /static/css/product-detail.css?v=20260820-1 | client=127.0.0.1:58422 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /static/css/dialogs.css?v=20260819-6 | client=127.0.0.1:58423 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /static/css/base.css | client=127.0.0.1:58424 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /static/js/state.js?v=20260810-1 | client=127.0.0.1:58425 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /static/img/site-logo.png | client=127.0.0.1:58426 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /static/css/sidebar.css?v=20261029-2 | status=200 | elapsed=19.0ms | bytes=12859
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /static/css/product-detail.css?v=20260820-1 | status=200 | elapsed=20.4ms | bytes=52438
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /static/css/dialogs.css?v=20260819-6 | status=200 | elapsed=19.7ms | bytes=25827
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /static/css/base.css | status=200 | elapsed=16.1ms | bytes=1098
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /static/js/state.js?v=20260810-1 | status=200 | elapsed=13.7ms | bytes=3102
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /static/img/site-logo.png | status=200 | elapsed=14.3ms | bytes=9583
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /static/js/products.js?v=20261029-1 | client=127.0.0.1:58421 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /static/js/product-copy.js?v=20260819-1 | client=127.0.0.1:58424 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /static/js/variants.js?v=20260820-1 | client=127.0.0.1:58422 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /static/js/images.js?v=20260731-1 | client=127.0.0.1:58425 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /static/js/products.js?v=20261029-1 | status=200 | elapsed=9.8ms | bytes=81703
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /static/js/variants.js?v=20260820-1 | status=200 | elapsed=11.0ms | bytes=92057
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /static/js/product-copy.js?v=20260819-1 | status=200 | elapsed=15.2ms | bytes=1400
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /static/js/images.js?v=20260731-1 | status=200 | elapsed=15.4ms | bytes=60571
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /api/product-classifications | client=127.0.0.1:58422 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /api/field-labels | client=127.0.0.1:58425 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /api/image-upload/config | client=127.0.0.1:58424 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [查询] 产品分类树
+2026-10-29 14:38:10 | DEBUG   | parts_system | [查询] 字段标签映射
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /static/img/favicon.ico | client=127.0.0.1:58421 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /api/product-classifications | status=200 | elapsed=101.6ms | bytes=6541
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /api/field-labels | status=200 | elapsed=101.2ms | bytes=1393
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /api/image-upload/config | status=200 | elapsed=101.2ms | bytes=96
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /api/field-labels | client=127.0.0.1:58426 | http=1.1
+2026-10-29 14:38:10 | DEBUG   | parts_system | [查询] 字段标签映射
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /api/field-labels | status=200 | elapsed=1.4ms | bytes=1393
+2026-10-29 14:38:10 | INFO    | parts_system | [响应] GET /static/img/favicon.ico | status=200 | elapsed=6.2ms | bytes=4286
+2026-10-29 14:38:10 | INFO    | parts_system | [请求] GET /api/products?page=1&page_size=30 | client=127.0.0.1:58421 | http=1.1
+2026-10-29 14:38:10 | INFO    | parts_system | [查询] 产品列表 | page=1, page_size=30, keyword=None, category=None, product_type=None, classification_status=None, feedback_status=None, status=None, duplicates_only=False
+2026-10-29 14:38:10 | DEBUG   | parts_system | [SQL] SELECT COUNT(*) AS total FROM parts WHERE 1=1 AND parts.status = 1 | params=[]
+2026-10-29 14:38:10 | DEBUG   | parts_system | [SQL] SELECT parts.id, parts.sku_code, parts.product_name, parts.model, parts.product_brand, parts.category, parts.product_type, parts.update_time_2, (SELECT COUNT(*) FROM sales_product_feedback feedback WHERE feedback.parts_id=parts.id AND feedback.status='pending') AS pending_feedback_count, parts.modification_completed, CASE WHEN COALESCE(TRIM(parts.model), '') <> '' AND EXISTS (SELECT 1 FROM parts p2 WHERE p2.model = parts.model AND p2.id <> parts.id) THEN 1 ELSE 0 END AS is_duplicate, CASE WHEN dpm.id IS NULL THEN 0 ELSE 1 END AS duplicate_marked FROM parts LEFT JOIN duplicate_product_marks dpm ON dpm.product_id = parts.id WHERE 1=1 AND parts.status = 1 ORDER BY parts.id LIMIT %s OFFSET %s | params=[30, 0]
+2026-10-29 14:38:11 | INFO    | parts_system | [查询] 产品列表完成 | 返回 30 条, 总计 5314 条
+2026-10-29 14:38:11 | INFO    | parts_system | [响应] GET /api/products?page=1&page_size=30 | status=200 | elapsed=161.9ms | bytes=9288
+2026-10-29 14:38:11 | INFO    | parts_system | [请求] GET /api/inquiry-match/detail/16868 | client=127.0.0.1:58421 | http=1.1
+2026-10-29 14:38:11 | INFO    | parts_system | [响应] GET /api/inquiry-match/detail/16868 | status=200 | elapsed=107.2ms | bytes=716

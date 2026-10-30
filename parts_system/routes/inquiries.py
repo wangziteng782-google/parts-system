@@ -118,15 +118,11 @@ def _fetch_oa_inquiries(keyword: str) -> list[dict]:
                        COALESCE(m.renew_time, m.update_time, m.finish_time,
                                 m.create_time, g.quote_time, g.update_time,
                                 g.inquiry_time, g.create_time) AS quote_updated_at,
-                       m.create_time,
-                       COALESCE(NULLIF(admin.nickname,''), admin.username,
-                                CONCAT('用户', m.admin_id), '') AS create_user,
                        g.goods_name, g.ele_type, g.goods_spec, g.images,
                        f.factory_name
                 FROM yh_query_goods_mission m
                 LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
                 LEFT JOIN yh_factory f ON f.id=g.factory AND f.delete_time IS NULL
-                LEFT JOIN yh_admin_user admin ON admin.id=m.admin_id
                 WHERE {" AND ".join(where)}
                 ORDER BY quote_updated_at DESC, m.id DESC
                 LIMIT 6000""",
