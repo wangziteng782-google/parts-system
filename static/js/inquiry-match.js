@@ -1,4 +1,4 @@
-// 产品关联：四栏联动，规格弹窗复用 variants.js 的 openSpecManager
+// 产品关联：三栏联动，规格弹窗复用 variants.js 的 openSpecManager
 
 const imState = {
     records: [],
@@ -8,8 +8,6 @@ const imState = {
     status: 'all',
     keyword: '',
     selectedMissionId: null,
-    leaves: [],
-    selectedCategory: '',
     products: [],
     productPage: 1,
     productPageSize: 30,
@@ -143,25 +141,19 @@ function selectRecord(missionId) {
     updateSummary();
 
     if (record && record.part_id) {
-        // 已匹配过：按库里记录的产品分类和型号直接定位，不靠询价名称猜
-        const guessed = suggestCategory(record.product_name);
-        document.getElementById('productSearch').value = '';
-        imState.selectedCategory = record.matched_part_type || (guessed ? guessed.name : '');
+        // 已匹配过：按询价型号筛产品，再把库里那条记录补进列表并选中
         imState.selectedPartId = record.part_id;
         imState.selectedGroupId = record.variant_group_id || '';
         resetSkuPanel();
-        renderTree();
         imState.productPage = 1;
-        loadProducts().then(() => ensureProductSelected(record));
+        autoFilterByRecord(record).then(() => ensureProductSelected(record));
         return;
     }
 
-    // 未匹配：清空分类，按询价里的型号/名称跨分类筛产品
-    imState.selectedCategory = '';
+    // 未匹配：按询价里的型号/名称筛产品
     imState.selectedPartId = null;
     imState.selectedGroupId = '';
     resetSkuPanel();
-    renderTree();
     autoFilterByRecord(record);
 }
 
@@ -193,7 +185,7 @@ async function autoFilterByRecord(record) {
     }
 
     document.getElementById('productList').innerHTML =
-        '<div class="im-empty">型号和名称都没筛到产品，可改关键词、换个分类，或去新增产品</div>';
+        '<div class="im-empty">型号和名称都没筛到产品，可改关键词或去新增产品</div>';
     document.getElementById('productCount').textContent = '未找到匹配产品';
 }
 
@@ -217,81 +209,11 @@ function ensureProductSelected(record) {
     selectProduct(partId, record.variant_group_id);
 }
 
-function suggestCategory(name) {
-    if (!name) return null;
-    const exact = imState.leaves.find(leaf => leaf.name === name);
-    if (exact) return exact;
-    const hits = imState.leaves.filter(leaf => name.includes(leaf.name));
-    hits.sort((a, b) => b.name.length - a.name.length);
-    return hits[0] || null;
-}
-
-// ========== 分类树 ==========
-async function loadCategories() {
-    try {
-        const data = await imFetch('/api/inquiry-match/categories');
-        imState.leaves = [];
-        data.tree.forEach(first => (first.children || []).forEach(second => {
-            (second.children || []).forEach(leaf => {
-                imState.leaves.push({ name: leaf.name, count: leaf.count });
-            });
-        }));
-        imState.tree = data.tree;
-        document.getElementById('categoryCount').textContent = imState.leaves.length + ' 个分类';
-        renderTree();
-    } catch (error) {
-        document.getElementById('categoryTree').innerHTML =
-            `<div class="im-empty">${escapeHtml(error.message)}</div>`;
-    }
-}
-
-function renderTree() {
-    const wrap = document.getElementById('categoryTree');
-    const html = (imState.tree || []).map(first => {
-        const seconds = (first.children || []).map(second => {
-            const leaves = (second.children || []).map(leaf => `
-                <div class="im-tree-leaf ${leaf.name === imState.selectedCategory ? 'active' : ''} ${leaf.count ? '' : 'is-zero'}"
-                     data-name="${escapeHtml(leaf.name)}">
-                    <span>${escapeHtml(leaf.name)}</span>
-                    <span class="im-tree-count">${leaf.count}</span>
-                </div>`).join('') || '<div class="im-tree-empty">暂无三级分类</div>';
-            return `<details class="im-tree-second" open>
-                <summary>${escapeHtml(second.name)}</summary>
-                ${leaves}
-            </details>`;
-        }).join('') || '<div class="im-tree-empty">暂无二级分类</div>';
-        return `<details class="im-tree-first" open>
-            <summary>${escapeHtml(first.name)}</summary>
-            ${seconds}
-        </details>`;
-    }).join('');
-    wrap.innerHTML = html || '<div class="im-empty">暂无分类</div>';
-
-    wrap.querySelectorAll('.im-tree-leaf').forEach(el => {
-        el.onclick = () => {
-            imState.selectedCategory = el.dataset.name;
-            imState.selectedPartId = null;
-            imState.selectedGroupId = '';
-            // 只切换高亮，不重画整棵树，避免折叠状态被重置
-            wrap.querySelectorAll('.im-tree-leaf').forEach(node => {
-                node.classList.toggle('active', node === el);
-            });
-            resetSkuPanel();
-            imState.productPage = 1;
-            loadProducts();
-        };
-    });
-
-    const active = wrap.querySelector('.im-tree-leaf.active');
-    if (active) active.scrollIntoView({ block: 'nearest' });
-}
-
 // ========== 产品列表 ==========
 function loadProducts() {
     const list = document.getElementById('productList');
     const keyword = document.getElementById('productSearch').value.trim();
     const params = new URLSearchParams({
-        category: imState.selectedCategory,
         keyword,
         page: imState.productPage,
         page_size: imState.productPageSize,
@@ -788,7 +710,6 @@ function bindEvents() {
 
 async function initInquiryMatch() {
     bindEvents();
-    await loadCategories();
     await loadRecords();
     loadProducts();
     updateSummary();

@@ -88,7 +88,7 @@ body {
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(228px, .82fr) minmax(196px, .7fr) minmax(240px, .85fr) minmax(400px, 1.5fr);
+    grid-template-columns: minmax(240px, .85fr) minmax(280px, 1fr) minmax(420px, 1.6fr);
     gap: 12px;
     padding: 12px 14px 14px;
     overflow: hidden;
@@ -313,109 +313,6 @@ img.im-record-thumb {
 
 img.im-record-thumb:hover {
     border-color: var(--accent);
-}
-
-.im-tree {
-    font-size: 13px;
-    padding: 2px 0;
-}
-
-.im-tree-first {
-    margin-top: 2px;
-}
-
-.im-tree-first > summary,
-.im-tree-second > summary {
-    position: relative;
-    list-style: none;
-    cursor: pointer;
-    border-radius: 5px;
-}
-
-.im-tree-first > summary::-webkit-details-marker,
-.im-tree-second > summary::-webkit-details-marker {
-    display: none;
-}
-
-.im-tree-first > summary {
-    padding: 8px 8px 8px 24px;
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--text);
-}
-
-.im-tree-second > summary {
-    padding: 6px 8px 6px 38px;
-    font-size: 12.5px;
-    color: var(--text-secondary);
-}
-
-.im-tree-first > summary::before,
-.im-tree-second > summary::before {
-    content: '›';
-    position: absolute;
-    color: #999;
-    transition: transform .12s;
-}
-
-.im-tree-first > summary::before {
-    left: 9px;
-}
-
-.im-tree-second > summary::before {
-    left: 24px;
-}
-
-.im-tree-first[open] > summary::before,
-.im-tree-second[open] > summary::before {
-    transform: rotate(90deg);
-}
-
-.im-tree-first > summary:hover,
-.im-tree-second > summary:hover {
-    background: #f5f6f7;
-}
-
-.im-tree-leaf {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 7px 8px 7px 54px;
-    font-size: 12.5px;
-    color: var(--text-secondary);
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-.im-tree-leaf:hover {
-    background: var(--sidebar-hover);
-}
-
-.im-tree-leaf.active {
-    color: var(--accent);
-    background: var(--sidebar-active);
-    font-weight: 600;
-}
-
-.im-tree-leaf.is-zero {
-    color: var(--text-muted);
-}
-
-.im-tree-count {
-    flex-shrink: 0;
-    font-size: 11.5px;
-    color: var(--text-muted);
-}
-
-.im-tree-leaf.active .im-tree-count {
-    color: var(--accent);
-}
-
-.im-tree-empty {
-    padding: 5px 8px 8px 54px;
-    font-size: 11.5px;
-    color: #bbb;
 }
 
 /* ========== 产品型号卡片（对齐配件管理页） ========== */
@@ -990,7 +887,7 @@ img.im-record-thumb:hover {
 
 @media (max-width: 1400px) {
     .im-workspace {
-        grid-template-columns: minmax(206px, .76fr) minmax(180px, .66fr) minmax(210px, .78fr) minmax(320px, 1.3fr);
+        grid-template-columns: minmax(220px, .85fr) minmax(240px, .95fr) minmax(340px, 1.45fr);
     }
 }
 
@@ -998,6 +895,11 @@ img.im-record-thumb:hover {
     .im-workspace {
         grid-template-columns: 1fr 1fr;
         overflow: auto;
+    }
+
+    /* 两列布局下 SKU 面板独占一整行 */
+    .im-panel:nth-child(3) {
+        grid-column: 1 / -1;
     }
 
     .im-panel {
