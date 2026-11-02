@@ -37,6 +37,7 @@ async def list_products(
     category: Optional[str] = None,
     product_type: Optional[str] = None,
     classification_status: Optional[str] = None,
+    completion_status: Optional[str] = None,
     feedback_status: Optional[str] = None,
     status: Optional[str] = None,
     duplicates_only: bool = False,
@@ -47,6 +48,7 @@ async def list_products(
     logger.info(
         f"[查询] 产品列表 | page={page}, page_size={page_size}, keyword={keyword}, "
         f"category={category}, product_type={product_type}, classification_status={classification_status}, "
+        f"completion_status={completion_status}, "
         f"feedback_status={feedback_status}, "
         f"status={status}, "
         f"duplicates_only={duplicates_only}"
@@ -94,10 +96,15 @@ async def list_products(
                 raise HTTPException(status_code=400, detail="无效的三级产品分类")
             where += " AND parts.product_type = %s"
             params.append(product_type)
-        elif classification_status == "unclassified":
-            placeholders = ", ".join(["%s"] * len(PRODUCT_TYPE_VALUES))
-            where += f" AND (parts.product_type IS NULL OR TRIM(parts.product_type) = '' OR parts.product_type NOT IN ({placeholders}))"
-            params.extend(PRODUCT_TYPE_VALUES)
+        # 「待重新分类」筛选已停用，保留代码备查
+        # elif classification_status == "unclassified":
+        #     placeholders = ", ".join(["%s"] * len(PRODUCT_TYPE_VALUES))
+        #     where += f" AND (parts.product_type IS NULL OR TRIM(parts.product_type) = '' OR parts.product_type NOT IN ({placeholders}))"
+        #     params.extend(PRODUCT_TYPE_VALUES)
+
+        # 「未标记完成」筛选：只看还没点过「标记修改完成」的产品
+        if completion_status == "incomplete":
+            where += " AND COALESCE(parts.modification_completed, 0) = 0"
 
         if feedback_status:
             normalized_feedback_status = feedback_status.strip().lower()
@@ -129,6 +136,7 @@ async def list_products(
             "AND EXISTS (SELECT 1 FROM parts p2 WHERE p2.model = parts.model " \
             "AND p2.id <> parts.id) THEN 1 ELSE 0 END"
         sql = "SELECT parts.id, parts.sku_code, parts.product_name, parts.model, parts.product_brand, parts.category, parts.product_type, parts.update_time_2, " \
+              "parts.status, " \
               "(SELECT COUNT(*) FROM sales_product_feedback feedback WHERE feedback.parts_id=parts.id AND feedback.status='pending') AS pending_feedback_count, " \
               "parts.modification_completed, " \
               + duplicate_flag_sql + " AS is_duplicate, " \

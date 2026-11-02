@@ -40,7 +40,10 @@ async def list_categories():
 
 @app.get("/api/product-classifications")
 async def list_product_classifications():
-    """获取 Excel 方案中的三级产品分类树及各三级分类的产品数量。"""
+    """获取 Excel 方案中的三级产品分类树及各三级分类的产品数量。
+        待重新分类
+        筛选未标记完成的产品
+    """
     logger.info("[查询] 产品分类树")
     conn = get_db()
     try:
@@ -51,10 +54,17 @@ async def list_product_classifications():
         rows = cursor.fetchall()
         raw_counts = {row['product_type']: row['count'] for row in rows}
         counts = {value: raw_counts.get(value, 0) for value in PRODUCT_TYPE_VALUES}
-        unclassified_count = sum(
-            count for value, count in raw_counts.items()
-            if not value or value not in PRODUCT_TYPE_VALUES
+        # 「待重新分类」统计已停用，保留代码备查
+        # unclassified_count = sum(
+        #     count for value, count in raw_counts.items()
+        #     if not value or value not in PRODUCT_TYPE_VALUES
+        # )
+        # 与列表口径一致：不区分上下架
+        cursor.execute(
+            "SELECT COUNT(*) AS count FROM parts"
+            " WHERE COALESCE(modification_completed, 0) = 0"
         )
+        incomplete_count = cursor.fetchone()["count"]
         cursor.execute(
             """SELECT COUNT(DISTINCT feedback.parts_id) AS count
                FROM sales_product_feedback feedback
@@ -68,7 +78,8 @@ async def list_product_classifications():
             "tree": PRODUCT_CLASSIFICATION_TREE,
             "values": PRODUCT_TYPE_VALUES,
             "counts": counts,
-            "unclassified_count": unclassified_count,
+            # "unclassified_count": unclassified_count,  # 待重新分类已停用
+            "incomplete_count": incomplete_count,
             "correction_count": correction_count,
             "delisted_count": delisted_count,
         }

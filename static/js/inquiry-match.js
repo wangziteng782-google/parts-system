@@ -244,7 +244,7 @@ function renderProducts() {
             <div class="p-info">
                 <div class="p-name">${escapeHtml(item.product_name || '未命名产品')}</div>
                 <div class="p-model">${escapeHtml(item.model || '无型号')}</div>
-                <span class="p-type">${escapeHtml(item.product_type || '待重新分类')}</span>
+                <span class="p-type">${escapeHtml(item.product_type || '未分类')}</span>
                 ${item.product_brand ? `<span class="p-brand">${escapeHtml(item.product_brand)}</span>` : ''}
                 <div class="p-updated">
                     <span>最后修改：${imDate(item.update_time) || '—'}</span>

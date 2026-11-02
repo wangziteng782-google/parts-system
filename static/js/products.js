@@ -388,7 +388,7 @@ async function init() {
             classificationTree = data.tree || [];
             productTypeValues = data.values || [];
             productTypeCounts = data.counts || {};
-            unclassifiedProductCount = data.unclassified_count || 0;
+            incompleteProductCount = data.incomplete_count || 0;
             correctionProductCount = data.correction_count || 0;
             delistedProductCount = data.delisted_count || 0;
             renderClassificationTree();
@@ -402,11 +402,11 @@ async function init() {
 
         function renderClassificationTree() {
             const treeEl = document.getElementById('classificationTree');
-            let html = `<div class="tree-all ${!selectedProductType && !showUnclassified && !showCorrection && !showDelisted ? 'active' : ''}" onclick="clearProductTypeFilter()">
+            let html = `<div class="tree-all ${!selectedProductType && !showIncomplete && !showCorrection && !showDelisted ? 'active' : ''}" onclick="clearProductTypeFilter()">
                 <span>全部产品</span>
             </div>`;
-            html += `<div class="tree-unclassified ${showUnclassified ? 'active' : ''}" onclick="selectUnclassified()">
-                <span>待重新分类</span><span class="tree-count">${unclassifiedProductCount}</span>
+            html += `<div class="tree-incomplete ${showIncomplete ? 'active' : ''}" onclick="selectIncomplete()">
+                <span>未标记完成</span><span class="tree-count">${incompleteProductCount}</span>
             </div>`;
             html += `<div class="tree-correction ${showCorrection ? 'active' : ''}" onclick="selectCorrection()">
                 <span>待改正</span><span class="tree-count">${correctionProductCount}</span>
@@ -520,7 +520,7 @@ async function init() {
 
         function selectProductType(encodedValue) {
             selectedProductType = decodeURIComponent(encodedValue);
-            showUnclassified = false;
+            showIncomplete = false;
             showCorrection = false;
             showDelisted = false;
             updateDuplicateFilterState(false);
@@ -529,50 +529,50 @@ async function init() {
             loadProducts();
         }
 
-        function selectUnclassified() {
+        function selectIncomplete() {
             selectedProductType = '';
-            showUnclassified = true;
+            showIncomplete = true;
             showCorrection = false;
             showDelisted = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
-            document.querySelector('.tree-unclassified')?.classList.add('active');
+            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelector('.tree-incomplete')?.classList.add('active');
             loadProducts();
         }
 
         function selectCorrection() {
             selectedProductType = '';
-            showUnclassified = false;
+            showIncomplete = false;
             showCorrection = true;
             showDelisted = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
             document.querySelector('.tree-correction')?.classList.add('active');
             loadProducts();
         }
 
         function selectDelisted() {
             selectedProductType = '';
-            showUnclassified = false;
+            showIncomplete = false;
             showCorrection = false;
             showDelisted = true;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
             document.querySelector('.tree-delisted')?.classList.add('active');
             loadProducts();
         }
 
         function clearProductTypeFilter() {
             selectedProductType = '';
-            showUnclassified = false;
+            showIncomplete = false;
             showCorrection = false;
             showDelisted = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
             document.querySelector('.tree-all')?.classList.add('active');
             loadProducts();
         }
@@ -584,7 +584,8 @@ async function init() {
             if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
             if (showDuplicatesOnly) url += '&duplicates_only=true';
             if (selectedProductType) url += `&product_type=${encodeURIComponent(selectedProductType)}`;
-            if (showUnclassified) url += `&classification_status=unclassified`;
+            // 未标记完成不区分上下架，全部筛出来
+            if (showIncomplete) url += '&completion_status=incomplete&status=all';
             if (showCorrection) url += `&feedback_status=pending`;
             if (showDelisted) url += `&status=delisted`;
             const res = await fetch(url);
@@ -598,8 +599,8 @@ async function init() {
             countEl.textContent = `显示 ${start}-${end} / 共 ${totalRecords} 条`;
             const classificationLabel = showDuplicatesOnly
                 ? '全部重复产品'
-                : (showDelisted ? '已下架' : (showCorrection ? '待改正' : (showUnclassified ? '待重新分类' : (selectedProductType || '全部产品'))));
-            const isMainTab = !showDuplicatesOnly && !showDelisted && !showCorrection && !showUnclassified && !selectedProductType;
+                : (showDelisted ? '已下架' : (showCorrection ? '待改正' : (showIncomplete ? '未标记完成' : (selectedProductType || '全部产品'))));
+            const isMainTab = !showDuplicatesOnly && !showDelisted && !showCorrection && !showIncomplete && !selectedProductType;
             const displayTotal = isMainTab ? (data.total_all ?? totalRecords) : totalRecords;
             document.getElementById('headerSubtitle').textContent = `${classificationLabel} · 共 ${displayTotal} 条 / 每页 ${PAGE_SIZE} 条`;
             const listEl = document.getElementById('productList');
@@ -614,9 +615,9 @@ async function init() {
                         <div class="p-name">${escapeHtml(p.product_name || '未命名产品')}${duplicateMark}</div>
                         ${showCorrection ? `<span class="p-feedback-count">${Number(p.pending_feedback_count) || 0} 条待处理反馈</span>` : ''}
                         <div class="p-model">${escapeHtml(p.model || '无型号')}</div>
-                        <span class="p-type">${escapeHtml(p.product_type || '待重新分类')}</span>
+                        <span class="p-type">${escapeHtml(p.product_type || '未分类')}</span>
                         ${p.product_brand ? `<span class="p-brand">${escapeHtml(p.product_brand)}</span>` : ''}
-                        <div class="p-updated">最后修改：${escapeHtml(formatUpdateTime(p.update_time_2))}${Number(p.modification_completed) === 1 ? '<span class="p-completed-tag">已完成</span>' : ''}</div>
+                        <div class="p-updated">最后修改：${escapeHtml(formatUpdateTime(p.update_time_2))}${Number(p.modification_completed) === 1 ? '<span class="p-completed-tag">已完成</span>' : ''}${Number(p.status) === 0 ? '<span class="p-delisted-tag">已下架</span>' : ''}</div>
                     </div>
                 </div>`;
             }).join('');
@@ -704,14 +705,14 @@ async function init() {
             updateDuplicateFilterState(enableDuplicates);
             currentPage = 1;
             selectedProductType = '';
-            showUnclassified = false;
+            showIncomplete = false;
             showCorrection = false;
             showDelisted = false;
             const searchInput = document.getElementById('searchInput');
             if (enableDuplicates && searchInput) {
                 searchInput.value = '';
             }
-            document.querySelectorAll('.tree-all, .tree-unclassified, .tree-correction, .tree-delisted, .tree-leaf')
+            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-leaf')
                 .forEach(el => el.classList.remove('active'));
             if (!enableDuplicates) document.querySelector('.tree-all')?.classList.add('active');
             loadProducts();
@@ -922,7 +923,7 @@ async function init() {
             // 面包屑
             html += `<div class="breadcrumb">
                 <span>配件管理</span><span>/</span>
-                <span>${escapeHtml(data.product_type || '待重新分类')}</span><span>/</span>
+                <span>${escapeHtml(data.product_type || '未分类')}</span><span>/</span>
                 <span class="bc-current">${escapeHtml(data.product_name || '未命名产品')}</span>
                 <div class="breadcrumb-actions">
                 </div>
