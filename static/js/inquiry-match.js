@@ -89,7 +89,7 @@ function renderRecords() {
             : '暂无报价';
         const thumb = item.image
             ? `<img class="im-record-thumb" src="${escapeHtml(item.image)}" alt="商品图片"
-                    loading="lazy" data-image="${escapeHtml(item.image)}">`
+                    loading="lazy" data-image="${escapeHtml(item.image)}" data-index="${index}">`
             : '<div class="im-record-thumb"></div>';
         return `<div class="im-record ${item.inquiry_mission_id === imState.selectedMissionId ? 'active' : ''}"
                      data-id="${item.inquiry_mission_id}">
@@ -133,7 +133,8 @@ function renderRecords() {
     list.querySelectorAll('img[data-image]').forEach(img => {
         img.onclick = event => {
             event.stopPropagation();
-            openImagePreview(img.dataset.image);
+            const item = imState.records[Number(img.dataset.index)] || {};
+            openImagePreview(img.dataset.image, item.images);
         };
     });
 }
@@ -449,14 +450,34 @@ async function openSpecEditor() {
 }
 
 // ========== 图片预览 ==========
-function openImagePreview(url) {
+let imImageGallery = { images: [], index: 0 };
+
+function openImagePreview(url, images) {
     if (!url) return;
-    document.getElementById('imagePreview').src = url;
+    const list = Array.isArray(images) && images.length ? images : [url];
+    imImageGallery = { images: list, index: Math.max(0, list.indexOf(url)) };
+    renderImagePreview();
     document.getElementById('imageOverlay').hidden = false;
+}
+
+function renderImagePreview() {
+    const { images, index } = imImageGallery;
+    document.getElementById('imagePreview').src = images[index] || '';
+    const multiple = images.length > 1;
+    document.getElementById('imagePrev').hidden = !multiple;
+    document.getElementById('imageNext').hidden = !multiple;
+}
+
+function stepImagePreview(offset) {
+    const { images, index } = imImageGallery;
+    if (images.length < 2) return;
+    imImageGallery.index = (index + offset + images.length) % images.length;
+    renderImagePreview();
 }
 
 function closeImagePreview() {
     document.getElementById('imageOverlay').hidden = true;
+    imImageGallery = { images: [], index: 0 };
 }
 
 // ========== 询价详情弹窗 ==========
@@ -510,11 +531,28 @@ function invoiceText(value) {
 }
 
 function renderDetail(data) {
+    const images = Array.isArray(data.images) && data.images.length
+        ? data.images
+        : (data.image ? [data.image] : []);
     const detailImage = document.getElementById('detailImage');
-    detailImage.src = data.image || '/static/img/site-logo.png';
-    // 有真实图片才允许点击放大，占位图点了没意义
-    detailImage.style.cursor = data.image ? 'zoom-in' : 'default';
-    detailImage.onclick = data.image ? () => openImagePreview(data.image) : null;
+    const thumbs = document.getElementById('detailThumbs');
+    const showImage = url => {
+        detailImage.src = url || '/static/img/site-logo.png';
+        // 有真实图片才允许点击放大，占位图点了没意义
+        detailImage.style.cursor = url ? 'zoom-in' : 'default';
+        detailImage.onclick = url ? () => openImagePreview(url, images) : null;
+        thumbs.querySelectorAll('img').forEach(el => {
+            el.classList.toggle('is-active', el.dataset.url === url);
+        });
+    };
+    // 只有一张时不显示缩略图条，省得占地方
+    thumbs.hidden = images.length < 2;
+    thumbs.innerHTML = images.map(url =>
+        `<img src="${escapeHtml(url)}" alt="商品图片" data-url="${escapeHtml(url)}">`).join('');
+    thumbs.querySelectorAll('img').forEach(el => {
+        el.onclick = () => showImage(el.dataset.url);
+    });
+    showImage(images[0] || '');
 
     document.getElementById('detailMissionSn').textContent = data.mission_sn || '—';
     document.getElementById('detailMissionType').textContent =
@@ -757,17 +795,25 @@ function bindEvents() {
 
     document.getElementById('detailClose').onclick = closeDetail;
     document.getElementById('detailFooterClose').onclick = closeDetail;
-    document.getElementById('detailOverlay').addEventListener('click', event => {
-        if (event.target.id === 'detailOverlay') closeDetail();
-    });
-    document.getElementById('imageOverlay').onclick = closeImagePreview;
+    // 两个弹窗都只认关闭按钮和 Esc，点遮罩不关，避免误触
+    document.getElementById('imageClose').onclick = closeImagePreview;
+    document.getElementById('imagePrev').onclick = event => {
+        event.stopPropagation();
+        stepImagePreview(-1);
+    };
+    document.getElementById('imageNext').onclick = event => {
+        event.stopPropagation();
+        stepImagePreview(1);
+    };
     document.addEventListener('keydown', event => {
-        if (event.key !== 'Escape') return;
         const imageOverlay = document.getElementById('imageOverlay');
         if (!imageOverlay.hidden) {
-            closeImagePreview();
+            if (event.key === 'Escape') closeImagePreview();
+            else if (event.key === 'ArrowLeft') stepImagePreview(-1);
+            else if (event.key === 'ArrowRight') stepImagePreview(1);
             return;
         }
+        if (event.key !== 'Escape') return;
         const overlay = document.getElementById('detailOverlay');
         if (overlay.classList.contains('show')) closeDetail();
     });

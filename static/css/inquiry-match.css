@@ -588,7 +588,27 @@ img.im-record-thumb:hover {
     justify-content: center;
     padding: 40px;
     background: rgba(17, 28, 45, .78);
-    cursor: zoom-out;
+    cursor: default;
+}
+
+.im-image-close {
+    position: absolute;
+    top: 18px;
+    right: 22px;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .16);
+    color: #fff;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.im-image-close:hover {
+    background: #e15b64;
 }
 
 .im-image-overlay[hidden] {
@@ -602,6 +622,40 @@ img.im-record-thumb:hover {
     border-radius: 8px;
     background: #fff;
     box-shadow: 0 20px 60px rgba(0, 0, 0, .4);
+}
+
+.im-image-nav {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .16);
+    color: #fff;
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background .2s;
+}
+
+.im-image-nav[hidden] {
+    display: none;
+}
+
+.im-image-nav:hover {
+    background: rgba(255, 255, 255, .32);
+}
+
+.im-image-nav.prev {
+    margin-right: 16px;
+}
+
+.im-image-nav.next {
+    margin-left: 16px;
 }
 
 /* ========== 询价详情弹窗（销售页详情弹窗的缩小版） ========== */
@@ -738,6 +792,13 @@ img.im-record-thumb:hover {
     font-size: 12px;
 }
 
+.im-detail-gallery {
+    flex: 0 0 108px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
 .im-detail-image {
     width: 108px;
     height: 108px;
@@ -749,6 +810,27 @@ img.im-record-thumb:hover {
     border: 1px solid #dfe6ef;
     border-radius: 8px;
     background: #f8faff;
+}
+
+.im-detail-thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.im-detail-thumbs img {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #dfe6ef;
+    border-radius: 5px;
+    background: #fff;
+    object-fit: cover;
+    cursor: pointer;
+}
+
+.im-detail-thumbs img.is-active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
 }
 
 .im-detail-image img {

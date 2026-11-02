@@ -16,6 +16,7 @@ from ..auth import get_current_user
 from ..bootstrap import app, templates
 from ..config.constants import PRODUCT_CLASSIFICATION_TREE
 from ..model import get_db, get_oa_db
+from ..util import parse_image_urls
 from .inquiries import _fetch_oa_inquiries
 from .sales import _oa_image
 
@@ -258,6 +259,7 @@ async def list_match_records(
             "specification": row.get("goods_spec"),
             "product_brand": row.get("factory_name"),
             "image": _oa_image(row.get("images")),
+            "images": parse_image_urls(row.get("images")),
             "purchase_price": row.get("purchase_price"),
             "goods_quotation_type": row.get("goods_quotation_type"),
             "jh_goods_price": row.get("jh_goods_price"),
@@ -578,6 +580,7 @@ async def inquiry_match_detail(inquiry_mission_id: int):
         "specification": row.get("goods_spec"),
         "ele_type": row.get("ele_type"),
         "image": _oa_image(row.get("images")),
+        "images": parse_image_urls(row.get("images")),
         "product_brand": row.get("factory_name"),
         "quotation_type": row.get("quotation_type"),
         "purchase_price": price,

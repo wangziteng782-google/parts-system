@@ -112,9 +112,12 @@
                         </div>
                     </div>
                     <div class="im-detail-goods">
-                        <div class="im-detail-image">
-                            <img id="detailImage" src="/static/img/site-logo.png" alt="商品图片"
-                                 onerror="this.src='/static/img/site-logo.png';this.onerror=null">
+                        <div class="im-detail-gallery">
+                            <div class="im-detail-image">
+                                <img id="detailImage" src="/static/img/site-logo.png" alt="商品图片"
+                                     onerror="this.src='/static/img/site-logo.png';this.onerror=null">
+                            </div>
+                            <div class="im-detail-thumbs" id="detailThumbs" hidden></div>
                         </div>
                         <div class="im-detail-goods-info">
                             <div class="im-detail-goods-name" id="detailGoodsName"></div>
@@ -151,13 +154,16 @@
 </div>
 
 <div class="im-image-overlay" id="imageOverlay" hidden>
+    <button type="button" class="im-image-close" id="imageClose" aria-label="关闭预览">×</button>
+    <button type="button" class="im-image-nav prev" id="imagePrev" aria-label="上一张" hidden>&#8249;</button>
     <img id="imagePreview" alt="商品图片">
+    <button type="button" class="im-image-nav next" id="imageNext" aria-label="下一张" hidden>&#8250;</button>
 </div>
 
 <div class="im-toast" id="toast"></div>
 
 <script src="/static/js/state.js"></script>
 <script src="/static/js/variants.js"></script>
-<script src="/static/js/inquiry-match.js?v=20261102-3"></script>
+<script src="/static/js/inquiry-match.js?v=20261102-4"></script>
 </body>
 </html>

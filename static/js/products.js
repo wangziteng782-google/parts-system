@@ -94,8 +94,12 @@ async function init() {
                 if (search) search.value = guess;
             }
 
-            if (data.image) {
-                pendingCreateLibraryUrls['actual_photos'] = [data.image];
+            // 询价记录可能有多张图，按原顺序全部塞进实物图，用户可自行删改
+            const inquiryImages = Array.isArray(data.images) && data.images.length
+                ? data.images
+                : (data.image ? [data.image] : []);
+            if (inquiryImages.length) {
+                pendingCreateLibraryUrls['actual_photos'] = inquiryImages.slice();
                 renderCreateImageSection();
             }
             showToast(guess
