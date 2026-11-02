@@ -147,6 +147,85 @@ def _match_map() -> dict[int, dict]:
         conn.close()
 
 
+def _to_amount(value) -> float:
+    """OA 里价格字段有 decimal 也有 varchar，统一转成数字，转不动当 0。"""
+    try:
+        return float(str(value).strip() or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _fetch_page_quotes(items: list[dict]) -> dict:
+    """按 (询价单, 商品) 取明细报价，只查当前页用到的键。"""
+    keys = sorted({
+        (int(item["query_order_id"]), int(item["order_goods_id"]))
+        for item in items
+        if item.get("query_order_id") and item.get("order_goods_id")
+    })
+    if not keys:
+        return {}
+    clause = " OR ".join(["(query_order_id=%s AND order_goods_id=%s)"] * len(keys))
+    params = [value for key in keys for value in key]
+    conn = get_oa_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""SELECT d.query_order_id, d.order_goods_id, d.is_selected,
+                       d.purchase_quotation_type, d.jh_goods_price, d.jh_goods_price_has_tax,
+                       d.supplier_name, d.purchase_source, d.goods_spec, d.warehouse,
+                       d.reminder, d.profit_rate, d.jh_post_fee, d.purchase_price,
+                       f.factory_name, b.brand_name AS ele_brand_name
+                  FROM yh_query_goods_mission_detail d
+                  LEFT JOIN yh_factory f ON f.id=d.factory AND f.delete_time IS NULL
+                  LEFT JOIN yh_ele_brand b ON b.id=d.ele_brand AND b.delete_time IS NULL
+                 WHERE ({clause}) AND d.delete_time IS NULL
+                 ORDER BY d.is_selected DESC, d.id DESC""",
+            params,
+        )
+        grouped = defaultdict(list)
+        for row in cursor.fetchall():
+            key = (int(row["query_order_id"]), int(row["order_goods_id"]))
+            grouped[key].append(row)
+        return grouped
+    finally:
+        conn.close()
+
+
+def _pick_fee_amount(quote_value, goods_value) -> str:
+    """运费和商品单价一样：报价为空时回落到商品上的运费。"""
+    if _to_amount(quote_value) > 0:
+        return str(quote_value).strip()
+    if _to_amount(goods_value) > 0:
+        return str(goods_value).strip()
+    return ""
+
+
+def _pick_purchase_price(quotes: list[dict], item: dict) -> tuple[str, str]:
+    """明细优先，商品表兜底，返回 (单价, 标签)。类型字段填反时看另一侧。"""
+    candidates = []
+    if quotes:
+        top = quotes[0]
+        candidates.append((
+            str(top.get("purchase_quotation_type") or "").strip(),
+            top.get("jh_goods_price"),
+            top.get("jh_goods_price_has_tax"),
+        ))
+    candidates.append((
+        str(item.get("goods_quotation_type") or "").strip(),
+        item.get("jh_goods_price"),
+        item.get("jh_goods_price_has_tax"),
+    ))
+    for quote_type, no_tax, with_tax in candidates:
+        if quote_type == "1":
+            ordered = ((with_tax, "含税采购价"), (no_tax, "无税采购价"))
+        else:
+            ordered = ((no_tax, "无税采购价"), (with_tax, "含税采购价"))
+        for value, label in ordered:
+            if _to_amount(value) > 0:
+                return str(value).strip(), label
+    return "", ""
+
+
 @app.get("/inquiry-match", response_class=HTMLResponse)
 async def inquiry_match_page(request: Request):
     return templates.TemplateResponse(
@@ -174,11 +253,15 @@ async def list_match_records(
         items.append({
             "inquiry_mission_id": mission_id,
             "order_goods_id": row.get("order_goods_id"),
+            "query_order_id": row.get("query_order_id"),
             "product_name": row.get("goods_name"),
             "specification": row.get("goods_spec"),
             "product_brand": row.get("factory_name"),
             "image": _oa_image(row.get("images")),
             "purchase_price": row.get("purchase_price"),
+            "goods_quotation_type": row.get("goods_quotation_type"),
+            "jh_goods_price": row.get("jh_goods_price"),
+            "jh_goods_price_has_tax": row.get("jh_goods_price_has_tax"),
             "quote_updated_at": row.get("quote_updated_at"),
             "create_user": row.get("create_user"),
             "create_time": row.get("create_time"),
@@ -205,8 +288,22 @@ async def list_match_records(
     total = len(items)
     pages = max(1, (total + page_size - 1) // page_size)
     start = (page - 1) * page_size
+    page_items = items[start:start + page_size]
+    # 只给当前页查明细报价，避免为一页数据把全量询价都连一遍
+    quotes_map = _fetch_page_quotes(page_items)
+    for item in page_items:
+        quotes = quotes_map.get(
+            (item["query_order_id"], item["order_goods_id"]), []
+        )
+        price, label = _pick_purchase_price(quotes, item)
+        item["purchase_price"] = price
+        item["price_label"] = label
+        # 取价用完就丢，这几个字段前端用不到
+        for key in ("query_order_id", "goods_quotation_type",
+                    "jh_goods_price", "jh_goods_price_has_tax"):
+            item.pop(key, None)
     return {
-        "items": items[start:start + page_size],
+        "items": page_items,
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -395,9 +492,14 @@ async def inquiry_match_detail(inquiry_mission_id: int):
     try:
         cursor = conn.cursor()
         cursor.execute(
-            """SELECT m.id AS inquiry_mission_id, m.order_goods_id, m.quotation_type,
-                      m.purchase_price, m.post_fee_purchase, m.post_fee_has_tax_purchase,
-                      g.goods_name, g.goods_spec, g.ele_type, g.images,
+            """SELECT m.id AS inquiry_mission_id, m.order_goods_id, m.query_order_id,
+                     m.mission_sn, m.mission_type, m.mission_status, m.used_time,
+                     COALESCE(NULLIF(TRIM(a.nickname), ''), a.username) AS creator_name,
+                     m.quotation_type, m.purchase_price,
+                     m.post_fee_purchase, m.post_fee_has_tax_purchase,
+                     g.quotation_type AS goods_quotation_type,
+                     g.jh_goods_price, g.jh_goods_price_has_tax,
+                     g.invoice, g.goods_name, g.goods_spec, g.ele_type, g.images,
                       g.goods_price, g.goods_price_tax, g.tax_rate, g.tax_fee,
                       g.post_fee, g.post_fee_tax_rate, g.post_fee_tax_fee,
                       g.post_fee_has_tax, g.goods_num, g.goods_unit, g.total_amount,
@@ -405,6 +507,7 @@ async def inquiry_match_detail(inquiry_mission_id: int):
                       g.goods_describe, g.post_fee_describe, g.remark, g.address,
                       f.factory_name
                FROM yh_query_goods_mission m
+               LEFT JOIN yh_admin_user a ON a.id=m.admin_id
                LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
                LEFT JOIN yh_factory f ON f.id=g.factory AND f.delete_time IS NULL
                WHERE m.id=%s""",
@@ -416,8 +519,60 @@ async def inquiry_match_detail(inquiry_mission_id: int):
     if not row:
         raise HTTPException(status_code=404, detail="询价记录不存在")
 
+    # 和列表同一套取价规则，保证两边显示一致
+    quote_key = None
+    if row.get("query_order_id") and row.get("order_goods_id"):
+        quote_key = (int(row["query_order_id"]), int(row["order_goods_id"]))
+    quotes_map = _fetch_page_quotes([{
+        "query_order_id": row.get("query_order_id"),
+        "order_goods_id": row.get("order_goods_id"),
+    }])
+    price, price_label = _pick_purchase_price(
+        quotes_map.get(quote_key, []) if quote_key else [], row
+    )
+    quotes = [
+        {
+            "index": index,
+            "supplier_name": quote.get("supplier_name"),
+            "purchase_source": quote.get("purchase_source"),
+            "factory_name": quote.get("factory_name"),
+            "ele_brand_name": quote.get("ele_brand_name"),
+            "goods_spec": quote.get("goods_spec"),
+            "warehouse": quote.get("warehouse"),
+            "reminder": quote.get("reminder"),
+            "purchase_quotation_type": quote.get("purchase_quotation_type"),
+            "jh_goods_price": quote.get("jh_goods_price"),
+            "jh_goods_price_has_tax": quote.get("jh_goods_price_has_tax"),
+            "profit_rate": quote.get("profit_rate"),
+            "jh_post_fee": quote.get("jh_post_fee"),
+            "purchase_price": quote.get("purchase_price"),
+            "is_selected": quote.get("is_selected"),
+        }
+        for index, quote in enumerate(quotes_map.get(quote_key, []) if quote_key else [], start=1)
+    ]
+
+    used_seconds = int(row.get("used_time") or 0)
+    mission_time_text = ""
+    if used_seconds > 0:
+        hours, rest = divmod(used_seconds, 3600)
+        minutes, seconds = divmod(rest, 60)
+        parts = []
+        if hours:
+            parts.append(f"{hours}小时")
+        if minutes:
+            parts.append(f"{minutes}分")
+        parts.append(f"{seconds}秒")
+        mission_time_text = "".join(parts)
+
     return {
         "inquiry_mission_id": int(row["inquiry_mission_id"]),
+        "mission_sn": row.get("mission_sn"),
+        "mission_type": row.get("mission_type"),
+        "mission_status_text": "已完成" if int(row.get("mission_status") or 0) == 4 else "",
+        "mission_time_text": mission_time_text,
+        "creator": row.get("creator_name"),
+        "invoice": row.get("invoice"),
+        "quotes": quotes,
         "order_goods_id": row.get("order_goods_id"),
         "product_name": row.get("goods_name"),
         "specification": row.get("goods_spec"),
@@ -425,9 +580,14 @@ async def inquiry_match_detail(inquiry_mission_id: int):
         "image": _oa_image(row.get("images")),
         "product_brand": row.get("factory_name"),
         "quotation_type": row.get("quotation_type"),
-        "purchase_price": row.get("purchase_price"),
-        "post_fee_purchase": row.get("post_fee_purchase"),
-        "post_fee_has_tax_purchase": row.get("post_fee_has_tax_purchase"),
+        "purchase_price": price,
+        "price_label": price_label,
+        "post_fee_purchase": _pick_fee_amount(
+            row.get("post_fee_purchase"), row.get("post_fee")
+        ),
+        "post_fee_has_tax_purchase": _pick_fee_amount(
+            row.get("post_fee_has_tax_purchase"), row.get("post_fee_has_tax")
+        ),
         "goods_price": row.get("goods_price"),
         "goods_price_tax": row.get("goods_price_tax"),
         "tax_rate": row.get("tax_rate"),

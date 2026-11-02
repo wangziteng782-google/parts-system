@@ -7,7 +7,7 @@
     <link rel="icon" href="/static/img/favicon.ico" sizes="any">
     <link rel="stylesheet" href="/static/css/base.css">
     <link rel="stylesheet" href="/static/css/product-detail.css">
-    <link rel="stylesheet" href="/static/css/inquiry-match.css?v=20261102-1">
+    <link rel="stylesheet" href="/static/css/inquiry-match.css?v=20261102-3">
 </head>
 <body>
 <div class="im-app">
@@ -89,49 +89,64 @@
 </div>
 
 <div class="im-detail-overlay" id="detailOverlay" aria-hidden="true">
-    <section class="im-detail-modal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <section class="im-detail-modal im-detail-modal--wide" role="dialog" aria-modal="true"
+             aria-labelledby="detailTitle">
         <header class="im-detail-header">
-            <div>
-                <h2 id="detailTitle">询价商品详情</h2>
-                <span class="im-badge">来自询价记录</span>
+            <div class="im-detail-heading">
+                <h2 id="detailTitle">任务单号：<span id="detailMissionSn">—</span></h2>
+                <span class="im-badge" id="detailMissionType">询价/运费</span>
             </div>
             <button type="button" class="im-detail-close" id="detailClose" aria-label="关闭详情">×</button>
         </header>
-        <div class="im-detail-scroll">
-            <div class="im-detail-card">
-                <div class="im-detail-row">
-                    <div class="im-detail-image">
-                        <img id="detailImage" src="/static/img/site-logo.png" alt="商品图片"
-                             onerror="this.src='/static/img/site-logo.png';this.onerror=null">
-                    </div>
-                    <div class="im-detail-summary" id="detailSummary"></div>
-                </div>
-                <div class="im-detail-strip" id="detailStrip"></div>
-                <div class="im-detail-title">询价信息</div>
-                <div class="im-detail-grid" id="detailGrid"></div>
 
-                <div class="im-detail-chat" id="detailChat" hidden>
-                    <div class="im-detail-title">
-                        <span>沟通记录</span>
-                        <span class="im-muted" id="detailChatCount"></span>
+        <div class="im-detail-body">
+            <div class="im-detail-main">
+                <section class="im-detail-block">
+                    <div class="im-detail-block-head">
+                        <span class="im-detail-block-title">询价商品信息</span>
+                        <span class="im-muted">（只读）</span>
+                        <div class="im-detail-block-meta">
+                            <span id="detailCreator"></span>
+                            <span class="im-pill ok" id="detailStatusText"></span>
+                            <span class="im-pill" id="detailMissionTime"></span>
+                        </div>
                     </div>
-                    <div class="im-detail-table-wrap">
-                        <table class="im-detail-table">
-                            <thead>
-                            <tr>
-                                <th>序号</th>
-                                <th>沟通内容</th>
-                                <th>附件</th>
-                                <th>创建人</th>
-                                <th>创建时间</th>
-                            </tr>
-                            </thead>
-                            <tbody id="detailChatBody"></tbody>
-                        </table>
+                    <div class="im-detail-goods">
+                        <div class="im-detail-image">
+                            <img id="detailImage" src="/static/img/site-logo.png" alt="商品图片"
+                                 onerror="this.src='/static/img/site-logo.png';this.onerror=null">
+                        </div>
+                        <div class="im-detail-goods-info">
+                            <div class="im-detail-goods-name" id="detailGoodsName"></div>
+                            <div class="im-detail-goods-spec" id="detailGoodsSpec"></div>
+                            <div class="im-detail-goods-meta" id="detailGoodsMeta"></div>
+                            <div class="im-detail-desc" id="detailGoodsDesc"></div>
+                        </div>
                     </div>
-                </div>
+                </section>
+
+                <section class="im-detail-block">
+                    <div class="im-detail-block-head">
+                        <span class="im-detail-block-title">供应商报价</span>
+                        <span class="im-muted">（可多家比价）</span>
+                    </div>
+                    <div class="im-quote-list" id="detailQuotes"></div>
+                </section>
             </div>
+
+            <aside class="im-detail-side">
+                <div class="im-detail-block-head">
+                    <span class="im-detail-block-title">沟通记录</span>
+                    <span class="im-muted" id="detailChatCount"></span>
+                </div>
+                <div class="im-chat-list" id="detailChatBody"></div>
+            </aside>
         </div>
+
+        <footer class="im-detail-footer">
+            <span class="im-detail-selected" id="detailSelected"></span>
+            <button type="button" class="im-detail-footer-close" id="detailFooterClose">关闭</button>
+        </footer>
     </section>
 </div>
 
@@ -143,6 +158,6 @@
 
 <script src="/static/js/state.js"></script>
 <script src="/static/js/variants.js"></script>
-<script src="/static/js/inquiry-match.js?v=20261102-1"></script>
+<script src="/static/js/inquiry-match.js?v=20261102-3"></script>
 </body>
 </html>

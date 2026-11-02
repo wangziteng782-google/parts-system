@@ -114,16 +114,22 @@ def _fetch_oa_inquiries(keyword: str) -> list[dict]:
         cursor = conn.cursor()
         cursor.execute(
             f"""SELECT m.id AS inquiry_mission_id, m.order_goods_id,
+                       m.query_order_id,
                        m.quotation_type, m.purchase_price,
                        m.post_fee_purchase, m.post_fee_has_tax_purchase,
+                       g.quotation_type AS goods_quotation_type,
+                       g.jh_goods_price, g.jh_goods_price_has_tax,
                        COALESCE(m.renew_time, m.update_time, m.finish_time,
                                 m.create_time, g.quote_time, g.update_time,
                                 g.inquiry_time, g.create_time) AS quote_updated_at,
                        g.goods_name, g.ele_type, g.goods_spec, g.images,
-                       f.factory_name
-                FROM yh_query_goods_mission m
-                LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
-                LEFT JOIN yh_factory f ON f.id=g.factory AND f.delete_time IS NULL
+                       f.factory_name,
+                       COALESCE(NULLIF(TRIM(a.nickname), ''), a.username) AS create_user,
+                       m.create_time
+                       FROM yh_query_goods_mission m
+                       LEFT JOIN yh_admin_user a ON a.id=m.admin_id
+                       LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
+                       LEFT JOIN yh_factory f ON f.id=g.factory AND f.delete_time IS NULL
                 WHERE {" AND ".join(where)}
                 ORDER BY quote_updated_at DESC, m.id DESC""",
             params,

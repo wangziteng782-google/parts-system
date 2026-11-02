@@ -83,9 +83,10 @@ function renderRecords() {
     list.innerHTML = imState.records.map((item, index) => {
         const matched = !!item.part_id;
         const rawPrice = Number(item.purchase_price);
+        const priceLabel = item.price_label || '';
         const price = rawPrice > 0
             ? '￥' + (Number.isInteger(rawPrice) ? rawPrice : rawPrice.toFixed(2))
-            : '询价中';
+            : '暂无报价';
         const thumb = item.image
             ? `<img class="im-record-thumb" src="${escapeHtml(item.image)}" alt="商品图片"
                     loading="lazy" data-image="${escapeHtml(item.image)}">`
@@ -106,7 +107,10 @@ function renderRecords() {
                     <div class="rmeta-row">
                         <span>创建时间：${imDate(item.create_time) || '—'}</span>
                     </div>
-                    <div class="rmeta-row">
+                    <div class="rmeta-row rmeta-row--price">
+                        ${priceLabel
+                            ? `<span class="price-label ${priceLabel === '含税采购价' ? 'is-tax' : ''}">${escapeHtml(priceLabel)}</span>`
+                            : ''}
                         <span class="price ${rawPrice > 0 ? '' : 'missing'}">${price}</span>
                     </div>
                 </div>
@@ -485,10 +489,10 @@ async function openDetail(missionId) {
     overlay.classList.add('show');
     overlay.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
-    document.getElementById('detailSummary').innerHTML =
-        '<span class="im-muted">加载中…</span>';
-    document.getElementById('detailStrip').innerHTML = '';
-    document.getElementById('detailGrid').innerHTML = '';
+    document.getElementById('detailQuotes').innerHTML =
+        '<div class="im-detail-empty">加载中…</div>';
+    document.getElementById('detailChatBody').innerHTML = '';
+    document.getElementById('detailSelected').textContent = '';
     try {
         const data = await imFetch('/api/inquiry-match/detail/' + missionId);
         renderDetail(data);
@@ -498,6 +502,13 @@ async function openDetail(missionId) {
     }
 }
 
+function invoiceText(value) {
+    const num = Number(value);
+    if (num === 2) return '专票';
+    if (num === 1) return '普票';
+    return '';
+}
+
 function renderDetail(data) {
     const detailImage = document.getElementById('detailImage');
     detailImage.src = data.image || '/static/img/site-logo.png';
@@ -505,49 +516,102 @@ function renderDetail(data) {
     detailImage.style.cursor = data.image ? 'zoom-in' : 'default';
     detailImage.onclick = data.image ? () => openImagePreview(data.image) : null;
 
-    document.getElementById('detailSummary').innerHTML = [
-        ['商品名称：', imText(data.product_name) || '—'],
-        ['规格型号：', imText(data.specification) || '—'],
-        ['产品规格：', imText(data.ele_type) || '—'],
-        ['商品单价：', imMoney(data.goods_price)
-            ? `<b class="im-detail-price">${imMoney(data.goods_price)}</b>` : '—'],
-    ].map(([label, value]) => `<label>${label}</label><span>${value}</span>`).join('');
+    document.getElementById('detailMissionSn').textContent = data.mission_sn || '—';
+    document.getElementById('detailMissionType').textContent =
+        Number(data.mission_type) === 3 ? '询价/运费' : '询价';
+    document.getElementById('detailCreator').textContent =
+        data.creator ? '创建人：' + data.creator : '';
+    document.getElementById('detailStatusText').textContent = data.mission_status_text || '';
+    const missionTime = document.getElementById('detailMissionTime');
+    missionTime.textContent = data.mission_time_text ? '报价用时 ' + data.mission_time_text : '';
+    missionTime.hidden = !data.mission_time_text;
 
-    document.getElementById('detailStrip').innerHTML = [
-        ['报价类型', imText(data.quotation_type) || '—'],
-        ['采购报价', imMoney(data.purchase_price) || '—'],
-        ['无税运费报价', imMoney(data.post_fee_purchase) || '—'],
-        ['含税运费报价', imMoney(data.post_fee_has_tax_purchase) || '—'],
-    ].map(([label, value]) => `<div><label>${label}</label><strong>${value}</strong></div>`).join('');
-
-    const fields = [
-        ['商品品牌/厂家', imText(data.product_brand)],
-        ['商品税率', imText(data.tax_rate)],
-        ['商品税费', imMoney(data.tax_fee)],
-        ['含税售价', imMoney(data.goods_price_tax)],
-        ['运费', imMoney(data.post_fee)],
-        ['运费税率', imText(data.post_fee_tax_rate)],
-        ['运费税费', imMoney(data.post_fee_tax_fee)],
-        ['含税运费', imMoney(data.post_fee_has_tax)],
+    document.getElementById('detailGoodsName').textContent = data.product_name || '未命名';
+    document.getElementById('detailGoodsSpec').textContent = data.specification || '';
+    document.getElementById('detailGoodsMeta').innerHTML = [
         ['数量', imNumber(data.goods_num)],
-        ['单位', imText(data.goods_unit)],
-        ['应收总额', imMoney(data.total_amount)],
-        ['电梯场景', imText(data.ele_scene)],
-        ['询价日期', imDate(data.inquiry_time)],
+        ['发票', invoiceText(data.invoice)],
         ['创建时间', imDate(data.create_time)],
-        ['询价描述', imText(data.goods_describe), true],
-        ['询运描述', imText(data.post_fee_describe), true],
-        ['商品备注', imText(data.remark), true],
-        ['收货地址', imText(data.address), true],
-    ].filter(([, value]) => value);
+        ['询价日期', imDate(data.inquiry_time)],
+    ].filter(([, value]) => value)
+        .map(([label, value]) => `<span>${label}：${value}</span>`)
+        .join('');
 
-    document.getElementById('detailGrid').innerHTML = fields.map(([label, value, full]) => `
-        <div class="${full ? 'im-detail-full' : ''}">
-            <label>${label}</label><span>${value}</span>
-        </div>`).join('')
-        || '<div class="im-detail-full"><span class="im-muted">暂无更多信息</span></div>';
+    const descRows = [
+        ['询价描述', data.goods_describe],
+        ['询运描述', data.post_fee_describe],
+    ].filter(([, value]) => imText(value));
+    document.getElementById('detailGoodsDesc').innerHTML = descRows.length
+        ? descRows.map(([label, value]) =>
+            `<div><label>${label}：</label><span>${imText(value)}</span></div>`).join('')
+        : '<div class="im-muted">暂无描述</div>';
 
+    renderQuotes(data.quotes || []);
     loadDetailChat(data.order_goods_id);
+}
+
+function renderQuotes(quotes) {
+    const wrap = document.getElementById('detailQuotes');
+    const selected = document.getElementById('detailSelected');
+    if (!quotes.length) {
+        wrap.innerHTML = '<div class="im-detail-empty">这条询价没有供应商报价记录</div>';
+        selected.textContent = '当前选中：无供应商报价';
+        return;
+    }
+    wrap.innerHTML = quotes.map(quote => {
+        const withTax = String(quote.purchase_quotation_type || '').trim() === '1';
+        const quotePrice = withTax ? quote.jh_goods_price_has_tax : quote.jh_goods_price;
+        const priceLabel = withTax ? '含税采购价' : '无税采购价';
+        const unit = imMoney(quotePrice);
+        const offer = imMoney(quote.purchase_price);
+        const profit = imText(quote.profit_rate);
+        const calc = unit
+            ? [unit, profit ? `× 利润 ${profit}%` : '', offer ? `= 报价 ${offer}` : '']
+                .filter(Boolean).join(' ')
+            : '';
+        const field = (label, value, opts) => {
+            const options = opts || {};
+            const classes = ['im-quote-field'];
+            if (options.full) classes.push('is-full');
+            const labelClasses = [];
+            if (options.price) labelClasses.push('is-price');
+            if (options.tax) labelClasses.push('is-tax');
+            if (options.required) labelClasses.push('is-required');
+            return `<div class="${classes.join(' ')}">
+                <label class="${labelClasses.join(' ')}">${label}</label>
+                <span class="im-quote-value">${value}</span>
+            </div>`;
+        };
+        const postFee = imMoney(quote.jh_post_fee);
+        return `<article class="im-quote-card ${Number(quote.is_selected) === 1 ? 'is-selected' : ''}">
+            <header class="im-quote-head">
+                <span class="im-quote-radio" aria-hidden="true"></span>
+                <span class="im-quote-supplier">${imText(quote.supplier_name) || '未命名供应商'}</span>
+                <span class="im-quote-no">报价 #${quote.index}</span>
+            </header>
+            <div class="im-quote-grid">
+                ${field('供应商', imText(quote.supplier_name), { required: true })}
+                ${field('报价来源', imText(quote.purchase_source), { required: true })}
+                ${field('商品品牌', imText(quote.factory_name), { required: true })}
+                ${field('电梯品牌', imText(quote.ele_brand_name))}
+                ${field('规格型号', imText(quote.goods_spec), { full: true })}
+                ${field('发货仓库', imText(quote.warehouse))}
+                ${field('销售提点', imText(quote.reminder))}
+                ${field(priceLabel, imMoney(quotePrice), { price: true, tax: withTax })}
+                ${field('利润系数', profit ? profit + '%' : '', { required: true })}
+                ${postFee ? field('运费', postFee, { full: true }) : ''}
+            </div>
+            <footer class="im-quote-total">
+                <span>${calc}</span>
+                <strong>${offer || '—'}</strong>
+            </footer>
+        </article>`;
+    }).join('');
+
+    const picked = quotes.find(item => Number(item.is_selected) === 1) || quotes[0];
+    const pickedWithTax = String(picked.purchase_quotation_type || '').trim() === '1';
+    selected.textContent = `当前选中：${picked.supplier_name || '未选择供应商'}`
+        + `  ${pickedWithTax ? '含税' : '不含税'} ${imMoney(picked.purchase_price) || ''}`;
 }
 
 function imAttachmentUrl(url) {
@@ -562,39 +626,39 @@ function imAttachmentUrl(url) {
 }
 
 async function loadDetailChat(orderGoodsId) {
-    const wrap = document.getElementById('detailChat');
     const body = document.getElementById('detailChatBody');
     const count = document.getElementById('detailChatCount');
     if (!orderGoodsId) {
-        wrap.hidden = true;
+        count.textContent = '';
+        body.innerHTML = '<div class="im-detail-empty">暂无沟通记录</div>';
         return;
     }
-    wrap.hidden = false;
     count.textContent = '加载中';
-    body.innerHTML = '<tr><td colspan="5" class="im-detail-empty">正在加载沟通记录…</td></tr>';
+    body.innerHTML = '<div class="im-detail-empty">正在加载沟通记录…</div>';
     try {
         const data = await imFetch(
             '/api/sales/inquiry-communications?order_goods_id=' + encodeURIComponent(orderGoodsId)
         );
         const items = data.items || [];
         count.textContent = items.length + ' 条';
-        body.innerHTML = items.length ? items.map((item, index) => {
+        body.innerHTML = items.length ? items.map(item => {
             const links = (item.attachments || [])
                 .map(imAttachmentUrl)
                 .filter(Boolean)
                 .map((url, i) => `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">附件${i + 1}</a>`)
                 .join('');
-            return `<tr>
-                <td>${index + 1}</td>
-                <td class="im-detail-content">${escapeHtml(item.content || '')}</td>
-                <td>${links}</td>
-                <td>${escapeHtml(item.creator || '')}</td>
-                <td>${imDate(item.create_time)}</td>
-            </tr>`;
-        }).join('') : '<tr><td colspan="5" class="im-detail-empty">暂无沟通记录</td></tr>';
+            return `<article class="im-chat-item">
+                <header>
+                    <span>${escapeHtml(item.creator || '')}</span>
+                    <time>${imDate(item.create_time)}</time>
+                </header>
+                <p>${escapeHtml(item.content || '')}</p>
+                ${links ? `<div class="im-chat-links">${links}</div>` : ''}
+            </article>`;
+        }).join('') : '<div class="im-detail-empty">暂无沟通记录</div>';
     } catch (error) {
         count.textContent = '加载失败';
-        body.innerHTML = `<tr><td colspan="5" class="im-detail-empty">${escapeHtml(error.message)}</td></tr>`;
+        body.innerHTML = `<div class="im-detail-empty">${escapeHtml(error.message)}</div>`;
     }
 }
 
@@ -692,6 +756,7 @@ function bindEvents() {
     document.getElementById('clearMatch').onclick = clearMatch;
 
     document.getElementById('detailClose').onclick = closeDetail;
+    document.getElementById('detailFooterClose').onclick = closeDetail;
     document.getElementById('detailOverlay').addEventListener('click', event => {
         if (event.target.id === 'detailOverlay') closeDetail();
     });
