@@ -389,14 +389,23 @@ const ICON_LOCATION = '<svg viewBox="0 0 1024 1024" width="14" height="14" fill=
 function renderGoodsRows() {
     inquiryEls.goodsRows.innerHTML = inquiryState.goods.map((good, index) => {
         const files = good.files || [];
-        const thumbs = files.map((item, fileIndex) => `
-            <div class="inquiry-upload-item" data-preview-image="${fileIndex}">
-                <img src="${item.url}" alt="">
+        const thumbs = files.map((item, fileIndex) => {
+            const isVideo = (item.file?.type || '').startsWith('video/');
+            const media = isVideo
+                ? `<video src="${item.url}" muted preload="metadata"></video>`
+                : `<img src="${item.url}" alt="">`;
+            const zoom = isVideo
+                ? ''
+                : `<button type="button" data-preview-image="${fileIndex}" title="预览">${ICON_ZOOM_IN}</button>`;
+            return `
+            <div class="inquiry-upload-item"${isVideo ? '' : ` data-preview-image="${fileIndex}"`}>
+                ${media}
                 <span class="inquiry-upload-actions">
-                    <button type="button" data-preview-image="${fileIndex}" title="预览">${ICON_ZOOM_IN}</button>
+                    ${zoom}
                     <button type="button" data-remove-image="${fileIndex}" title="删除">${ICON_DELETE}</button>
                 </span>
-            </div>`).join('');
+            </div>`;
+        }).join('');
         return `
         <article class="inquiry-goods-card" data-goods-index="${index}">
             <header class="inquiry-goods-head">
@@ -407,11 +416,11 @@ function renderGoodsRows() {
             <div class="inquiry-fields">
                 <div class="inquiry-field span-3 inquiry-field-images">
                     <span class="inquiry-field-label">商品图片</span>
-                    <div class="inquiry-goods-media${files.length >= MAX_GOODS_IMAGES ? ' is-hide' : ''}">
+                    <div class="inquiry-goods-media">
                         ${thumbs}
-                        <label class="inquiry-upload-plus" data-drop-zone title="点击上传，也可以拖拽图片进来">
+                        <label class="inquiry-upload-plus" data-drop-zone title="点击上传，也可以拖拽文件进来">
                             <span>＋</span>
-                            <input type="file" accept="image/*" multiple data-image-input hidden>
+                            <input type="file" multiple data-image-input hidden>
                         </label>
                     </div>
                 </div>
@@ -464,14 +473,13 @@ function renderChatTypes() {
 
 /* ---------------- 图片 ---------------- */
 
-const MAX_GOODS_IMAGES = 4;
-
+// 张数、类型、大小都不在前端拦，OA 上传接口接受什么就传什么
 function imagesFromTransfer(transfer) {
     if (!transfer) return [];
     const files = Array.from(transfer.files || []);
-    if (files.length) return files.filter(file => file.type.startsWith('image/'));
+    if (files.length) return files;
     return Array.from(transfer.items || [])
-        .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+        .filter(item => item.kind === 'file')
         .map(item => item.getAsFile())
         .filter(Boolean);
 }
@@ -481,14 +489,6 @@ function appendImageFiles(good, files) {
     good.files = good.files || [];
     let added = 0;
     for (const file of files) {
-        if (good.files.length >= MAX_GOODS_IMAGES) {
-            showSalesToast(`超出限制，最多上传 ${MAX_GOODS_IMAGES} 个图片`, 'error');
-            break;
-        }
-        if (!file.type.startsWith('image/')) {
-            showSalesToast('只能上传图片文件', 'error');
-            continue;
-        }
         good.files.push({file, url: URL.createObjectURL(file)});
         added += 1;
     }
@@ -1277,7 +1277,12 @@ inquiryEls.goodsRows?.addEventListener('click', event => {
     if (preview) {
         const card = preview.closest('[data-goods-index]');
         const good = inquiryState.goods[Number(card?.dataset.goodsIndex)];
-        if (good?.files?.length) openViewer(good.files.map(item => item.url), Number(preview.dataset.previewImage));
+        if (!good?.files?.length) return;
+        const clicked = good.files[Number(preview.dataset.previewImage)];
+        // 预览器只认图片，视频缩略图不放放大按钮
+        const images = good.files.filter(item => (item.file?.type || '').startsWith('image/'));
+        if (!clicked || !images.includes(clicked)) return;
+        openViewer(images.map(item => item.url), images.indexOf(clicked));
         return;
     }
     const button = event.target.closest('[data-remove]');

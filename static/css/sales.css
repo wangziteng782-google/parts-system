@@ -441,13 +441,13 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .inquiry-goods-media { flex: 1; display: flex; align-items: flex-start; gap: 10px; min-width: 0; overflow-x: auto; padding-bottom: 2px; }
 /* 边框和底色用 Element Plus 的默认值：item 用 --el-border-color，上传位用 --el-border-color-darker */
 .inquiry-upload-item { position: relative; flex: 0 0 auto; width: 68px; height: 68px; overflow: hidden; border: 1px solid #dcdfe6; border-radius: 6px; background: #fff; }
-.inquiry-upload-item img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.inquiry-upload-item img,
+.inquiry-upload-item video { width: 100%; height: 100%; display: block; object-fit: cover; }
 .inquiry-upload-actions { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: #fff; background: rgba(0,0,0,.5); opacity: 0; transition: opacity .3s; }
 .inquiry-upload-actions button { display: inline-flex; padding: 0; color: #fff; border: 0; background: none; line-height: 1; cursor: pointer; }
 .inquiry-upload-item:hover .inquiry-upload-actions { opacity: 1; }
 .inquiry-upload-plus { flex: 0 0 auto; width: 68px; height: 68px; display: flex; align-items: center; justify-content: center; color: #8c939d; border: 1px dashed #cdd0d6; border-radius: 6px; background: #fff; font-size: 26px; line-height: 1; cursor: pointer; transition: .18s; }
 .inquiry-upload-plus:hover, .inquiry-upload-plus.is-drag { color: var(--sales-blue); border-color: var(--sales-blue); }
-.inquiry-goods-media.is-hide .inquiry-upload-plus { display: none; }
 .inquiry-paste-menu { position: fixed; z-index: 6700; min-width: 80px; padding: 6px 12px; color: #606266; border: 1px solid #ddd; border-radius: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.15); font-size: 13px; cursor: pointer; }
 .inquiry-paste-menu:hover { background: #f5f5f5; }
 
