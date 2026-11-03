@@ -465,7 +465,6 @@ function renderChatTypes() {
 /* ---------------- 图片 ---------------- */
 
 const MAX_GOODS_IMAGES = 4;
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 function imagesFromTransfer(transfer) {
     if (!transfer) return [];
@@ -488,10 +487,6 @@ function appendImageFiles(good, files) {
         }
         if (!file.type.startsWith('image/')) {
             showSalesToast('只能上传图片文件', 'error');
-            continue;
-        }
-        if (file.size > MAX_IMAGE_SIZE) {
-            showSalesToast('单张图片不能超过 5MB', 'error');
             continue;
         }
         good.files.push({file, url: URL.createObjectURL(file)});
