@@ -94,8 +94,11 @@ def _feedback_map() -> dict[int, dict]:
     return grouped
 
 
-def _fetch_oa_inquiries(keyword: str) -> list[dict]:
-    """按报价时间倒序拉取，不设条数上限：上架状态和反馈在本地表，只能全量取回再过滤分页。"""
+def _fetch_oa_inquiries(keyword: str, since: str = "") -> list[dict]:
+    """按报价时间倒序拉取，不设条数上限：上架状态和反馈在本地表，只能全量取回再过滤分页。
+
+    since 为询价创建时间下限，格式 YYYY-MM-DD，留空表示不限。
+    """
     where = [
         "m.mission_type IN (1,3)",
         "m.mission_status=4",
@@ -109,6 +112,9 @@ def _fetch_oa_inquiries(keyword: str) -> list[dict]:
             "OR g.goods_spec LIKE %s OR f.factory_name LIKE %s)"
         )
         params.extend([like_keyword] * 4)
+    if since:
+        where.append("m.create_time >= %s")
+        params.append(since)
     conn = get_oa_db()
     try:
         cursor = conn.cursor()
