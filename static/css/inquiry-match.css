@@ -167,8 +167,23 @@ body {
 .im-tabs {
     flex-shrink: 0;
     display: flex;
+    align-items: center;
     gap: 5px;
-    padding: 0 10px 9px;
+    height: 40px;
+    padding: 0 10px;
+    box-sizing: border-box;
+}
+
+/* 用 .im-tabs 前缀提权，否则会被后面的 .im-btn 的 padding 盖掉 */
+.im-tabs .im-batch-entry {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 26px;
+    padding: 0 12px;
+    line-height: 1;
+    white-space: nowrap;
 }
 
 .im-tab {
@@ -221,6 +236,247 @@ body {
     border-left-color: var(--accent);
 }
 
+.im-list.batch-mode .im-record {
+    grid-template-columns: 16px 22px minmax(0, 1fr) auto;
+}
+
+/* 询价记录做成白底卡片，选中整块变浅蓝 */
+#recordList {
+    padding: 8px;
+    background: #f6f8fb;
+}
+
+#recordList .im-record {
+    margin: 0 0 8px;
+    padding: 12px 12px 12px 10px;
+    border: 1px solid #eef2f7;
+    border-left: 3px solid transparent;
+    border-radius: 9px;
+    background: #fff;
+}
+
+#recordList .im-record:last-child {
+    margin-bottom: 0;
+}
+
+#recordList .im-record:hover {
+    background: #fafcff;
+}
+
+#recordList .im-record.active {
+    background: #eaf2ff;
+    border-color: #cfe0ff;
+    border-left-color: var(--accent);
+}
+
+#recordList .im-record.checked {
+    background: #eef5ff;
+    border-color: #cfe0ff;
+    border-left-color: var(--accent);
+}
+
+.im-check {
+    width: 15px;
+    height: 15px;
+    margin-top: 4px;
+    border: 1.5px solid #c3cedd;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.im-record.checked .im-check {
+    position: relative;
+    border-color: var(--accent);
+    background: var(--accent);
+}
+
+.im-record.checked .im-check::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* 批量工具条：全选本页 / 选择同型号 / 已选条数 */
+.im-batch-tools {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 10px 8px;
+    padding: 8px 12px;
+    border: 1px solid #dbe7fb;
+    border-radius: 8px;
+    background: #f2f7ff;
+}
+
+.im-select-all {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #3d4b61;
+    font-size: 12.5px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.im-select-all input {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.im-batch-specs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+}
+
+.im-spec-chip {
+    max-width: 240px;
+    padding: 4px 10px;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--accent);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.im-spec-chip:hover {
+    background: #e8f0fe;
+}
+
+.im-spec-chip.is-active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+
+.im-spec-chip.is-active::before {
+    content: '✓ ';
+}
+
+.im-batch-count {
+    margin-left: auto;
+    color: #3d4b61;
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* 批量底部条：已选条数 + 取消选择 + 批量关联 SKU */
+.im-batch-footer {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 10px 8px;
+    padding: 9px 12px;
+    border: 1px solid #cfe0ff;
+    border-radius: 9px;
+    background: #eaf2ff;
+    color: #2a3b57;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.im-batch-footer-text {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.im-batch-dot {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+.im-batch-dot::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 3px;
+    width: 4px;
+    height: 7px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.im-batch-footer .im-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* display:flex 会盖掉 hidden 属性，这三个都得显式关掉 */
+.im-batch-tools[hidden],
+.im-batch-footer[hidden],
+.im-detail-thumbs[hidden] {
+    display: none;
+}
+
+.im-batch-footer .im-btn:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+/* 数字分页 */
+.im-pager {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.im-pager-num,
+.im-pager-arrow {
+    min-width: 26px;
+    height: 26px;
+    padding: 0 7px;
+    border: 1px solid #e2e9f3;
+    border-radius: 6px;
+    background: #fff;
+    color: #536177;
+    font-size: 12.5px;
+    cursor: pointer;
+}
+
+.im-pager-num.active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+
+.im-pager-arrow:disabled {
+    opacity: .45;
+    cursor: default;
+}
+
+.im-pager-num:hover:not(.active),
+.im-pager-arrow:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.im-pager-gap {
+    padding: 0 2px;
+    color: #9aa7b8;
+}
+
 .im-record .n {
     padding-top: 1px;
     text-align: center;
@@ -264,6 +520,19 @@ body {
     align-items: baseline;
     justify-content: space-between;
     gap: 8px;
+}
+
+.im-record .rmeta-row--plain {
+    justify-content: flex-start;
+    gap: 8px;
+    color: #8d9aad;
+}
+
+.im-record .rmeta-sep {
+    width: 1px;
+    height: 11px;
+    align-self: center;
+    background: #dfe6ef;
 }
 
 .im-record .rmeta-row--price {
@@ -315,11 +584,11 @@ body {
 }
 
 .im-record-thumb {
-    width: 56px;
-    height: 56px;
+    width: 62px;
+    height: 62px;
     flex-shrink: 0;
     border: 1px solid #e9eef5;
-    border-radius: 6px;
+    border-radius: 7px;
     object-fit: cover;
     background: #f5f7fa;
 }

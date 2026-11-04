@@ -27,6 +27,16 @@ class MatchSaveRequest(BaseModel):
     variant_group_id: Optional[str] = None
 
 
+class BatchMatchSaveRequest(BaseModel):
+    inquiry_mission_ids: list[int]
+    part_id: int
+    variant_group_id: Optional[str] = None
+
+
+# 单次批量上限：一个型号组的量级通常几十条，500 足够，再多基本是选错了
+BATCH_LIMIT = 500
+
+
 def _load_inquiry_brief(inquiry_mission_id: int):
     """从 OA 读取询价商品名和型号；记录不存在返回 None。"""
     conn = get_oa_db()
@@ -485,6 +495,147 @@ async def save_match(req: MatchSaveRequest):
     finally:
         conn.close()
     return {"message": "已保存"}
+
+
+@app.get("/api/inquiry-match/batch/preview")
+async def batch_preview(keyword: str = "", status: str = "all"):
+    """批量关联用：当前搜索下每条询价的 id、规格型号和已关联产品。
+
+    规格型号是分组依据，同一规格套同一个 SKU 才安全；
+    没搜索词时没必要把 7000 条都吐给前端，直接让页面走手工勾选。
+    """
+    keyword = keyword.strip()
+    if not keyword:
+        return {"items": [], "total": 0, "hint": "先搜索型号再按组批量选择"}
+    matches = _match_map()
+    items = []
+    for row in _fetch_oa_inquiries(keyword):
+        mission_id = int(row["inquiry_mission_id"])
+        matched = matches.get(mission_id) or {}
+        row_status = "matched" if matched.get("part_id") else "pending"
+        if status in ("pending", "matched") and row_status != status:
+            continue
+        items.append({
+            "id": mission_id,
+            "spec": str(row.get("goods_spec") or "").strip(),
+            "name": row.get("goods_name") or "",
+            "matched_part_id": matched.get("part_id"),
+            "matched_part_name": matched.get("part_name"),
+        })
+    return {"items": items, "total": len(items)}
+
+
+@app.post("/api/inquiry-match/batch/save")
+async def batch_save_match(req: BatchMatchSaveRequest):
+    """把同一规格的一批询价关联到同一个产品与 SKU，整批一个事务。"""
+    if not req.part_id:
+        raise HTTPException(status_code=400, detail="请先选择产品")
+    mission_ids = list(dict.fromkeys(int(item) for item in req.inquiry_mission_ids))
+    if not mission_ids:
+        raise HTTPException(status_code=400, detail="请先勾选询价记录")
+    if len(mission_ids) > BATCH_LIMIT:
+        raise HTTPException(
+            status_code=400, detail=f"单次最多关联 {BATCH_LIMIT} 条，请按型号分批"
+        )
+    group_id = (req.variant_group_id or "").strip()
+
+    # 询价在 OA 库：一次 IN 查存在性，顺带取规格。跨规格整批套同一个 SKU 必然是误操作
+    oa_conn = get_oa_db()
+    try:
+        oa_cursor = oa_conn.cursor()
+        placeholders = ",".join(["%s"] * len(mission_ids))
+        oa_cursor.execute(
+            f"""SELECT m.id, g.goods_spec
+                  FROM yh_query_goods_mission m
+                  LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
+                 WHERE m.id IN ({placeholders})""",
+            mission_ids,
+        )
+        rows = oa_cursor.fetchall()
+    finally:
+        oa_conn.close()
+    found = {int(row["id"]) for row in rows}
+    missing = [mid for mid in mission_ids if mid not in found]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"{len(missing)} 条询价记录不存在")
+    specs = {str(row.get("goods_spec") or "").strip() for row in rows}
+    if len(specs) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail=f"选中包含 {len(specs)} 种规格型号，请按规格分组后分别关联",
+        )
+    spec_text = next(iter(specs), "") or "无规格"
+    # 空规格之间无法证明是同一个东西，多条套一个 SKU 必然写错，只允许单条走原有流程
+    if not spec_text.strip() or spec_text == "无规格":
+        if len(mission_ids) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail="无规格型号的记录不支持批量关联，请逐条关联",
+            )
+
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM parts WHERE id=%s", (req.part_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="产品不存在")
+        if group_id:
+            cursor.execute(
+                """SELECT 1 FROM product_variant_group_specs
+                   WHERE part_id=%s AND variant_group_id=%s LIMIT 1""",
+                (req.part_id, group_id),
+            )
+            if not cursor.fetchone():
+                raise HTTPException(status_code=400, detail="该规格组合不属于这个产品")
+
+        user = get_current_user() or {}
+        matched_by = (
+            user.get("nickname") or user.get("username") or str(user.get("id") or "")
+        )
+        placeholders = ",".join(["%s"] * len(mission_ids))
+        cursor.execute(
+            f"""SELECT inquiry_mission_id, part_id FROM part_inquiries
+                 WHERE inquiry_mission_id IN ({placeholders})""",
+            mission_ids,
+        )
+        previous = {int(row["inquiry_mission_id"]): row.get("part_id")
+                    for row in cursor.fetchall()}
+        overwritten = sum(
+            1 for part in previous.values() if part and int(part) != req.part_id
+        )
+
+        cursor.executemany(
+            """INSERT INTO part_inquiries
+                   (inquiry_mission_id, part_id, variant_group_id, matched_by, matched_at)
+               VALUES (%s,%s,%s,%s,NOW())
+               ON DUPLICATE KEY UPDATE
+                   part_id=VALUES(part_id),
+                   variant_group_id=VALUES(variant_group_id),
+                   matched_by=VALUES(matched_by),
+                   matched_at=NOW()""",
+            [(mid, req.part_id, group_id or None, matched_by) for mid in mission_ids],
+        )
+        detail = f"批量关联 {len(mission_ids)} 条询价（规格 {spec_text}）"
+        if overwritten:
+            detail += f"，覆盖原关联 {overwritten} 条"
+        write_operation_log(
+            cursor,
+            part_id=req.part_id,
+            operation_type="INQUIRY",
+            module_code="INQUIRY",
+            user_id=user.get("id"),
+            detail=detail,
+        )
+        conn.commit()
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return {"saved": len(mission_ids), "overwritten": overwritten}
 
 
 @app.get("/api/inquiry-match/detail/{inquiry_mission_id}")

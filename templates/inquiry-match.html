@@ -7,7 +7,7 @@
     <link rel="icon" href="/static/img/favicon.ico" sizes="any">
     <link rel="stylesheet" href="/static/css/base.css">
     <link rel="stylesheet" href="/static/css/product-detail.css">
-    <link rel="stylesheet" href="/static/css/inquiry-match.css?v=20261102-3">
+    <link rel="stylesheet" href="/static/css/inquiry-match.css?v=20261103-6">
 </head>
 <body>
 <div class="im-app">
@@ -39,14 +39,29 @@
                 <button class="im-tab active" data-status="all">全部 <span id="statAll">0</span></button>
                 <button class="im-tab" data-status="pending">待关联 <span id="statPending">0</span></button>
                 <button class="im-tab" data-status="matched">已关联 <span id="statMatched">0</span></button>
+                <button id="batchToggle" class="im-btn im-btn-sm im-btn-primary im-batch-entry" title="按型号批量关联">批量关联</button>
+            </div>
+            <div class="im-batch-tools" id="batchTools" hidden>
+                <label class="im-select-all">
+                    <input type="checkbox" id="batchSelectAll">
+                    <span>全选本页</span>
+                </label>
+                <div class="im-batch-specs" id="batchSpecs"></div>
+                <span class="im-batch-count" id="batchCount">已选 0 条</span>
             </div>
             <div class="im-list" id="recordList"></div>
+            <div class="im-batch-footer" id="batchFooter" hidden>
+                <span class="im-batch-footer-text">
+                    <i class="im-batch-dot"></i>
+                    <span id="batchFooterCount">已选择 0 条询价记录</span>
+                </span>
+                <div class="im-actions">
+                    <button id="batchClear" class="im-btn im-btn-sm">取消选择</button>
+                </div>
+            </div>
             <div class="im-foot">
                 <span class="im-muted" id="recordPageInfo">-</span>
-                <div class="im-actions">
-                    <button id="recordPrev" class="im-btn im-btn-sm">上一页</button>
-                    <button id="recordNext" class="im-btn im-btn-sm">下一页</button>
-                </div>
+                <div class="im-pager" id="recordPager"></div>
             </div>
         </section>
 
@@ -164,6 +179,6 @@
 
 <script src="/static/js/state.js"></script>
 <script src="/static/js/variants.js"></script>
-<script src="/static/js/inquiry-match.js?v=20261102-4"></script>
+<script src="/static/js/inquiry-match.js?v=20261103-7"></script>
 </body>
 </html>

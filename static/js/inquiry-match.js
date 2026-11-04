@@ -8,6 +8,9 @@ const imState = {
     status: 'all',
     keyword: '',
     selectedMissionId: null,
+    batchMode: false,
+    batchIds: new Set(),
+    batchItems: [],
     products: [],
     productPage: 1,
     productPageSize: 30,
@@ -69,9 +72,47 @@ async function loadRecords() {
         document.getElementById('recordPageInfo').textContent =
             `第 ${data.page} / ${data.pages} 页，共 ${data.total} 条`;
         renderRecords();
+        renderPager();
+        if (imState.batchMode) loadBatchPreview();
     } catch (error) {
         list.innerHTML = `<div class="im-empty">${escapeHtml(error.message)}</div>`;
     }
+}
+
+// 页码只渲染首尾和当前页附近，237 页也不会拉出一长条
+function renderPager() {
+    const wrap = document.getElementById('recordPager');
+    const pages = imState.recordPages;
+    const current = imState.recordPage;
+    if (!pages || pages <= 1) {
+        wrap.innerHTML = '';
+        return;
+    }
+    const numbers = Array.from(new Set([1, pages, current - 1, current, current + 1]))
+        .filter(num => num >= 1 && num <= pages)
+        .sort((a, b) => a - b);
+    const cells = [];
+    numbers.forEach((num, index) => {
+        if (index && num - numbers[index - 1] > 1) {
+            cells.push('<span class="im-pager-gap">…</span>');
+        }
+        cells.push(`<button type="button" class="im-pager-num ${num === current ? 'active' : ''}"
+                           data-page="${num}">${num}</button>`);
+    });
+    wrap.innerHTML = `
+        <button type="button" class="im-pager-arrow" data-page="${current - 1}"
+                ${current <= 1 ? 'disabled' : ''}>&#8249;</button>
+        ${cells.join('')}
+        <button type="button" class="im-pager-arrow" data-page="${current + 1}"
+                ${current >= pages ? 'disabled' : ''}>&#8250;</button>`;
+    wrap.querySelectorAll('[data-page]').forEach(button => {
+        button.onclick = () => {
+            const page = Number(button.dataset.page);
+            if (!page || page === imState.recordPage) return;
+            imState.recordPage = page;
+            loadRecords();
+        };
+    });
 }
 
 function renderRecords() {
@@ -91,8 +132,10 @@ function renderRecords() {
             ? `<img class="im-record-thumb" src="${escapeHtml(item.image)}" alt="商品图片"
                     loading="lazy" data-image="${escapeHtml(item.image)}" data-index="${index}">`
             : '<div class="im-record-thumb"></div>';
-        return `<div class="im-record ${item.inquiry_mission_id === imState.selectedMissionId ? 'active' : ''}"
+        const checked = imState.batchIds.has(item.inquiry_mission_id);
+        return `<div class="im-record ${item.inquiry_mission_id === imState.selectedMissionId ? 'active' : ''} ${checked ? 'checked' : ''}"
                      data-id="${item.inquiry_mission_id}">
+            ${imState.batchMode ? '<span class="im-check"></span>' : ''}
             <div class="n">${index + 1}</div>
             <div class="rmain">
                 <div class="rname">
@@ -101,10 +144,9 @@ function renderRecords() {
                 </div>
                 <div class="model">${escapeHtml(item.specification || '（无规格型号）')}</div>
                 <div class="rmeta">
-                    <div class="rmeta-row">
+                    <div class="rmeta-row rmeta-row--plain">
                         <span>创建人：${escapeHtml(item.create_user || '—')}</span>
-                    </div>
-                    <div class="rmeta-row">
+                        <i class="rmeta-sep"></i>
                         <span>创建时间：${imDate(item.create_time) || '—'}</span>
                     </div>
                     <div class="rmeta-row rmeta-row--price">
@@ -122,7 +164,11 @@ function renderRecords() {
         </div>`;
     }).join('');
     list.querySelectorAll('.im-record').forEach(el => {
-        el.onclick = () => selectRecord(Number(el.dataset.id));
+        el.onclick = () => {
+            const missionId = Number(el.dataset.id);
+            if (imState.batchMode) toggleBatch(missionId);
+            else selectRecord(missionId);
+        };
     });
     list.querySelectorAll('[data-detail]').forEach(btn => {
         btn.onclick = event => {
@@ -137,6 +183,177 @@ function renderRecords() {
             openImagePreview(img.dataset.image, item.images);
         };
     });
+}
+
+// ========== 批量关联 ==========
+function enterBatch() {
+    imState.batchMode = true;
+    imState.batchIds = new Set();
+    imState.batchItems = [];
+    document.getElementById('batchToggle').textContent = '退出批量';
+    document.getElementById('batchTools').hidden = false;
+    document.getElementById('batchFooter').hidden = false;
+    document.getElementById('recordList').classList.add('batch-mode');
+    // 批量要重新选目标，别沿用上一条单条记录留下的产品和 SKU
+    imState.selectedPartId = null;
+    imState.selectedGroupId = '';
+    imState.selectedSpecs = {};
+    renderProducts();
+    resetSkuPanel();
+    renderRecords();
+    updateBatchUi();
+    loadBatchPreview();
+}
+
+function exitBatch() {
+    imState.batchMode = false;
+    imState.batchIds = new Set();
+    imState.batchItems = [];
+    document.getElementById('batchToggle').textContent = '批量关联';
+    document.getElementById('batchTools').hidden = true;
+    document.getElementById('batchFooter').hidden = true;
+    document.getElementById('batchSpecs').innerHTML = '';
+    document.getElementById('recordList').classList.remove('batch-mode');
+    renderRecords();
+    updateSummary();
+}
+
+function toggleBatch(missionId) {
+    if (imState.batchIds.has(missionId)) {
+        imState.batchIds.delete(missionId);
+    } else {
+        // 无规格的记录可能是完全不同的小件，套同一个 SKU 会批量写错
+        const record = imState.records.find(item => item.inquiry_mission_id === missionId);
+        if (record && !String(record.specification || '').trim()) {
+            showToast('无规格型号的记录不支持批量关联，请单独关联', 'error');
+            return;
+        }
+        imState.batchIds.add(missionId);
+    }
+    renderRecords();
+    updateBatchUi();
+}
+
+// 同型号按钮点一次选中整组，再点一次取消整组
+function toggleBatchSpec(spec) {
+    const ids = imState.batchItems
+        .filter(item => item.spec === spec)
+        .map(item => item.id);
+    const allSelected = ids.length > 0 && ids.every(id => imState.batchIds.has(id));
+    ids.forEach(id => {
+        if (allSelected) imState.batchIds.delete(id);
+        else imState.batchIds.add(id);
+    });
+    renderRecords();
+    updateBatchUi();
+}
+
+// 全选本页：无规格的记录跳过，这类记录套同一个 SKU 风险太大
+function toggleBatchPage(select) {
+    let skipped = 0;
+    imState.records.forEach(item => {
+        const missionId = item.inquiry_mission_id;
+        if (!select) {
+            imState.batchIds.delete(missionId);
+            return;
+        }
+        if (!String(item.specification || '').trim()) {
+            skipped += 1;
+            return;
+        }
+        imState.batchIds.add(missionId);
+    });
+    renderRecords();
+    updateBatchUi();
+    if (skipped) showToast(`已跳过 ${skipped} 条无规格记录`);
+}
+
+function updateBatchUi() {
+    const count = imState.batchIds.size;
+    document.getElementById('batchCount').textContent = `已选 ${count} 条`;
+    document.getElementById('batchFooterCount').textContent = `已选择 ${count} 条询价记录`;
+    const selectable = imState.records.filter(
+        item => String(item.specification || '').trim()
+    );
+    document.getElementById('batchSelectAll').checked = selectable.length > 0
+        && selectable.every(item => imState.batchIds.has(item.inquiry_mission_id));
+    syncBatchSpecState();
+    updateSummary();
+}
+
+// 整组都被选中时按钮显示选中态，取消任意一条就退回普通态
+function syncBatchSpecState() {
+    const wrap = document.getElementById('batchSpecs');
+    if (!wrap) return;
+    wrap.querySelectorAll('[data-spec]').forEach(chip => {
+        const ids = imState.batchItems
+            .filter(item => item.spec === chip.dataset.spec)
+            .map(item => item.id);
+        chip.classList.toggle(
+            'is-active',
+            ids.length > 0 && ids.every(id => imState.batchIds.has(id))
+        );
+    });
+}
+
+// 分组只用规格型号：同一个型号会有一堆不同叫法，名称不能当键
+async function loadBatchPreview() {
+    if (!imState.keyword) {
+        imState.batchItems = [];
+        renderBatchSpecs();
+        return;
+    }
+    try {
+        const params = new URLSearchParams({
+            keyword: imState.keyword,
+            status: imState.status,
+        });
+        const data = await imFetch('/api/inquiry-match/batch/preview?' + params);
+        imState.batchItems = data.items || [];
+        // 选择跟着筛选走，预览里已经没有的 id 直接丢掉，避免选中看不见的记录
+        const alive = new Set(imState.batchItems.map(item => item.id));
+        Array.from(imState.batchIds).forEach(id => {
+            if (!alive.has(id)) imState.batchIds.delete(id);
+        });
+        renderBatchSpecs();
+        renderRecords();
+        updateBatchUi();
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+// 同型号按钮：只按规格型号分组，同一个型号会有一堆不同叫法，名称不能当键
+function renderBatchSpecs() {
+    const wrap = document.getElementById('batchSpecs');
+    if (!imState.batchMode || !imState.keyword) {
+        wrap.innerHTML = '';
+        return;
+    }
+    const groups = new Map();
+    imState.batchItems.forEach(item => {
+        if (!item.spec) return;
+        if (!groups.has(item.spec)) {
+            groups.set(item.spec, { spec: item.spec, ids: [], names: new Set(), matched: 0 });
+        }
+        const group = groups.get(item.spec);
+        group.ids.push(item.id);
+        if (item.name) group.names.add(item.name);
+        if (item.matched_part_id) group.matched += 1;
+    });
+    wrap.innerHTML = Array.from(groups.values()).map(group => {
+        const hint = [
+            `${group.ids.length} 条`,
+            group.names.size > 1 ? `${group.names.size} 种叫法` : '',
+            group.matched ? `已关联 ${group.matched}` : '',
+        ].filter(Boolean).join(' · ');
+        return `<button type="button" class="im-spec-chip" data-spec="${escapeHtml(group.spec)}"
+                        title="${escapeHtml(hint)}">选择同型号（${escapeHtml(group.spec)}）</button>`;
+    }).join('');
+    wrap.querySelectorAll('[data-spec]').forEach(btn => {
+        btn.onclick = () => toggleBatchSpec(btn.dataset.spec);
+    });
+    syncBatchSpecState();
 }
 
 function selectRecord(missionId) {
@@ -349,7 +566,10 @@ function renderSkuPanel() {
 
     body.querySelectorAll('.im-sku-value').forEach(el => {
         el.onclick = () => {
-            imState.selectedSpecs[el.dataset.spec] = el.dataset.value;
+            const { spec, value } = el.dataset;
+            // 再点一次同一个值就是取消选择
+            if (imState.selectedSpecs[spec] === value) delete imState.selectedSpecs[spec];
+            else imState.selectedSpecs[spec] = value;
             imState.selectedGroupId = '';
             renderSkuPanel();
             updateSummary();
@@ -376,27 +596,42 @@ function updateSummary() {
     const product = imState.products.find(item => item.id === imState.selectedPartId);
     const groupId = findSelectedGroup();
     const parts = [];
-    if (record) parts.push(record.product_name || '询价');
+    if (imState.batchMode) parts.push(`已选 ${imState.batchIds.size} 条`);
+    else if (record) parts.push(record.product_name || '询价');
     if (product) parts.push(product.model || product.product_name || '产品');
     if (groupId) parts.push('SKU 已选');
     else if (imState.selectedPartId) parts.push('未选 SKU');
 
     document.getElementById('matchSummary').textContent =
         parts.length ? parts.join(' · ') : '尚未完成选择';
-    const canSave = !!(imState.selectedMissionId && imState.selectedPartId);
-    document.getElementById('saveMatch').disabled = !canSave;
-    document.getElementById('clearMatch').disabled = !record || !record.part_id;
+    const saveBtn = document.getElementById('saveMatch');
+    if (imState.batchMode) {
+        const count = imState.batchIds.size;
+        saveBtn.textContent = count ? `保存关联（${count} 条）` : '保存关联';
+        saveBtn.disabled = !(count && imState.selectedPartId);
+    } else {
+        saveBtn.textContent = '保存关联';
+        saveBtn.disabled = !(imState.selectedMissionId && imState.selectedPartId);
+    }
+    // 批量模式下取消关联还是走单条，先去掉避免两边语义混在一起
+    document.getElementById('clearMatch').disabled =
+        imState.batchMode || !record || !record.part_id;
 }
 
 async function saveMatch() {
-    const missionId = imState.selectedMissionId;
     const partId = imState.selectedPartId;
-    if (!missionId || !partId) return;
     const groupId = findSelectedGroup();
+    if (!partId) return;
     if (imState.specs.length && !groupId) {
         showToast('请先选择完整的规格组合', 'error');
         return;
     }
+    if (imState.batchMode) {
+        await saveBatchMatch(partId, groupId);
+        return;
+    }
+    const missionId = imState.selectedMissionId;
+    if (!missionId) return;
     try {
         await imFetch('/api/inquiry-match/save', {
             method: 'POST',
@@ -415,6 +650,53 @@ async function saveMatch() {
             renderRecords();
         }
         updateSummary();
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+async function saveBatchMatch(partId, groupId) {
+    const ids = Array.from(imState.batchIds);
+    if (!ids.length) {
+        showToast('请先勾选询价记录', 'error');
+        return;
+    }
+    const idSet = new Set(ids);
+    const specs = new Set(ids.map(id => {
+        const item = imState.batchItems.find(row => row.id === id);
+        return item ? item.spec : '';
+    }));
+    if (specs.size > 1) {
+        showToast(`选中包含 ${specs.size} 种规格型号，请按规格分组关联`, 'error');
+        return;
+    }
+    const product = imState.products.find(item => item.id === partId) || {};
+    const overwritten = imState.batchItems.filter(item =>
+        idSet.has(item.id) && item.matched_part_id
+        && Number(item.matched_part_id) !== partId
+    ).length;
+    const lines = [
+        `将把 ${ids.length} 条询价关联到：${product.product_name || '产品'} ${product.model || ''}`.trim(),
+    ];
+    // 没搜索词就没有分组数据，规格由后端校验，这里不瞎写
+    if (imState.batchItems.length) lines.push(`规格型号：${[...specs][0] || '无规格'}`);
+    lines.push(`目标 SKU：${groupId || '未选择规格组合'}`);
+    if (overwritten) lines.push(`其中 ${overwritten} 条原已关联其他产品，将被覆盖`);
+    if (!window.confirm(lines.join('\n') + '\n\n确认继续？')) return;
+    try {
+        const result = await imFetch('/api/inquiry-match/batch/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                inquiry_mission_ids: ids,
+                part_id: partId,
+                variant_group_id: groupId || null,
+            }),
+        });
+        showToast(`已关联 ${result.saved} 条`
+            + (result.overwritten ? `，覆盖 ${result.overwritten} 条` : ''));
+        exitBatch();
+        await loadRecords();
     } catch (error) {
         showToast(error.message, 'error');
     }
@@ -717,31 +999,43 @@ function bindEvents() {
         document.querySelectorAll('#recordTabs .im-tab').forEach(el => {
             el.classList.toggle('active', el === tab);
         });
+        // 换筛选条件就退出批量，免得选中的记录已经不在结果里
+        if (imState.batchMode) exitBatch();
         loadRecords();
     });
+
+    document.getElementById('batchToggle').onclick = () => {
+        if (imState.batchMode) exitBatch();
+        else enterBatch();
+    };
+    document.getElementById('batchClear').onclick = () => {
+        imState.batchIds = new Set();
+        renderRecords();
+        updateBatchUi();
+    };
+    document.getElementById('batchSelectAll').onchange = event => {
+        toggleBatchPage(event.target.checked);
+    };
 
     const searchRecords = () => {
         imState.keyword = document.getElementById('recordSearch').value.trim();
         imState.recordPage = 1;
+        // 换筛选条件就退出批量，免得选中的记录已经不在结果里
+        if (imState.batchMode) exitBatch();
         loadRecords();
     };
+    // 输入即搜（300ms 防抖），和产品型号搜索一致，不用按回车
+    let recordSearchTimer;
     document.getElementById('recordSearchBtn').onclick = searchRecords;
-    document.getElementById('recordSearch').addEventListener('keydown', event => {
-        if (event.key === 'Enter') searchRecords();
+    document.getElementById('recordSearch').addEventListener('input', () => {
+        clearTimeout(recordSearchTimer);
+        recordSearchTimer = setTimeout(searchRecords, 300);
     });
-
-    document.getElementById('recordPrev').onclick = () => {
-        if (imState.recordPage > 1) {
-            imState.recordPage -= 1;
-            loadRecords();
-        }
-    };
-    document.getElementById('recordNext').onclick = () => {
-        if (imState.recordPage < imState.recordPages) {
-            imState.recordPage += 1;
-            loadRecords();
-        }
-    };
+    document.getElementById('recordSearch').addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        clearTimeout(recordSearchTimer);
+        searchRecords();
+    });
 
     document.getElementById('productSearchBtn').onclick = () => {
         imState.productPage = 1;
