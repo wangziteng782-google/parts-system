@@ -318,6 +318,16 @@ async def list_match_records(
     elif status == "matched":
         items = matched
 
+    # 同型号的询价排在一起，型号之间按各自最新一条的时间倒序。
+    # items 进来时已按时间倒序，型号首次出现的位置就是它最新那条的位置。
+    # ponytail: 空规格用 mission_id 兜底成独立键，否则几百条无型号记录会连成一大段
+    groups = {}
+    for item in items:
+        spec = (item.get("specification") or "").strip()
+        key = spec or f"#m{item['inquiry_mission_id']}"
+        groups.setdefault(key, []).append(item)
+    items = [row for rows in groups.values() for row in rows]
+
     page = max(1, page)
     page_size = max(1, min(100, page_size))
     total = len(items)
