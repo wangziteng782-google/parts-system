@@ -1066,8 +1066,6 @@ async function init() {
                 <div class="product-tags">
                     <span class="tag tag-primary"><span style="opacity:0.7">产品分类：</span><span class="field-value" id="fv-product_type" onclick="editField('product_type')">${escapeHtml(data.product_type || '点击设置三级分类')}</span></span>
                     <span class="tag tag-primary" style="display:none"><span style="opacity:0.7">品类归属：</span><span class="field-value" id="fv-category" onclick="editField('category')">${escapeHtml(data.category || '未分类')}</span></span>
-                    <span class="tag tag-success"><span style="opacity:0.7">性质：</span><span class="field-value" id="fv-nature" onclick="editField('nature')">${escapeHtml(data.nature || '未标注')}</span></span>
-                    <span class="tag tag-warning"><span style="opacity:0.7">供应商：</span><span class="field-value" id="fv-supplier" onclick="editField('supplier')">${escapeHtml(data.supplier || '无供应商')}</span></span>
                 </div>
                 <div class="main-price-meta">
                     <div class="main-price-item purchase-cost-highlight">

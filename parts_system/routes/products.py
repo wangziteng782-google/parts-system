@@ -180,6 +180,9 @@ async def get_product(product_id: int):
         if not row:
             logger.warning(f"[查询] 产品不存在 | product_id={product_id}")
             raise HTTPException(status_code=404, detail="产品不存在")
+        # 供应商、性质不再展示，详情里直接剔除，不返回给前端
+        row.pop("supplier", None)
+        row.pop("nature", None)
         logger.info(f"[查询] 产品详情完成 | product_id={product_id}, name={row.get('product_name', 'N/A')}")
         return row
     except HTTPException:
