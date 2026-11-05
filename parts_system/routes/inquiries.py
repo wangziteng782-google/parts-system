@@ -125,6 +125,7 @@ def _fetch_oa_inquiries(keyword: str, since: str = "") -> list[dict]:
                        m.post_fee_purchase, m.post_fee_has_tax_purchase,
                        g.quotation_type AS goods_quotation_type,
                        g.jh_goods_price, g.jh_goods_price_has_tax,
+                       s.supplier_name AS goods_supplier_name,
                        COALESCE(m.renew_time, m.update_time, m.finish_time,
                                 m.create_time, g.quote_time, g.update_time,
                                 g.inquiry_time, g.create_time) AS quote_updated_at,
@@ -136,6 +137,7 @@ def _fetch_oa_inquiries(keyword: str, since: str = "") -> list[dict]:
                        LEFT JOIN yh_admin_user a ON a.id=m.admin_id
                        LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
                        LEFT JOIN yh_factory f ON f.id=g.factory AND f.delete_time IS NULL
+                       LEFT JOIN yh_supplier s ON s.id=g.supplier AND s.delete_time IS NULL
                 WHERE {" AND ".join(where)}
                 ORDER BY quote_updated_at DESC, m.id DESC""",
             params,

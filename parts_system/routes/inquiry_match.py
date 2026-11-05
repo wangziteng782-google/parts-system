@@ -296,6 +296,7 @@ async def list_match_records(
             "goods_quotation_type": row.get("goods_quotation_type"),
             "jh_goods_price": row.get("jh_goods_price"),
             "jh_goods_price_has_tax": row.get("jh_goods_price_has_tax"),
+            "goods_supplier_name": row.get("goods_supplier_name"),
             "quote_updated_at": row.get("quote_updated_at"),
             "create_user": row.get("create_user"),
             "create_time": row.get("create_time"),
@@ -327,13 +328,24 @@ async def list_match_records(
     quotes_map = _fetch_page_quotes(page_items)
     for item in page_items:
         quotes = quotes_map.get(item["inquiry_mission_id"], [])
+        if not quotes and item.get("goods_supplier_name"):
+            # 没有比价明细时成交价记在商品主行上，供应商也从主行取，补一条出来
+            quotes = [{
+                "supplier_name": item["goods_supplier_name"],
+                "goods_spec": item.get("specification"),
+                "purchase_quotation_type": item.get("goods_quotation_type"),
+                "jh_goods_price": item.get("jh_goods_price"),
+                "jh_goods_price_has_tax": item.get("jh_goods_price_has_tax"),
+                "is_selected": 1,
+            }]
         price, label = _pick_purchase_price(quotes, item)
         item["purchase_price"] = price
         item["price_label"] = label
         # 报价明细一并带上：列表多条时直接摊开，供应商报价弹窗也拿它做参考
         item["quotes"] = _quote_rows(quotes)
         # 取价用完就丢，这几个字段前端用不到
-        for key in ("goods_quotation_type", "jh_goods_price", "jh_goods_price_has_tax"):
+        for key in ("goods_quotation_type", "jh_goods_price",
+                    "jh_goods_price_has_tax", "goods_supplier_name"):
             item.pop(key, None)
     return {
         "items": page_items,
@@ -673,6 +685,7 @@ async def inquiry_match_detail(inquiry_mission_id: int):
                      m.post_fee_purchase, m.post_fee_has_tax_purchase,
                      g.quotation_type AS goods_quotation_type,
                      g.jh_goods_price, g.jh_goods_price_has_tax,
+                     s.supplier_name AS goods_supplier_name,
                      g.invoice, g.goods_name, g.goods_spec, g.ele_type, g.images,
                       g.goods_price, g.goods_price_tax, g.tax_rate, g.tax_fee,
                       g.post_fee, g.post_fee_tax_rate, g.post_fee_tax_fee,
@@ -684,6 +697,7 @@ async def inquiry_match_detail(inquiry_mission_id: int):
                LEFT JOIN yh_admin_user a ON a.id=m.admin_id
                LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
                LEFT JOIN yh_factory f ON f.id=g.factory AND f.delete_time IS NULL
+               LEFT JOIN yh_supplier s ON s.id=g.supplier AND s.delete_time IS NULL
                WHERE m.id=%s""",
             (inquiry_mission_id,),
         )
@@ -696,6 +710,16 @@ async def inquiry_match_detail(inquiry_mission_id: int):
     # 和列表同一套取价规则，保证两边显示一致
     quotes_map = _fetch_page_quotes([{"inquiry_mission_id": inquiry_mission_id}])
     detail_quotes = quotes_map.get(inquiry_mission_id, [])
+    if not detail_quotes and row.get("goods_supplier_name"):
+        # 没有比价明细时成交价记在商品主行上，供应商也从主行取，补一条出来
+        detail_quotes = [{
+            "supplier_name": row["goods_supplier_name"],
+            "goods_spec": row.get("goods_spec"),
+            "purchase_quotation_type": row.get("goods_quotation_type"),
+            "jh_goods_price": row.get("jh_goods_price"),
+            "jh_goods_price_has_tax": row.get("jh_goods_price_has_tax"),
+            "is_selected": 1,
+        }]
     price, price_label = _pick_purchase_price(detail_quotes, row)
     quotes = [
         {
