@@ -140,6 +140,50 @@
         let currentPanelPriceId = null;
         let isNewSupplierMode = false; // 标记是否处于新增模式
 
+        // 询价页专用：当前选中询价记录的供应商报价，独立成左侧面板，和供应商管理并排。
+        // 一次询价里常有几个不同型号，按型号分组展示，不能全挂在主规格下面。
+        // 产品管理页没有 imState，这里返回空串，面板保持原样。
+        function inquiryRefPanelHtml() {
+            if (typeof imState === 'undefined' || !imState.selectedMissionId) return '';
+            const record = (imState.records || [])
+                .find(item => item.inquiry_mission_id === imState.selectedMissionId);
+            if (!record) return '';
+            const quotes = record.quotes || [];
+            if (!quotes.length) return '';
+
+            const groups = [];
+            quotes.forEach(quote => {
+                const spec = (quote.spec || '').trim() || '（无型号）';
+                let group = groups.find(item => item.spec === spec);
+                if (!group) {
+                    group = { spec: spec, rows: [] };
+                    groups.push(group);
+                }
+                group.rows.push(quote);
+            });
+
+            const bodies = groups.map(group => `
+                <div class="sp-ref-group">
+                    <div class="sp-ref-spec">${escapeHtml(group.spec)}</div>
+                    <div class="sp-ref-list">
+                        ${group.rows.map(quote => `
+                            <div class="sp-inquiry-item">
+                                <span class="sp-inquiry-name">${escapeHtml(quote.supplier || '未命名')}</span>
+                                <span class="sp-inquiry-type">${escapeHtml(quote.type || '')}</span>
+                                <span class="sp-inquiry-price">${quote.price ? '¥' + escapeHtml(quote.price) : '—'}</span>
+                            </div>`).join('')}
+                    </div>
+                </div>`).join('');
+
+            const head = groups.length > 1
+                ? `询价报价参考（${quotes.length} 条 / ${groups.length} 个型号）`
+                : `询价报价参考（${quotes.length} 条）`;
+            return `<aside class="sp-ref-panel">
+                <div class="sp-ref-head">${head}</div>
+                ${bodies}
+            </aside>`;
+        }
+
         async function openSupplierPanel(specsJson) {
             currentPanelSpecs = JSON.parse(specsJson.replace(/&quot;/g, '"'));
             currentPanelPriceId = null;
@@ -155,7 +199,8 @@
             }
             // 创建面板容器结构（只创建一次）
             const specTitle = currentPanelSpecs.map(s => `${s.name}: ${s.value}`).join(' / ');
-            panel.innerHTML = `<div class="sp-container">
+            const refPanel = inquiryRefPanelHtml();
+            panel.innerHTML = `<div class="sp-stack">${refPanel}<div class="sp-container">
                 <div class="sp-header">
                     <div class="sp-header-left">
                         <span class="sp-header-title">供应商管理</span>
@@ -175,7 +220,9 @@
                     </div>
                     <div class="sp-right" id="spDetailArea"></div>
                 </div>
-            </div>`;
+            </div></div>`;
+            // 有参考面板时主面板右移 300px，两者并排
+            panel.classList.toggle('has-ref', !!refPanel);
             panel.classList.add('open');
             // 渲染内容
             renderPanelContent();

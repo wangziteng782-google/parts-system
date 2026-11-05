@@ -88,7 +88,7 @@ body {
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(240px, .85fr) minmax(280px, 1fr) minmax(420px, 1.6fr);
+    grid-template-columns: minmax(276px, 1fr) minmax(280px, 1fr) minmax(420px, 1.45fr);
     gap: 12px;
     padding: 12px 14px 14px;
     overflow: hidden;
@@ -560,6 +560,105 @@ body {
 .im-record .rmeta .price.missing {
     color: var(--text-muted);
     font-weight: 400;
+}
+
+/* 多条供应商报价在记录内直接摊开，跨列占满卡片宽度
+   类名用 im-rec-quote- 前缀：详情弹窗已占用 .im-quote-head 等名字，撞上会被它的 flex 覆盖 */
+.im-rec-quote {
+    grid-column: 1 / -1;
+    margin-top: 7px;
+    padding: 8px 10px 10px;
+    border-radius: 8px;
+    background: #f4f6fa;
+}
+
+.im-rec-quote-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.im-rec-quote-title::before {
+    content: '';
+    width: 3px;
+    height: 13px;
+    border-radius: 2px;
+    background: var(--accent);
+}
+
+/* 表头和每一行共用同一套列宽，文字才对得上 */
+.im-rec-quote-head,
+.im-rec-quote-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px 84px 76px;
+    gap: 8px;
+    align-items: center;
+}
+
+.im-rec-quote-head {
+    padding: 0 8px 5px;
+    border: 1px solid transparent;
+    font-size: 11.5px;
+    color: #8d9aad;
+}
+
+.im-rec-quote-head span:nth-child(2) {
+    text-align: center;
+}
+
+.im-rec-quote-head span:nth-child(3) {
+    text-align: center;
+}
+
+.im-rec-quote-head span:nth-child(4) {
+    text-align: right;
+}
+
+.im-rec-quote-row {
+    padding: 6px 8px;
+    border: 1px solid #eef2f8;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 12px;
+    color: var(--text);
+}
+
+.im-rec-quote-row + .im-rec-quote-row {
+    margin-top: 4px;
+}
+
+.im-rec-quote-spec {
+    line-height: 1.45;
+    word-break: break-all;
+}
+
+.im-rec-quote-supplier {
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #5b6878;
+}
+
+.im-rec-quote-type {
+    text-align: center;
+    font-size: 11.5px;
+    color: #e08a2e;
+}
+
+.im-rec-quote-type.is-tax {
+    color: #1e8e3e;
+}
+
+.im-rec-quote-price {
+    text-align: right;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
 }
 
 .im-record .rside {
@@ -1420,7 +1519,7 @@ img.im-record-thumb:hover {
 
 @media (max-width: 1400px) {
     .im-workspace {
-        grid-template-columns: minmax(220px, .85fr) minmax(240px, .95fr) minmax(340px, 1.45fr);
+        grid-template-columns: minmax(252px, 1fr) minmax(240px, .95fr) minmax(340px, 1.3fr);
     }
 }
 

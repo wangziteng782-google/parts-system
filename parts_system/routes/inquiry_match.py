@@ -170,21 +170,24 @@ def _to_amount(value) -> float:
 
 
 def _fetch_page_quotes(items: list[dict]) -> dict:
-    """按 (询价单, 商品) 取明细报价，只查当前页用到的键。"""
-    keys = sorted({
-        (int(item["query_order_id"]), int(item["order_goods_id"]))
+    """按询价任务 ID 取明细报价，只查当前页用到的 mission。
+
+    用 mission_id 而不是 (询价单, 商品) 定位：同一商品被多次询价时，
+    后者会把几条询价的报价混在一起。
+    """
+    ids = sorted({
+        int(item["inquiry_mission_id"])
         for item in items
-        if item.get("query_order_id") and item.get("order_goods_id")
+        if item.get("inquiry_mission_id")
     })
-    if not keys:
+    if not ids:
         return {}
-    clause = " OR ".join(["(query_order_id=%s AND order_goods_id=%s)"] * len(keys))
-    params = [value for key in keys for value in key]
+    placeholders = ",".join(["%s"] * len(ids))
     conn = get_oa_db()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            f"""SELECT d.query_order_id, d.order_goods_id, d.is_selected,
+            f"""SELECT d.mission_id, d.is_selected,
                        d.purchase_quotation_type, d.jh_goods_price, d.jh_goods_price_has_tax,
                        d.supplier_name, d.purchase_source, d.goods_spec, d.warehouse,
                        d.reminder, d.profit_rate, d.jh_post_fee, d.purchase_price,
@@ -192,14 +195,13 @@ def _fetch_page_quotes(items: list[dict]) -> dict:
                   FROM yh_query_goods_mission_detail d
                   LEFT JOIN yh_factory f ON f.id=d.factory AND f.delete_time IS NULL
                   LEFT JOIN yh_ele_brand b ON b.id=d.ele_brand AND b.delete_time IS NULL
-                 WHERE ({clause}) AND d.delete_time IS NULL
+                 WHERE d.mission_id IN ({placeholders}) AND d.delete_time IS NULL
                  ORDER BY d.is_selected DESC, d.id DESC""",
-            params,
+            ids,
         )
         grouped = defaultdict(list)
         for row in cursor.fetchall():
-            key = (int(row["query_order_id"]), int(row["order_goods_id"]))
-            grouped[key].append(row)
+            grouped[int(row["mission_id"])].append(row)
         return grouped
     finally:
         conn.close()
@@ -240,6 +242,24 @@ def _pick_purchase_price(quotes: list[dict], item: dict) -> tuple[str, str]:
     return "", ""
 
 
+def _quote_rows(quotes: list[dict]) -> list[dict]:
+    """列表里直接摊开的报价行：规格型号、供应商、报价类型、对应价格。"""
+    rows = []
+    for quote in quotes:
+        is_tax = str(quote.get("purchase_quotation_type") or "").strip() == "1"
+        amount = _to_amount(
+            quote.get("jh_goods_price_has_tax") if is_tax else quote.get("jh_goods_price")
+        )
+        rows.append({
+            "spec": str(quote.get("goods_spec") or "").strip(),
+            "supplier": str(quote.get("supplier_name") or "").strip(),
+            "type": "含税采购价" if is_tax else "无税采购价",
+            "price": f"{amount:.2f}" if amount > 0 else "",
+            "selected": int(quote.get("is_selected") or 0) == 1,
+        })
+    return rows
+
+
 @app.get("/inquiry-match", response_class=HTMLResponse)
 async def inquiry_match_page(request: Request):
     return templates.TemplateResponse(
@@ -267,7 +287,6 @@ async def list_match_records(
         items.append({
             "inquiry_mission_id": mission_id,
             "order_goods_id": row.get("order_goods_id"),
-            "query_order_id": row.get("query_order_id"),
             "product_name": row.get("goods_name"),
             "specification": row.get("goods_spec"),
             "product_brand": row.get("factory_name"),
@@ -307,15 +326,14 @@ async def list_match_records(
     # 只给当前页查明细报价，避免为一页数据把全量询价都连一遍
     quotes_map = _fetch_page_quotes(page_items)
     for item in page_items:
-        quotes = quotes_map.get(
-            (item["query_order_id"], item["order_goods_id"]), []
-        )
+        quotes = quotes_map.get(item["inquiry_mission_id"], [])
         price, label = _pick_purchase_price(quotes, item)
         item["purchase_price"] = price
         item["price_label"] = label
+        # 报价明细一并带上：列表多条时直接摊开，供应商报价弹窗也拿它做参考
+        item["quotes"] = _quote_rows(quotes)
         # 取价用完就丢，这几个字段前端用不到
-        for key in ("query_order_id", "goods_quotation_type",
-                    "jh_goods_price", "jh_goods_price_has_tax"):
+        for key in ("goods_quotation_type", "jh_goods_price", "jh_goods_price_has_tax"):
             item.pop(key, None)
     return {
         "items": page_items,
@@ -676,16 +694,9 @@ async def inquiry_match_detail(inquiry_mission_id: int):
         raise HTTPException(status_code=404, detail="询价记录不存在")
 
     # 和列表同一套取价规则，保证两边显示一致
-    quote_key = None
-    if row.get("query_order_id") and row.get("order_goods_id"):
-        quote_key = (int(row["query_order_id"]), int(row["order_goods_id"]))
-    quotes_map = _fetch_page_quotes([{
-        "query_order_id": row.get("query_order_id"),
-        "order_goods_id": row.get("order_goods_id"),
-    }])
-    price, price_label = _pick_purchase_price(
-        quotes_map.get(quote_key, []) if quote_key else [], row
-    )
+    quotes_map = _fetch_page_quotes([{"inquiry_mission_id": inquiry_mission_id}])
+    detail_quotes = quotes_map.get(inquiry_mission_id, [])
+    price, price_label = _pick_purchase_price(detail_quotes, row)
     quotes = [
         {
             "index": index,
@@ -704,7 +715,7 @@ async def inquiry_match_detail(inquiry_mission_id: int):
             "purchase_price": quote.get("purchase_price"),
             "is_selected": quote.get("is_selected"),
         }
-        for index, quote in enumerate(quotes_map.get(quote_key, []) if quote_key else [], start=1)
+        for index, quote in enumerate(detail_quotes, start=1)
     ]
 
     used_seconds = int(row.get("used_time") or 0)

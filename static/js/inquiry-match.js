@@ -133,7 +133,9 @@ function renderRecords() {
                     loading="lazy" data-image="${escapeHtml(item.image)}" data-index="${index}">`
             : '<div class="im-record-thumb"></div>';
         const checked = imState.batchIds.has(item.inquiry_mission_id);
-        return `<div class="im-record ${item.inquiry_mission_id === imState.selectedMissionId ? 'active' : ''} ${checked ? 'checked' : ''}"
+        // 报价表只跟在当前选中的那条记录后面，没选中的保持紧凑
+        const active = item.inquiry_mission_id === imState.selectedMissionId;
+        return `<div class="im-record ${active ? 'active' : ''} ${checked ? 'checked' : ''}"
                      data-id="${item.inquiry_mission_id}">
             ${imState.batchMode ? '<span class="im-check"></span>' : ''}
             <div class="n">${index + 1}</div>
@@ -149,18 +151,19 @@ function renderRecords() {
                         <i class="rmeta-sep"></i>
                         <span>创建时间：${imDate(item.create_time) || '—'}</span>
                     </div>
-                    <div class="rmeta-row rmeta-row--price">
+                    ${item.quotes && item.quotes.length ? '' : `<div class="rmeta-row rmeta-row--price">
                         ${priceLabel
                             ? `<span class="price-label ${priceLabel === '含税采购价' ? 'is-tax' : ''}">${escapeHtml(priceLabel)}</span>`
                             : ''}
                         <span class="price ${rawPrice > 0 ? '' : 'missing'}">${price}</span>
-                    </div>
+                    </div>`}
                 </div>
             </div>
             <div class="rside">
                 ${thumb}
                 <button type="button" class="im-record-detail" data-detail="${item.inquiry_mission_id}">详情</button>
             </div>
+            ${item.quotes && item.quotes.length ? renderQuoteTable(item.quotes) : ''}
         </div>`;
     }).join('');
     list.querySelectorAll('.im-record').forEach(el => {
@@ -183,6 +186,24 @@ function renderRecords() {
             openImagePreview(img.dataset.image, item.images);
         };
     });
+}
+
+// 多条供应商报价直接摊在询价记录里，省得逐条点详情比对
+function renderQuoteTable(quotes) {
+    const rows = quotes.map(quote => `
+        <div class="im-rec-quote-row">
+            <span class="im-rec-quote-spec">${escapeHtml(quote.spec || '—')}</span>
+            <span class="im-rec-quote-supplier">${escapeHtml(quote.supplier || '—')}</span>
+            <span class="im-rec-quote-type ${quote.type === '含税采购价' ? 'is-tax' : ''}">${escapeHtml(quote.type)}</span>
+            <span class="im-rec-quote-price">${quote.price ? '¥' + escapeHtml(quote.price) : '—'}</span>
+        </div>`).join('');
+    return `<div class="im-rec-quote">
+        <div class="im-rec-quote-title">供应商报价（共 ${quotes.length} 条）</div>
+        <div class="im-rec-quote-head">
+            <span>规格型号</span><span>供应商名称</span><span>报价类型</span><span>采购价</span>
+        </div>
+        ${rows}
+    </div>`;
 }
 
 // ========== 批量关联 ==========
