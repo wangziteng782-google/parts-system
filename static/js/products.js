@@ -325,7 +325,28 @@ async function init() {
             document.getElementById('productCreateOverlay').classList.remove('open');
         }
 
-        async function submitProductCreate() {
+        let confirmDialogResolver = null;
+
+        function resolveConfirmDialog(result) {
+            const overlay = document.getElementById('confirmOverlay');
+            if (!overlay || !overlay.classList.contains('open')) return;
+            overlay.classList.remove('open');
+            const resolve = confirmDialogResolver;
+            confirmDialogResolver = null;
+            if (resolve) resolve(result);
+        }
+
+        function showConfirmDialog(message, { title = '提示', okText = '确定' } = {}) {
+            const overlay = document.getElementById('confirmOverlay');
+            if (!overlay) return Promise.resolve(false);
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMessage').textContent = message;
+            document.getElementById('confirmOk').textContent = okText;
+            overlay.classList.add('open');
+            return new Promise(resolve => { confirmDialogResolver = resolve; });
+        }
+
+        async function submitProductCreate(force = false) {
             const saveBtn = document.getElementById('productCreateSave');
             const fields = {};
             document.querySelectorAll('[data-create-field]').forEach(control => {
@@ -342,9 +363,21 @@ async function init() {
                 const res = await fetch('/api/products', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fields }),
+                    body: JSON.stringify({ fields, force }),
                 });
                 const result = await res.json();
+                if (res.status === 409) {
+                    if (force) throw new Error(result.detail || '新增失败');
+                    // 弹窗期间先把按钮还原，免得底层按钮一直显示"正在保存"
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = '保存新增';
+                    const goOn = await showConfirmDialog(
+                        `型号「${fields.model || ''}」已有产品，确认仍要新增吗？`,
+                        { title: '型号已存在', okText: '仍然新增' },
+                    );
+                    if (!goOn) return;
+                    return submitProductCreate(true);
+                }
                 if (!res.ok) throw new Error(result.detail || '新增失败');
                 createdProduct = result.product;
                 const uploadFailures = [];

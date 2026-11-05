@@ -603,3 +603,25 @@
             .create-image-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
             .product-header .main-price-meta { grid-template-columns:1fr; }
         }
+
+        /* ========== 通用确认弹窗 ========== */
+        .confirm-overlay {
+            position:fixed; inset:0; z-index:3700; background:rgba(15,23,42,.45);
+            display:flex; align-items:center; justify-content:center; padding:4vh 4vw;
+            opacity:0; visibility:hidden; transition:opacity .18s, visibility .18s;
+        }
+        .confirm-overlay.open { opacity:1; visibility:visible; }
+        .confirm-dialog {
+            width:min(420px,94vw); padding:20px 22px 18px; background:#fff;
+            border-radius:12px; box-shadow:0 24px 70px rgba(15,23,42,.28);
+            transform:scale(.97); transition:transform .18s ease;
+        }
+        .confirm-overlay.open .confirm-dialog { transform:scale(1); }
+        .confirm-title { color:#1e293b; font-size:16px; font-weight:700; }
+        .confirm-message { margin-top:10px; color:#475569; font-size:13px; line-height:1.7; word-break:break-word; }
+        .confirm-footer { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:20px; }
+        .confirm-btn { border-radius:6px; padding:8px 20px; font-size:13px; cursor:pointer; }
+        .confirm-btn-cancel { border:1px solid #cbd5e1; background:#fff; color:#475569; }
+        .confirm-btn-cancel:hover { background:#f1f5f9; }
+        .confirm-btn-primary { border:1px solid var(--accent); background:var(--accent); color:#fff; font-weight:600; }
+        .confirm-btn-primary:hover { background:var(--accent-hover); }

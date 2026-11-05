@@ -357,6 +357,8 @@ class UpdateFieldRequest(BaseModel):
 
 class ProductCreateRequest(BaseModel):
     fields: Dict[str, Optional[str]]
+    # 型号已存在时前端二次确认后带 force=true 重发
+    force: bool = False
 
 
 class UpdateImagesRequest(BaseModel):
@@ -387,6 +389,19 @@ async def create_product(req: ProductCreateRequest):
     try:
         ensure_employee_operation_logs_table(conn)
         cursor = conn.cursor()
+        # 型号查重：同型号在库里可能本来就有多条（有专门的重复标记流程），
+        # 所以只拦首次提交，前端确认后带 force=true 放行。
+        model = values.get("model")
+        if model and not req.force:
+            cursor.execute(
+                "SELECT 1 FROM parts WHERE TRIM(model) = %s AND TRIM(model) <> '' LIMIT 1",
+                (model,),
+            )
+            if cursor.fetchone():
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"型号「{model}」已有产品",
+                )
         fields = list(values.keys())
         if fields:
             placeholders = ', '.join(['%s'] * len(fields))
