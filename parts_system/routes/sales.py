@@ -493,6 +493,7 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
         )
         params.extend([like_keyword] * 4)
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    # 排序用成本价原始值，展示价再乘销售系数，两者口径不同，排序结果可能与展示价不完全一致
     price_sql = (
         "CASE WHEN TRIM(purchase_price) REGEXP '^[0-9]+([.][0-9]+)?' "
         "THEN CAST(TRIM(purchase_price) AS DECIMAL(12,2)) ELSE NULL END"
@@ -544,7 +545,7 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
                 "inquiry_time": row.get("inquiry_time"),
                 "create_time": row.get("create_time"),
                 "image": _oa_image(row.get("images")),
-                "display_price": None if price is None else str(price),
+                "display_price": _display_price(price, row.get("goods_name")),
                 "modification_completed": False,
                 "quote_updated_at": row.get("quote_updated_at"),
                 "has_any_price": True,
