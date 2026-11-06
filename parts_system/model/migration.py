@@ -144,6 +144,26 @@ def ensure_technical_params_column(conn):
             pass  # 列已存在
 
 
+def ensure_parts_indexes(conn):
+    """给 parts 补两个二级索引，这张表此前只有主键。
+
+    /api/products 每行都要判断同型号是否重复，没有 model 索引时是逐行全表扫，
+    6071 行数据、单页 30 行要比较十几万行。status 索引让上下架筛选和计数不用扫全表。
+    """
+    cursor = conn.cursor()
+    cursor.execute("SHOW INDEX FROM parts")
+    existing = {row["Key_name"] for row in cursor.fetchall()}
+    for name, ddl in (
+        ("idx_parts_model", "CREATE INDEX idx_parts_model ON parts (model)"),
+        ("idx_parts_status_id", "CREATE INDEX idx_parts_status_id ON parts (status, id)"),
+    ):
+        if name in existing:
+            continue
+        logger.info(f"[数据库迁移] parts 新增索引 {name}")
+        cursor.execute(ddl)
+        conn.commit()
+
+
 def ensure_duplicate_marks_table(conn):
     """确保员工重复标记表存在；只创建表，不修改现有产品数据。"""
     cursor = conn.cursor()

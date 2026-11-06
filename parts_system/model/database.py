@@ -7,6 +7,7 @@ from .migration import (
     ensure_employee_operation_logs_table,
     ensure_inquiry_tables,
     ensure_part_inquiries_table,
+    ensure_parts_indexes,
     ensure_product_spec_required_rules,
     ensure_product_variant_tables,
     ensure_sales_query_logs_has_result,
@@ -26,6 +27,7 @@ def get_db():
     conn = pymysql.connect(**DB_CONFIG)
     ensure_employee_operation_logs_table(conn)
     ensure_technical_params_column(conn)
+    ensure_parts_indexes(conn)
     ensure_product_variant_tables(conn)
     ensure_product_spec_required_rules(conn)
     ensure_sales_query_logs_has_result(conn)

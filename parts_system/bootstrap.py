@@ -50,4 +50,7 @@ async def log_requests(request: Request, call_next):
         f"[响应] {method} {request_target} | status={response.status_code} | "
         f"elapsed={elapsed_ms:.1f}ms | bytes={content_length}"
     )
+    # 页面 HTML 不缓存，静态资源靠 ?v= 版本号失效；改完前端用户下次打开就是新的
+    if response.headers.get("content-type", "").startswith("text/html"):
+        response.headers["Cache-Control"] = "no-store"
     return response
