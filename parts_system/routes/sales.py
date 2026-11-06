@@ -18,7 +18,7 @@ from ..bootstrap import app
 from ..auth import get_current_user, get_current_user_id
 from ..feedback import FEEDBACK_TYPE_LABELS
 from ..config import IMAGE_FIELDS, logger
-from ..model import get_db, get_oa_db
+from ..model import get_db
 from ..util import parse_image_urls
 
 
@@ -479,65 +479,46 @@ def _fetch_variant_combinations(part_ids: list[int]) -> dict[int, list[dict]]:
 
 
 def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
-    where = [
-        "m.mission_type IN (1,3)",
-        "m.mission_status=4",
-        "m.delete_time IS NULL",
-    ]
-    params = []
+    where, params = [], []
     hidden_ids = _hidden_inquiry_mission_ids()
     if hidden_ids:
         placeholders = ",".join(["%s"] * len(hidden_ids))
-        where.append(f"m.id NOT IN ({placeholders})")
+        where.append(f"inquiry_mission_id NOT IN ({placeholders})")
         params.extend(hidden_ids)
     if keyword:
         like_keyword = f"%{keyword}%"
         where.append(
-            "(g.goods_name LIKE %s OR g.ele_type LIKE %s "
-            "OR g.goods_spec LIKE %s OR f.factory_name LIKE %s)"
+            "(product_name LIKE %s OR model LIKE %s "
+            "OR specification LIKE %s OR product_brand LIKE %s)"
         )
         params.extend([like_keyword] * 4)
-    where_sql = " WHERE " + " AND ".join(where)
-    mission_price_sql = (
-        "CASE WHEN TRIM(m.purchase_price) REGEXP '^[0-9]+([.][0-9]+)?' "
-        "THEN CAST(TRIM(m.purchase_price) AS DECIMAL(12,2)) ELSE NULL END"
-    )
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
     price_sql = (
-        f"COALESCE(NULLIF({mission_price_sql},0), "
-        "NULLIF(g.purchase_price,0), NULLIF(g.goods_price,0))"
+        "CASE WHEN TRIM(purchase_price) REGEXP '^[0-9]+([.][0-9]+)?' "
+        "THEN CAST(TRIM(purchase_price) AS DECIMAL(12,2)) ELSE NULL END"
     )
-    updated_sql = (
-        "COALESCE(m.renew_time, m.update_time, m.finish_time, m.create_time, "
-        "g.quote_time, g.update_time, g.inquiry_time, g.create_time)"
-    )
+    updated_sql = "quote_updated_at"
     order_sql = {
-        "default": f"{updated_sql} DESC, m.id DESC",
-        "updated_desc": f"{updated_sql} DESC, m.id DESC",
-        "price_asc": f"({price_sql} IS NULL), {price_sql} ASC, m.id DESC",
-        "price_desc": f"({price_sql} IS NULL), {price_sql} DESC, m.id DESC",
+        "default": f"{updated_sql} DESC, inquiry_mission_id DESC",
+        "updated_desc": f"{updated_sql} DESC, inquiry_mission_id DESC",
+        "price_asc": f"({price_sql} IS NULL), {price_sql} ASC, inquiry_mission_id DESC",
+        "price_desc": f"({price_sql} IS NULL), {price_sql} DESC, inquiry_mission_id DESC",
     }[sort]
-    conn = get_oa_db()
+    conn = get_db()
     try:
         cursor = conn.cursor()
-        from_sql = (
-            " FROM yh_query_goods_mission m "
-            "LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id "
-            "LEFT JOIN yh_factory f ON f.id=g.factory AND f.delete_time IS NULL"
-        )
-        cursor.execute("SELECT COUNT(*) AS total" + from_sql + where_sql, params)
+        cursor.execute("SELECT COUNT(*) AS total FROM inquiry_records" + where_sql, params)
         total = int(cursor.fetchone()["total"])
         cursor.execute(
-            f"""SELECT m.id, m.order_goods_id, m.quotation_type, m.purchase_price,
-                       m.post_fee_purchase, m.post_fee_has_tax_purchase,
-                       g.goods_name, g.ele_type, g.goods_spec, g.images,
-                       g.goods_describe, g.post_fee_describe, g.goods_price_tax,
-                       g.address, g.goods_type, g.goods_num, g.goods_unit, g.tax_fee,
-                       g.total_amount, g.remark, g.tax_rate, g.post_fee,
-                       g.post_fee_tax_rate, g.post_fee_tax_fee, g.post_fee_has_tax,
-                       g.ele_scene, g.inquiry_time, g.create_time,
+            f"""SELECT inquiry_mission_id AS id, order_goods_id, quotation_type,
+                       purchase_price, post_fee_purchase, post_fee_has_tax_purchase,
+                       product_name AS goods_name, model AS ele_type,
+                       specification AS goods_spec, images,
+                       goods_describe, goods_num,
+                       inquiry_time, create_time, product_brand AS factory_name,
                        {price_sql} AS display_price,
-                       f.factory_name, {updated_sql} AS quote_updated_at
-                {from_sql}
+                       {updated_sql} AS quote_updated_at
+                FROM inquiry_records
                 {where_sql}
                 ORDER BY {order_sql}
                 LIMIT %s""",
@@ -558,23 +539,8 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
                 "model": row.get("ele_type"),
                 "specification": row.get("goods_spec"),
                 "product_brand": row.get("factory_name"),
-                "nature": None,
                 "goods_describe": row.get("goods_describe"),
-                "post_fee_describe": row.get("post_fee_describe"),
-                "goods_price_tax": row.get("goods_price_tax"),
-                "address": row.get("address"),
-                "goods_type": row.get("goods_type"),
                 "goods_num": row.get("goods_num"),
-                "goods_unit": row.get("goods_unit"),
-                "tax_fee": row.get("tax_fee"),
-                "total_amount": row.get("total_amount"),
-                "remark": row.get("remark"),
-                "tax_rate": row.get("tax_rate"),
-                "post_fee": row.get("post_fee"),
-                "post_fee_tax_rate": row.get("post_fee_tax_rate"),
-                "post_fee_tax_fee": row.get("post_fee_tax_fee"),
-                "post_fee_has_tax": row.get("post_fee_has_tax"),
-                "ele_scene": row.get("ele_scene"),
                 "inquiry_time": row.get("inquiry_time"),
                 "create_time": row.get("create_time"),
                 "image": _oa_image(row.get("images")),
@@ -592,17 +558,14 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
 
 
 def _fetch_inquiry_communications(order_goods_id: int) -> list:
-    conn = get_oa_db()
+    conn = get_db()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            """SELECT qa.id, qa.content, qa.attachments, qa.create_time,
-                      COALESCE(NULLIF(TRIM(u.nickname), ''), u.username) AS creator
-                 FROM yh_query_goods_qa qa
-                 LEFT JOIN yh_admin_user u ON u.id=qa.admin_id
-                WHERE qa.order_goods_id=%s
-                  AND qa.delete_time IS NULL
-                ORDER BY qa.create_time ASC, qa.id ASC""",
+            """SELECT id, content, attachments, creator, create_time
+                 FROM inquiry_communications
+                WHERE order_goods_id=%s
+                ORDER BY create_time ASC, id ASC""",
             [order_goods_id],
         )
         return [

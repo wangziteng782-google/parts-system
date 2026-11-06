@@ -15,9 +15,9 @@ from ..audit import write_operation_log
 from ..auth import get_current_user
 from ..bootstrap import app, templates
 from ..config.constants import PRODUCT_CLASSIFICATION_TREE
-from ..model import get_db, get_oa_db
+from ..model import get_db
 from ..util import parse_image_urls
-from .inquiries import _fetch_oa_inquiries
+from .inquiries import _fetch_inquiries
 from .sales import _oa_image
 
 
@@ -41,15 +41,13 @@ INQUIRY_SINCE = "2026-04-01"
 
 
 def _load_inquiry_brief(inquiry_mission_id: int):
-    """从 OA 读取询价商品名和型号；记录不存在返回 None。"""
-    conn = get_oa_db()
+    """从本地落地表读询价商品名和型号；记录不存在返回 None。"""
+    conn = get_db()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            """SELECT g.goods_name, g.goods_spec, g.ele_type
-               FROM yh_query_goods_mission m
-               LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
-               WHERE m.id=%s LIMIT 1""",
+            """SELECT product_name AS goods_name, specification AS goods_spec, model AS ele_type
+               FROM inquiry_records WHERE inquiry_mission_id=%s LIMIT 1""",
             (inquiry_mission_id,),
         )
         row = cursor.fetchone()
@@ -183,20 +181,18 @@ def _fetch_page_quotes(items: list[dict]) -> dict:
     if not ids:
         return {}
     placeholders = ",".join(["%s"] * len(ids))
-    conn = get_oa_db()
+    conn = get_db()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            f"""SELECT d.mission_id, d.is_selected,
-                       d.purchase_quotation_type, d.jh_goods_price, d.jh_goods_price_has_tax,
-                       d.supplier_name, d.purchase_source, d.goods_spec, d.warehouse,
-                       d.reminder, d.profit_rate, d.jh_post_fee, d.purchase_price,
-                       f.factory_name, b.brand_name AS ele_brand_name
-                  FROM yh_query_goods_mission_detail d
-                  LEFT JOIN yh_factory f ON f.id=d.factory AND f.delete_time IS NULL
-                  LEFT JOIN yh_ele_brand b ON b.id=d.ele_brand AND b.delete_time IS NULL
-                 WHERE d.mission_id IN ({placeholders}) AND d.delete_time IS NULL
-                 ORDER BY d.is_selected DESC, d.id DESC""",
+            f"""SELECT mission_id, is_selected,
+                       purchase_quotation_type, jh_goods_price, jh_goods_price_has_tax,
+                       supplier_name, purchase_source, goods_spec, warehouse,
+                       reminder, profit_rate, jh_post_fee, purchase_price,
+                       factory_name, ele_brand_name
+                  FROM inquiry_quotes
+                 WHERE mission_id IN ({placeholders})
+                 ORDER BY is_selected DESC, id DESC""",
             ids,
         )
         grouped = defaultdict(list)
@@ -205,15 +201,6 @@ def _fetch_page_quotes(items: list[dict]) -> dict:
         return grouped
     finally:
         conn.close()
-
-
-def _pick_fee_amount(quote_value, goods_value) -> str:
-    """运费和商品单价一样：报价为空时回落到商品上的运费。"""
-    if _to_amount(quote_value) > 0:
-        return str(quote_value).strip()
-    if _to_amount(goods_value) > 0:
-        return str(goods_value).strip()
-    return ""
 
 
 def _pick_purchase_price(quotes: list[dict], item: dict) -> tuple[str, str]:
@@ -277,7 +264,7 @@ async def list_match_records(
     page_size: int = 30,
 ):
     """询价列表。关键词在 OA 侧过滤，匹配状态在本地合并。"""
-    rows = _fetch_oa_inquiries(keyword, INQUIRY_SINCE)
+    rows = _fetch_inquiries(keyword, INQUIRY_SINCE)
     matches = _match_map()
 
     items = []
@@ -552,7 +539,7 @@ async def batch_preview(keyword: str = "", status: str = "all"):
         return {"items": [], "total": 0, "hint": "先搜索型号再按组批量选择"}
     matches = _match_map()
     items = []
-    for row in _fetch_oa_inquiries(keyword, INQUIRY_SINCE):
+    for row in _fetch_inquiries(keyword, INQUIRY_SINCE):
         mission_id = int(row["inquiry_mission_id"])
         matched = matches.get(mission_id) or {}
         row_status = "matched" if matched.get("part_id") else "pending"
@@ -582,21 +569,20 @@ async def batch_save_match(req: BatchMatchSaveRequest):
         )
     group_id = (req.variant_group_id or "").strip()
 
-    # 询价在 OA 库：一次 IN 查存在性，顺带取规格。跨规格整批套同一个 SKU 必然是误操作
-    oa_conn = get_oa_db()
+    # 询价在本地落地表：一次 IN 查存在性，顺带取规格。跨规格整批套同一个 SKU 必然是误操作
+    check_conn = get_db()
     try:
-        oa_cursor = oa_conn.cursor()
+        check_cursor = check_conn.cursor()
         placeholders = ",".join(["%s"] * len(mission_ids))
-        oa_cursor.execute(
-            f"""SELECT m.id, g.goods_spec
-                  FROM yh_query_goods_mission m
-                  LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
-                 WHERE m.id IN ({placeholders})""",
+        check_cursor.execute(
+            f"""SELECT inquiry_mission_id AS id, specification AS goods_spec
+                  FROM inquiry_records
+                 WHERE inquiry_mission_id IN ({placeholders})""",
             mission_ids,
         )
-        rows = oa_cursor.fetchall()
+        rows = check_cursor.fetchall()
     finally:
-        oa_conn.close()
+        check_conn.close()
     found = {int(row["id"]) for row in rows}
     missing = [mid for mid in mission_ids if mid not in found]
     if missing:
@@ -684,31 +670,22 @@ async def batch_save_match(req: BatchMatchSaveRequest):
 @app.get("/api/inquiry-match/detail/{inquiry_mission_id}")
 async def inquiry_match_detail(inquiry_mission_id: int):
     """单条询价详情，字段对齐销售页的询价详情弹窗。"""
-    conn = get_oa_db()
+    conn = get_db()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            """SELECT m.id AS inquiry_mission_id, m.order_goods_id, m.query_order_id,
-                     m.mission_sn, m.mission_type, m.mission_status, m.used_time,
-                     COALESCE(NULLIF(TRIM(a.nickname), ''), a.username) AS creator_name,
-                     m.quotation_type, m.purchase_price,
-                     m.post_fee_purchase, m.post_fee_has_tax_purchase,
-                     g.quotation_type AS goods_quotation_type,
-                     g.jh_goods_price, g.jh_goods_price_has_tax,
-                     s.supplier_name AS goods_supplier_name,
-                     g.invoice, g.goods_name, g.goods_spec, g.ele_type, g.images,
-                      g.goods_price, g.goods_price_tax, g.tax_rate, g.tax_fee,
-                      g.post_fee, g.post_fee_tax_rate, g.post_fee_tax_fee,
-                      g.post_fee_has_tax, g.goods_num, g.goods_unit, g.total_amount,
-                      g.ele_scene, g.inquiry_time, g.create_time,
-                      g.goods_describe, g.post_fee_describe, g.remark, g.address,
-                      f.factory_name
-               FROM yh_query_goods_mission m
-               LEFT JOIN yh_admin_user a ON a.id=m.admin_id
-               LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
-               LEFT JOIN yh_factory f ON f.id=g.factory AND f.delete_time IS NULL
-               LEFT JOIN yh_supplier s ON s.id=g.supplier AND s.delete_time IS NULL
-               WHERE m.id=%s""",
+            """SELECT inquiry_mission_id, order_goods_id, mission_sn, mission_type,
+                      used_time, create_user AS creator_name,
+                      quotation_type, purchase_price,
+                      post_fee_purchase, post_fee_has_tax_purchase,
+                      invoice, product_name AS goods_name,
+                      specification AS goods_spec, images,
+                      product_brand AS factory_name,
+                      goods_describe, goods_num,
+                      inquiry_time, create_time,
+                      4 AS mission_status
+                 FROM inquiry_records
+                WHERE inquiry_mission_id=%s""",
             (inquiry_mission_id,),
         )
         row = cursor.fetchone()
@@ -720,16 +697,6 @@ async def inquiry_match_detail(inquiry_mission_id: int):
     # 和列表同一套取价规则，保证两边显示一致
     quotes_map = _fetch_page_quotes([{"inquiry_mission_id": inquiry_mission_id}])
     detail_quotes = quotes_map.get(inquiry_mission_id, [])
-    if not detail_quotes and row.get("goods_supplier_name"):
-        # 没有比价明细时成交价记在商品主行上，供应商也从主行取，补一条出来
-        detail_quotes = [{
-            "supplier_name": row["goods_supplier_name"],
-            "goods_spec": row.get("goods_spec"),
-            "purchase_quotation_type": row.get("goods_quotation_type"),
-            "jh_goods_price": row.get("jh_goods_price"),
-            "jh_goods_price_has_tax": row.get("jh_goods_price_has_tax"),
-            "is_selected": 1,
-        }]
     price, price_label = _pick_purchase_price(detail_quotes, row)
     quotes = [
         {
@@ -777,37 +744,18 @@ async def inquiry_match_detail(inquiry_mission_id: int):
         "order_goods_id": row.get("order_goods_id"),
         "product_name": row.get("goods_name"),
         "specification": row.get("goods_spec"),
-        "ele_type": row.get("ele_type"),
         "image": _oa_image(row.get("images")),
         "images": parse_image_urls(row.get("images")),
         "product_brand": row.get("factory_name"),
         "quotation_type": row.get("quotation_type"),
         "purchase_price": price,
         "price_label": price_label,
-        "post_fee_purchase": _pick_fee_amount(
-            row.get("post_fee_purchase"), row.get("post_fee")
-        ),
-        "post_fee_has_tax_purchase": _pick_fee_amount(
-            row.get("post_fee_has_tax_purchase"), row.get("post_fee_has_tax")
-        ),
-        "goods_price": row.get("goods_price"),
-        "goods_price_tax": row.get("goods_price_tax"),
-        "tax_rate": row.get("tax_rate"),
-        "tax_fee": row.get("tax_fee"),
-        "post_fee": row.get("post_fee"),
-        "post_fee_tax_rate": row.get("post_fee_tax_rate"),
-        "post_fee_tax_fee": row.get("post_fee_tax_fee"),
-        "post_fee_has_tax": row.get("post_fee_has_tax"),
+        "post_fee_purchase": row.get("post_fee_purchase"),
+        "post_fee_has_tax_purchase": row.get("post_fee_has_tax_purchase"),
         "goods_num": row.get("goods_num"),
-        "goods_unit": row.get("goods_unit"),
-        "total_amount": row.get("total_amount"),
-        "ele_scene": row.get("ele_scene"),
         "inquiry_time": row.get("inquiry_time"),
         "create_time": row.get("create_time"),
         "goods_describe": row.get("goods_describe"),
-        "post_fee_describe": row.get("post_fee_describe"),
-        "remark": row.get("remark"),
-        "address": row.get("address"),
     }
 
 

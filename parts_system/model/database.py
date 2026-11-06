@@ -5,6 +5,7 @@ import pymysql
 from ..config import DB_CONFIG, OA_DB_CONFIG, logger
 from .migration import (
     ensure_employee_operation_logs_table,
+    ensure_inquiry_tables,
     ensure_part_inquiries_table,
     ensure_product_spec_required_rules,
     ensure_product_variant_tables,
@@ -29,4 +30,5 @@ def get_db():
     ensure_product_spec_required_rules(conn)
     ensure_sales_query_logs_has_result(conn)
     ensure_part_inquiries_table(conn)
+    ensure_inquiry_tables(conn)
     return conn

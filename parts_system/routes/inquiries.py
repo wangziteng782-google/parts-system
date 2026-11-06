@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from ..auth import get_current_user_id
 from ..bootstrap import app, templates
 from ..feedback import FEEDBACK_TYPE_LABELS
-from ..model import get_db, get_oa_db
+from ..model import get_db
 from ..config import logger
 from .sales import _oa_image
 
@@ -94,52 +94,39 @@ def _feedback_map() -> dict[int, dict]:
     return grouped
 
 
-def _fetch_oa_inquiries(keyword: str, since: str = "") -> list[dict]:
-    """按报价时间倒序拉取，不设条数上限：上架状态和反馈在本地表，只能全量取回再过滤分页。
+def _fetch_inquiries(keyword: str = "", since: str = "") -> list[dict]:
+    """从本地落地表读询价记录，不设条数上限：上架状态和反馈在本地表，只能全量取回再过滤分页。
 
-    since 为询价创建时间下限，格式 YYYY-MM-DD，留空表示不限。
+    字段名保持和原来查 OA 时一致，调用方不用跟着改。since 为创建时间下限，格式 YYYY-MM-DD。
     """
-    where = [
-        "m.mission_type IN (1,3)",
-        "m.mission_status=4",
-        "m.delete_time IS NULL",
-    ]
-    params = []
+    where, params = [], []
     if keyword:
         like_keyword = f"%{keyword}%"
         where.append(
-            "(g.goods_name LIKE %s OR g.ele_type LIKE %s "
-            "OR g.goods_spec LIKE %s OR f.factory_name LIKE %s)"
+            "(product_name LIKE %s OR model LIKE %s "
+            "OR specification LIKE %s OR product_brand LIKE %s)"
         )
         params.extend([like_keyword] * 4)
     if since:
-        where.append("m.create_time >= %s")
+        where.append("create_time >= %s")
         params.append(since)
-    conn = get_oa_db()
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    conn = get_db()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            f"""SELECT m.id AS inquiry_mission_id, m.order_goods_id,
-                       m.query_order_id,
-                       m.quotation_type, m.purchase_price,
-                       m.post_fee_purchase, m.post_fee_has_tax_purchase,
-                       g.quotation_type AS goods_quotation_type,
-                       g.jh_goods_price, g.jh_goods_price_has_tax,
-                       s.supplier_name AS goods_supplier_name,
-                       COALESCE(m.renew_time, m.update_time, m.finish_time,
-                                m.create_time, g.quote_time, g.update_time,
-                                g.inquiry_time, g.create_time) AS quote_updated_at,
-                       g.goods_name, g.ele_type, g.goods_spec, g.images,
-                       f.factory_name,
-                       COALESCE(NULLIF(TRIM(a.nickname), ''), a.username) AS create_user,
-                       m.create_time
-                       FROM yh_query_goods_mission m
-                       LEFT JOIN yh_admin_user a ON a.id=m.admin_id
-                       LEFT JOIN yh_query_order_goods g ON g.id=m.order_goods_id
-                       LEFT JOIN yh_factory f ON f.id=g.factory AND f.delete_time IS NULL
-                       LEFT JOIN yh_supplier s ON s.id=g.supplier AND s.delete_time IS NULL
-                WHERE {" AND ".join(where)}
-                ORDER BY quote_updated_at DESC, m.id DESC""",
+            f"""SELECT inquiry_mission_id, order_goods_id,
+                       product_name AS goods_name, model AS ele_type,
+                       specification AS goods_spec, product_brand AS factory_name,
+                       images, quotation_type, purchase_price,
+                       post_fee_purchase, post_fee_has_tax_purchase,
+                       NULL AS goods_quotation_type,
+                       NULL AS jh_goods_price,
+                       NULL AS jh_goods_price_has_tax,
+                       NULL AS goods_supplier_name,
+                       quote_updated_at, create_user, create_time
+                  FROM inquiry_records{where_sql}
+                 ORDER BY quote_updated_at DESC, inquiry_mission_id DESC""",
             params,
         )
         return cursor.fetchall()
@@ -205,7 +192,7 @@ async def list_inquiries(
     if status not in {"pending", "listed", "hidden", "all"}:
         raise HTTPException(status_code=400, detail="无效的询价状态")
     try:
-        items = _decorate_inquiries(_fetch_oa_inquiries(keyword.strip()[:100]))
+        items = _decorate_inquiries(_fetch_inquiries(keyword.strip()[:100]))
     except Exception as exc:
         logger.exception("[询价管理] 列表加载失败 | error=%s", exc)
         raise HTTPException(status_code=503, detail="询价记录暂时无法读取") from exc

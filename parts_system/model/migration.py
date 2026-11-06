@@ -466,6 +466,102 @@ def ensure_product_variant_tables(conn):
         conn.commit()
 
 
+def _ensure_inquiry_column(cursor, table, column, ddl_suffix):
+    cursor.execute(f"SHOW COLUMNS FROM {table} LIKE '{column}'")
+    if cursor.fetchone():
+        return
+    cursor.execute(f"ALTER TABLE {table} {ddl_suffix}")
+    logger.info(f"[数据库迁移] {table}.{column} 已补列")
+
+
+def ensure_inquiry_tables(conn):
+    """询价落地表：任务、明细报价、沟通记录。
+
+    主键沿用 OA 的 id，重复同步靠它幂等。数据由 inquiry_sync 从 OA 拉取。
+    """
+    cursor = conn.cursor()
+    cursor.execute(
+        """CREATE TABLE IF NOT EXISTS inquiry_records (
+            inquiry_mission_id INT UNSIGNED NOT NULL COMMENT 'OA询价任务ID',
+            order_goods_id INT UNSIGNED NOT NULL COMMENT 'OA询价商品ID，沟通记录关联键',
+            mission_sn VARCHAR(255) NULL COMMENT '任务编号',
+            mission_type TINYINT NULL COMMENT '任务类型 1询价 3运费',
+            used_time INT NULL COMMENT '报价用时（秒）',
+            product_name VARCHAR(255) NULL COMMENT '商品名称',
+            model VARCHAR(255) NULL COMMENT '型号',
+            specification VARCHAR(255) NULL COMMENT '规格型号',
+            product_brand VARCHAR(255) NULL COMMENT '品牌',
+            images VARCHAR(2048) NULL COMMENT '图片URL，英文逗号分隔',
+            goods_num DECIMAL(12,2) NULL COMMENT '数量',
+            invoice TINYINT NULL COMMENT '发票类型 0不要票 1专票 2普票',
+            inquiry_time DATE NULL COMMENT '询价日期',
+            goods_describe VARCHAR(1024) NULL COMMENT '询价描述',
+            purchase_price VARCHAR(32) NULL COMMENT '采购价',
+            quotation_type VARCHAR(8) NULL COMMENT '任务报售价是否含税 0无税 1含税',
+            post_fee_purchase VARCHAR(64) NULL COMMENT '任务无税运费',
+            post_fee_has_tax_purchase VARCHAR(64) NULL COMMENT '任务含税运费',
+            price_label VARCHAR(16) NULL COMMENT '价格标签：无税采购价/含税采购价',
+            quote_updated_at DATETIME NULL COMMENT '报价更新时间',
+            create_user VARCHAR(100) NULL COMMENT '创建人',
+            create_time DATETIME NULL COMMENT '创建时间',
+            PRIMARY KEY (inquiry_mission_id),
+            KEY idx_order_goods (order_goods_id),
+            KEY idx_specification (specification),
+            KEY idx_quote_updated (quote_updated_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='OA询价任务落地表'"""
+    )
+    cursor.execute(
+        """CREATE TABLE IF NOT EXISTS inquiry_quotes (
+            id BIGINT NOT NULL COMMENT 'OA明细ID；负数表示从商品主行补齐，值为 -mission_id',
+            mission_id INT UNSIGNED NOT NULL COMMENT '所属询价任务ID',
+            supplier_name VARCHAR(255) NULL COMMENT '供应商名称',
+            purchase_source VARCHAR(255) NULL COMMENT '报价来源',
+            factory_name VARCHAR(255) NULL COMMENT '商品品牌',
+            ele_brand_name VARCHAR(255) NULL COMMENT '电梯品牌',
+            goods_spec VARCHAR(255) NULL COMMENT '规格型号',
+            warehouse VARCHAR(255) NULL COMMENT '发货仓库',
+            reminder VARCHAR(32) NULL COMMENT '销售提成',
+            purchase_quotation_type VARCHAR(8) NULL COMMENT '报价是否含税 0无税 1含税',
+            jh_goods_price VARCHAR(32) NULL COMMENT '无税采购价',
+            jh_goods_price_has_tax VARCHAR(32) NULL COMMENT '含税采购价',
+            profit_rate VARCHAR(32) NULL COMMENT '利润系数',
+            jh_post_fee VARCHAR(32) NULL COMMENT '报价运费',
+            purchase_price DECIMAL(10,2) NULL COMMENT '报价金额',
+            is_selected TINYINT NULL COMMENT '是否成交 1是',
+            PRIMARY KEY (id),
+            KEY idx_mission (mission_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='OA询价明细报价落地表'"""
+    )
+    cursor.execute(
+        """CREATE TABLE IF NOT EXISTS inquiry_communications (
+            id INT UNSIGNED NOT NULL COMMENT 'OA沟通记录ID',
+            order_goods_id INT UNSIGNED NOT NULL COMMENT '询价商品ID',
+            content VARCHAR(255) NULL COMMENT '沟通内容',
+            attachments TEXT NULL COMMENT '附件URL，英文逗号分隔',
+            creator VARCHAR(100) NULL COMMENT '创建人',
+            create_time DATETIME NULL COMMENT '创建时间',
+            PRIMARY KEY (id),
+            KEY idx_order_goods (order_goods_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='OA询价沟通记录落地表'"""
+    )
+    conn.commit()
+
+    # 早期版本建的表缺这几列，补上
+    for column, ddl_suffix in (
+        ("model", "ADD COLUMN model VARCHAR(255) NULL COMMENT '型号' AFTER product_name"),
+        ("quotation_type",
+         "ADD COLUMN quotation_type VARCHAR(8) NULL COMMENT '任务报售价是否含税 0无税 1含税' "
+         "AFTER purchase_price"),
+        ("post_fee_purchase",
+         "ADD COLUMN post_fee_purchase VARCHAR(64) NULL COMMENT '任务无税运费' AFTER quotation_type"),
+        ("post_fee_has_tax_purchase",
+         "ADD COLUMN post_fee_has_tax_purchase VARCHAR(64) NULL COMMENT '任务含税运费' "
+         "AFTER post_fee_purchase"),
+    ):
+        _ensure_inquiry_column(cursor, "inquiry_records", column, ddl_suffix)
+    conn.commit()
+
+
 def ensure_part_inquiries_table(conn):
     """确保询价与SPU/SKU的匹配表存在；只建表，不改动产品与询价数据。"""
     cursor = conn.cursor()
