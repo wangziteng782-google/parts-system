@@ -563,10 +563,6 @@ function openSalesProductDetail(index) {
         source === 'inquiry' ? quotationTypeText(item.quotation_type) : '',
     );
     setSalesDetailText(
-        'salesDetailPurchasePrice',
-        source === 'inquiry' ? detailAmountText(item.purchase_price) : '',
-    );
-    setSalesDetailText(
         'salesDetailPostFeePurchase',
         source === 'inquiry' ? detailAmountText(item.post_fee_purchase) : '',
     );

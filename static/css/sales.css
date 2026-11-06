@@ -207,7 +207,7 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-summary strong { color: #1e2c43; font-size: 18px; }
 .sales-detail-summary span { color: #35445b; }
 .sales-detail-price { color: var(--sales-price); font-size: 22px; }
-.sales-detail-quote-strip { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; padding: 16px 28px; border-bottom: 1px solid #e7edf5; background: #fbfcff; }
+.sales-detail-quote-strip { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; padding: 16px 28px; border-bottom: 1px solid #e7edf5; background: #fbfcff; }
 .sales-detail-quote-strip > div { min-height: 66px; display: flex; flex-direction: column; justify-content: center; gap: 7px; padding: 10px 14px; border: 1px solid #dde7f4; border-radius: 9px; background: #fff; }
 .sales-detail-quote-strip label { color: #7b8799; font-size: 14px; }
 .sales-detail-quote-strip strong { min-height: 24px; color: #253650; font-size: 17px; line-height: 1.4; }

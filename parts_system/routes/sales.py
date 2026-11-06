@@ -517,7 +517,11 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
                        specification AS goods_spec, images,
                        goods_describe, goods_num,
                        inquiry_time, create_time, product_brand AS factory_name,
-                       {price_sql} AS display_price,
+                       {price_sql} AS cost_price,
+                       (SELECT q.purchase_price FROM inquiry_quotes q
+                         WHERE q.mission_id = inquiry_records.inquiry_mission_id
+                           AND q.is_selected = 1
+                         ORDER BY q.id DESC LIMIT 1) AS sale_price,
                        {updated_sql} AS quote_updated_at
                 FROM inquiry_records
                 {where_sql}
@@ -527,13 +531,13 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
         )
         items = []
         for row in cursor.fetchall():
-            price = row.get("display_price")
+            cost = row.get("cost_price")
+            sale = row.get("sale_price")
             items.append({
                 "id": row["id"],
                 "inquiry_mission_id": row["id"],
                 "order_goods_id": row.get("order_goods_id"),
                 "quotation_type": row.get("quotation_type"),
-                "purchase_price": row.get("purchase_price"),
                 "post_fee_purchase": row.get("post_fee_purchase"),
                 "post_fee_has_tax_purchase": row.get("post_fee_has_tax_purchase"),
                 "product_name": row.get("goods_name"),
@@ -545,7 +549,8 @@ def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
                 "inquiry_time": row.get("inquiry_time"),
                 "create_time": row.get("create_time"),
                 "image": _oa_image(row.get("images")),
-                "display_price": _display_price(price, row.get("goods_name")),
+                # 优先用 OA 里选中那条的报价金额（已含利润系数），没有明细时才按销售系数换算
+                "display_price": str(sale) if sale is not None else _display_price(cost, row.get("goods_name")),
                 "modification_completed": False,
                 "quote_updated_at": row.get("quote_updated_at"),
                 "has_any_price": True,
