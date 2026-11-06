@@ -280,10 +280,7 @@ async def list_match_records(
             "image": _oa_image(row.get("images")),
             "images": parse_image_urls(row.get("images")),
             "purchase_price": row.get("purchase_price"),
-            "goods_quotation_type": row.get("goods_quotation_type"),
-            "jh_goods_price": row.get("jh_goods_price"),
-            "jh_goods_price_has_tax": row.get("jh_goods_price_has_tax"),
-            "goods_supplier_name": row.get("goods_supplier_name"),
+            "price_label": row.get("price_label"),
             "quote_updated_at": row.get("quote_updated_at"),
             "create_user": row.get("create_user"),
             "create_time": row.get("create_time"),
@@ -325,25 +322,8 @@ async def list_match_records(
     quotes_map = _fetch_page_quotes(page_items)
     for item in page_items:
         quotes = quotes_map.get(item["inquiry_mission_id"], [])
-        if not quotes and item.get("goods_supplier_name"):
-            # 没有比价明细时成交价记在商品主行上，供应商也从主行取，补一条出来
-            quotes = [{
-                "supplier_name": item["goods_supplier_name"],
-                "goods_spec": item.get("specification"),
-                "purchase_quotation_type": item.get("goods_quotation_type"),
-                "jh_goods_price": item.get("jh_goods_price"),
-                "jh_goods_price_has_tax": item.get("jh_goods_price_has_tax"),
-                "is_selected": 1,
-            }]
-        price, label = _pick_purchase_price(quotes, item)
-        item["purchase_price"] = price
-        item["price_label"] = label
         # 报价明细一并带上：列表多条时直接摊开，供应商报价弹窗也拿它做参考
         item["quotes"] = _quote_rows(quotes)
-        # 取价用完就丢，这几个字段前端用不到
-        for key in ("goods_quotation_type", "jh_goods_price",
-                    "jh_goods_price_has_tax", "goods_supplier_name"):
-            item.pop(key, None)
     return {
         "items": page_items,
         "total": total,
@@ -681,7 +661,7 @@ async def inquiry_match_detail(inquiry_mission_id: int):
                       invoice, product_name AS goods_name,
                       specification AS goods_spec, images,
                       product_brand AS factory_name,
-                      goods_describe, goods_num,
+                      goods_describe, goods_num, price_label,
                       inquiry_time, create_time,
                       4 AS mission_status
                  FROM inquiry_records
@@ -694,10 +674,9 @@ async def inquiry_match_detail(inquiry_mission_id: int):
     if not row:
         raise HTTPException(status_code=404, detail="询价记录不存在")
 
-    # 和列表同一套取价规则，保证两边显示一致
+    # 价格同步时就按明细算好存在表里了，这里直接读
     quotes_map = _fetch_page_quotes([{"inquiry_mission_id": inquiry_mission_id}])
     detail_quotes = quotes_map.get(inquiry_mission_id, [])
-    price, price_label = _pick_purchase_price(detail_quotes, row)
     quotes = [
         {
             "index": index,
@@ -748,8 +727,8 @@ async def inquiry_match_detail(inquiry_mission_id: int):
         "images": parse_image_urls(row.get("images")),
         "product_brand": row.get("factory_name"),
         "quotation_type": row.get("quotation_type"),
-        "purchase_price": price,
-        "price_label": price_label,
+        "purchase_price": row.get("purchase_price"),
+        "price_label": row.get("price_label"),
         "post_fee_purchase": row.get("post_fee_purchase"),
         "post_fee_has_tax_purchase": row.get("post_fee_has_tax_purchase"),
         "goods_num": row.get("goods_num"),

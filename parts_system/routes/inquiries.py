@@ -118,12 +118,8 @@ def _fetch_inquiries(keyword: str = "", since: str = "") -> list[dict]:
             f"""SELECT inquiry_mission_id, order_goods_id,
                        product_name AS goods_name, model AS ele_type,
                        specification AS goods_spec, product_brand AS factory_name,
-                       images, quotation_type, purchase_price,
+                       images, quotation_type, purchase_price, price_label,
                        post_fee_purchase, post_fee_has_tax_purchase,
-                       NULL AS goods_quotation_type,
-                       NULL AS jh_goods_price,
-                       NULL AS jh_goods_price_has_tax,
-                       NULL AS goods_supplier_name,
                        quote_updated_at, create_user, create_time
                   FROM inquiry_records{where_sql}
                  ORDER BY quote_updated_at DESC, inquiry_mission_id DESC""",
