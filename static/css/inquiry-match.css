@@ -909,7 +909,6 @@ img.im-record-thumb:hover {
     font-size: 13px;
     text-align: center;
     cursor: pointer;
-    user-select: none;
     transition: border-color .12s, color .12s, background .12s;
 }
 

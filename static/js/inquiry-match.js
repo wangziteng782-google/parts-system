@@ -31,6 +31,13 @@ function escapeHtml(value) {
     }[ch]));
 }
 
+// 拖选文字松手时浏览器也会补一个 click，这里拦住，
+// 否则列表一重渲染，刚选中的型号就没了，复制不了
+function imIsSelectingText() {
+    const selection = window.getSelection();
+    return !!selection && !selection.isCollapsed && !!selection.toString().trim();
+}
+
 function showToast(message, type) {
     const el = document.getElementById('toast');
     if (!el) return;
@@ -168,6 +175,7 @@ function renderRecords() {
     }).join('');
     list.querySelectorAll('.im-record').forEach(el => {
         el.onclick = () => {
+            if (imIsSelectingText()) return;
             const missionId = Number(el.dataset.id);
             if (imState.batchMode) toggleBatch(missionId);
             else selectRecord(missionId);
@@ -496,7 +504,10 @@ function renderProducts() {
             </div>
         </div>`).join('');
     list.querySelectorAll('.im-product').forEach(el => {
-        el.onclick = () => selectProduct(Number(el.dataset.part));
+        el.onclick = () => {
+            if (imIsSelectingText()) return;
+            selectProduct(Number(el.dataset.part));
+        };
     });
 }
 
@@ -587,6 +598,7 @@ function renderSkuPanel() {
 
     body.querySelectorAll('.im-sku-value').forEach(el => {
         el.onclick = () => {
+            if (imIsSelectingText()) return;
             const { spec, value } = el.dataset;
             // 再点一次同一个值就是取消选择
             if (imState.selectedSpecs[spec] === value) delete imState.selectedSpecs[spec];
