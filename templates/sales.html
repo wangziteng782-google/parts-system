@@ -6,7 +6,7 @@
     <title>销售商品查询</title>
     <link rel="icon" href="/static/img/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="/static/img/site-logo.png">
-    <link rel="stylesheet" href="/static/css/sales.css?v=20261106-1">
+    <link rel="stylesheet" href="/static/css/sales.css?v=20261109-6">
     <link rel="preconnect" href="https://oa.yixiuti.com">
 </head>
 <body data-user-name="{{ sales_user_name }}">
@@ -130,51 +130,111 @@
         <section class="sales-detail-modal" id="salesDetailModal" role="dialog" aria-modal="true" aria-labelledby="salesDetailTitle">
             <header class="sales-detail-header">
                 <div>
-                    <h2 id="salesDetailTitle">产品详情</h2>
+                    <h2 id="salesDetailTitle">配件商品详情</h2>
+                    <span class="sales-detail-crumb-sep">/</span>
+                    <span class="sales-detail-crumb-current" id="salesDetailCrumbName"></span>
                     <span class="source-badges" id="salesDetailSource"><span class="source-badge parts">来自配件库</span></span>
                 </div>
                 <button type="button" class="sales-detail-close" onclick="closeSalesProductDetail()" aria-label="关闭详情">×</button>
             </header>
 
             <div class="sales-detail-scroll">
-                <div class="sales-detail-card">
-                    <div class="sales-detail-product-row">
-                        <div class="sales-detail-image"><img id="salesDetailImage" src="/static/img/site-logo.png" alt="商品图片" onerror="this.src='/static/img/site-logo.png';this.onerror=null"></div>
-                        <div class="sales-detail-summary">
-                            <div><label>商品名称：</label><strong id="salesDetailName"></strong></div>
-                            <div><label>规格型号：</label><span id="salesDetailModel"></span></div>
-                            <div><label>产品规格：</label><span id="salesDetailSpecification"></span></div>
-                            <div><label>销售参考价：</label><b class="sales-detail-price" id="salesDetailPrice"></b></div>
+                <div class="sales-detail-body" data-sales-body="parts">
+                <section class="sales-detail-head">
+                    <div class="sales-detail-gallery">
+                        <div class="sales-detail-thumbs" id="salesDetailThumbs"></div>
+                        <div class="sales-detail-image-wrap">
+                            <button type="button" class="sales-detail-nav prev" id="salesDetailImagePrev" onclick="stepSalesDetailImage(-1)" aria-label="上一张" hidden>‹</button>
+                            <div class="sales-detail-image"><img id="salesDetailImage" src="/static/img/site-logo.png" alt="商品图片" onerror="this.src='/static/img/site-logo.png';this.onerror=null"></div>
+                            <button type="button" class="sales-detail-nav next" id="salesDetailImageNext" onclick="stepSalesDetailImage(1)" aria-label="下一张" hidden>›</button>
                         </div>
                     </div>
-
-                    <div class="sales-detail-quote-strip">
-                        <div><label>报价类型</label><strong id="salesDetailQuotationType"></strong></div>
-                        <div><label>无税运费报价</label><strong id="salesDetailPostFeePurchase"></strong></div>
-                        <div><label>含税运费报价</label><strong id="salesDetailPostFeeHasTaxPurchase"></strong></div>
-                    </div>
-
-                    <div class="sales-detail-parts-prices" id="salesDetailPartsPrices" hidden>
-                        <div class="sales-detail-subtitle">
-                            <strong>价格信息</strong>
-                            <span id="salesDetailPriceMultiplier"></span>
+                    <div class="sales-detail-summary">
+                        <h1 class="sales-detail-name" id="salesDetailName"></h1>
+                        <div class="sales-detail-meta">
+                            <span>规格型号 <b id="salesDetailModel"></b></span>
+                            <span>品牌 <b id="salesDetailBrand"></b></span>
+                            <span>分类 <b id="salesDetailCategory"></b></span>
+                            <span>质保 <b id="salesDetailWarranty"></b></span>
                         </div>
-                        <div id="salesDetailPartsPriceContent"></div>
+                        <div class="sales-detail-price-box">
+                            <div class="sales-detail-price-main">
+                                <span class="sales-detail-price-label" id="salesDetailPriceLabel">不含票价</span>
+                                <strong class="sales-detail-price" id="salesDetailPrice"></strong>
+                            </div>
+                            <div class="sales-detail-price-extra">
+                                <span>含专票 <b id="salesDetailSpecialPrice"></b></span>
+                                <span>含普票 <b id="salesDetailGeneralPrice"></b></span>
+                            </div>
+                        </div>
+                        <div class="sales-detail-attrs">
+                            <div id="salesDetailElevatorWrap" hidden><label>适用电梯</label><span id="salesDetailElevator"></span></div>
+                            <div id="salesDetailSubstituteWrap" hidden><label>替代型号</label><span id="salesDetailSubstitute"></span></div>
+                            <div id="salesDetailOriginWrap" hidden><label>发货地</label><span id="salesDetailOrigin"></span></div>
+                            <div id="salesDetailQuotationWrap" hidden><label>报价类型</label><span id="salesDetailQuotationType"></span></div>
+                            <div id="salesDetailPostFeeWrap" hidden><label>无税运费</label><span id="salesDetailPostFeePurchase"></span></div>
+                            <div id="salesDetailPostFeeTaxWrap" hidden><label>含税运费</label><span id="salesDetailPostFeeHasTaxPurchase"></span></div>
+                        </div>
+                        <div class="sales-detail-variant-picker" id="salesDetailPartsPrices" hidden>
+                            <div class="sales-detail-variant-head">
+                                <span>商品规格</span>
+                                <em id="salesDetailPriceMultiplier"></em>
+                            </div>
+                            <div class="sales-detail-spec-groups" id="salesDetailPartsPriceContent"></div>
+                        </div>
                     </div>
+                </section>
 
-                    <div class="sales-detail-subtitle"><strong id="salesDetailInfoTitle">商品信息</strong></div>
-                    <div class="sales-detail-info-grid" id="salesDetailInfoGrid"></div>
+                <section class="sales-detail-tabs">
+                    <nav class="sales-detail-tab-nav">
+                        <button type="button" class="sales-detail-tab active" data-sales-tab="info" onclick="switchSalesDetailTab('info')">配件库信息</button>
+                        <button type="button" class="sales-detail-tab" data-sales-tab="chat" onclick="switchSalesDetailTab('chat')">询价记录 <em id="salesDetailChatCount">0</em></button>
+                    </nav>
+                    <div class="sales-detail-panel" data-sales-panel="info">
+                        <div class="sales-detail-info-grid" id="salesDetailInfoGrid"></div>
+                    </div>
+                    <div class="sales-detail-panel" data-sales-panel="chat" hidden>
+                        <div class="sales-detail-chat" id="salesDetailChat">
+                            <div class="sales-detail-table-wrap">
+                                <table>
+                                    <thead><tr><th>序号</th><th>沟通内容</th><th>附件</th><th>创建人</th><th>创建时间</th><th>操作</th></tr></thead>
+                                    <tbody id="salesDetailChatBody"><tr><td colspan="6" class="sales-detail-empty">暂无沟通记录</td></tr></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
                 </div>
 
-                <div class="sales-detail-chat" id="salesDetailChat" hidden>
-                    <div class="sales-detail-section-title">
-                        <strong>沟通记录</strong><span id="salesDetailChatCount">0 条</span>
+                <div class="sales-detail-body" data-sales-body="inquiry" hidden>
+                    <div class="sales-detail-card">
+                        <div class="sales-detail-product-row">
+                            <div class="sales-detail-image"><img id="salesDetailImageLegacy" src="/static/img/site-logo.png" alt="商品图片" onerror="this.src='/static/img/site-logo.png';this.onerror=null"></div>
+                            <div class="sales-detail-summary">
+                                <div><label>商品名称：</label><strong id="salesDetailNameLegacy"></strong></div>
+                                <div><label>规格型号：</label><span id="salesDetailModelLegacy"></span></div>
+                                <div><label>产品规格：</label><span id="salesDetailSpecificationLegacy"></span></div>
+                                <div><label>销售参考价：</label><b class="sales-detail-price" id="salesDetailPriceLegacy"></b></div>
+                            </div>
+                        </div>
+                        <div class="sales-detail-quote-strip">
+                            <div><label>报价类型</label><strong id="salesDetailQuotationTypeLegacy"></strong></div>
+                            <div><label>无税运费报价</label><strong id="salesDetailPostFeePurchaseLegacy"></strong></div>
+                            <div><label>含税运费报价</label><strong id="salesDetailPostFeeHasTaxPurchaseLegacy"></strong></div>
+                        </div>
+                        <div class="sales-detail-subtitle"><strong>商品信息</strong></div>
+                        <div class="sales-detail-info-grid" id="salesDetailInfoGridLegacy"></div>
                     </div>
-                    <div class="sales-detail-table-wrap">
-                        <table>
-                            <thead><tr><th>序号</th><th>沟通内容</th><th>附件</th><th>创建人</th><th>创建时间</th><th>操作</th></tr></thead>
-                            <tbody id="salesDetailChatBody"><tr><td colspan="6" class="sales-detail-empty">暂无沟通记录</td></tr></tbody>
-                        </table>
+                    <div class="sales-detail-chat" id="salesDetailChatLegacy">
+                        <div class="sales-detail-section-title">
+                            <strong>沟通记录</strong><span id="salesDetailChatCountLegacy">0 条</span>
+                        </div>
+                        <div class="sales-detail-table-wrap">
+                            <table>
+                                <thead><tr><th>序号</th><th>沟通内容</th><th>附件</th><th>创建人</th><th>创建时间</th><th>操作</th></tr></thead>
+                                <tbody id="salesDetailChatBodyLegacy"><tr><td colspan="6" class="sales-detail-empty">暂无沟通记录</td></tr></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -364,7 +424,7 @@
     </div>
 
     <div class="sales-toast" id="salesToast"></div>
-    <script src="/static/js/sales.js?v=20261106-1"></script>
+    <script src="/static/js/sales.js?v=20261109-6"></script>
     <script src="/static/js/sales-inquiry.js?v=20261103-2"></script>
 </body>
 </html>
