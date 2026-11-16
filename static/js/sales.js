@@ -585,9 +585,20 @@ let activeSalesDetailImageIndex = 0;
 
 // 价格盒：不含票价用大字，含专票、含普票跟在后头
 function setSalesDetailPrices(noTax, special, general) {
-    setSalesDetailText('salesDetailPrice', detailPriceText(noTax) || '价格待定');
-    setSalesDetailText('salesDetailSpecialPrice', detailAmountText(special) || '—');
-    setSalesDetailText('salesDetailGeneralPrice', detailAmountText(general) || '—');
+    const label = document.getElementById('salesDetailPriceLabel');
+    const noTaxText = detailPriceText(noTax);
+    const specialText = detailAmountText(special);
+    const generalText = detailAmountText(general);
+    // 有的组合只录了含票价，这时用含票兜底并改标签，否则「价格待定」和旁边的 ¥230 自相矛盾
+    const fallback = specialText || generalText;
+    setSalesDetailText('salesDetailPrice', noTaxText || fallback || '价格待定');
+    if (label) {
+        label.textContent = noTaxText ? '不含票价'
+            : specialText ? '含专票价'
+            : generalText ? '含普票价' : '不含票价';
+    }
+    setSalesDetailText('salesDetailSpecialPrice', specialText || '—');
+    setSalesDetailText('salesDetailGeneralPrice', generalText || '—');
 }
 
 function switchSalesDetailTab(name) {
@@ -607,6 +618,10 @@ function switchSalesDetailBody(mode, item) {
     const isInquiry = mode === 'inquiry';
     partsBody.hidden = isInquiry;
     inquiryBody.hidden = !isInquiry;
+    // 配件没有关联询价记录，那个标签页永远是空的，藏掉
+    const chatTab = document.querySelector('[data-sales-tab="chat"]');
+    if (chatTab) chatTab.hidden = !isInquiry;
+    if (!isInquiry) switchSalesDetailTab('info');
     if (!isInquiry || !item) return;
 
     const setText = (id, text) => {
