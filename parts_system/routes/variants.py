@@ -6,7 +6,6 @@
 """
 import datetime
 import uuid
-import time
 from typing import Optional, List
 
 from fastapi import BackgroundTasks, HTTPException
@@ -19,11 +18,7 @@ from ..model import get_oa_db as _get_oa_db
 from ..util import *
 from ..audit import write_operation_log
 
-_supplier_cache = None  # (fetched_at, [rows])
-_SUPPLIER_CACHE_TTL = 60  # 秒，供应商列表变更频率低
-
-_oa_supplier_name_cache = {}  # {oa_id: (fetched_at, supplier_name)}
-_OA_SUPPLIER_NAME_TTL = 300  # 秒，单条供应商名缓存
+# OA 供应商数据走本地快照表 oa_suppliers（由 supplier_sync 覆盖写入），不再直连 OA 查询
 
 # ========== 产品规格与供应商价格 ==========
 class VariantSpecRequest(BaseModel):
@@ -70,23 +65,17 @@ class VariantGroupRequest(BaseModel):
 
 
 def _get_oa_supplier_name(oa_id: int) -> str:
-    """从OA获取供应商名称，带内存缓存（TTL 300s）避免每次独立连接OA库。"""
-    now = time.time()
-    cached = _oa_supplier_name_cache.get(oa_id)
-    if cached and now - cached[0] < _OA_SUPPLIER_NAME_TTL:
-        return cached[1]
-    oa_conn = _get_oa_db()
+    """按 OA 供应商 ID 取名称，读本地快照表。"""
+    conn = get_db()
     try:
-        oa_cur = oa_conn.cursor()
-        oa_cur.execute("SELECT supplier_name FROM yh_supplier WHERE id=%s AND delete_time IS NULL", (oa_id,))
-        row = oa_cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=400, detail="OA供应商不存在")
-        name = row["supplier_name"]
+        cur = conn.cursor()
+        cur.execute("SELECT supplier_name FROM oa_suppliers WHERE oa_supplier_id=%s", (oa_id,))
+        row = cur.fetchone()
     finally:
-        oa_conn.close()
-    _oa_supplier_name_cache[oa_id] = (now, name)
-    return name
+        conn.close()
+    if not row:
+        raise HTTPException(status_code=400, detail="OA供应商不存在")
+    return row["supplier_name"]
 
 
 def _variant_spec_catalog(cur, product_id: int):
@@ -879,8 +868,8 @@ async def save_variant_price(product_id: int, req: VariantPriceRequest, backgrou
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"[variant-prices] OA供应商查询失败: {e}")
-            raise HTTPException(status_code=502, detail=f"OA供应商查询失败: {e}")
+            logger.error(f"[variant-prices] 供应商查询失败: {e}")
+            raise HTTPException(status_code=502, detail=f"供应商查询失败: {e}")
     elif not req.supplier or not req.supplier.strip():
         raise HTTPException(status_code=400, detail="请填写供应商名称或选择OA供应商")
     # is_external_visible 不在此管理——由 PATCH /variant-prices/{id}/external-visible 单独切换
@@ -1204,8 +1193,8 @@ async def update_variant_price(product_id: int, price_id: int, req: VariantPrice
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"[variant-prices PUT] OA供应商查询失败: {e}")
-            raise HTTPException(status_code=502, detail=f"OA供应商查询失败: {e}")
+            logger.error(f"[variant-prices PUT] 供应商查询失败: {e}")
+            raise HTTPException(status_code=502, detail=f"供应商查询失败: {e}")
     elif not req.supplier or not req.supplier.strip():
         raise HTTPException(status_code=400, detail="请填写供应商名称或选择OA供应商")
     # is_external_visible 不在此管理——由 PATCH /variant-prices/{id}/external-visible 单独切换
@@ -1253,71 +1242,69 @@ async def update_variant_price(product_id: int, price_id: int, req: VariantPrice
         conn.close()
 
 
-# ========== OA 供应商查询 ==========
+# ========== OA 供应商查询（读本地快照表） ==========
+def _fetch_oa_suppliers():
+    """OA 直连兜底：本地表还没同步过时才会走到这里。"""
+    conn = _get_oa_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT id AS oa_supplier_id, supplier_name
+               FROM yh_supplier
+               WHERE delete_time IS NULL
+               ORDER BY id""",
+        )
+        return cur.fetchall()
+    finally:
+        conn.close()
+
+
 @app.get("/api/oa/suppliers")
 async def list_oa_suppliers(keyword: str = ""):
-    """返回OA供应商列表，供前端下拉选择。支持keyword模糊搜索。"""
-    global _supplier_cache
-    now = time.time()
-
-    if _supplier_cache and now - _supplier_cache[0] < _SUPPLIER_CACHE_TTL:
-        rows = _supplier_cache[1]
-    else:
-        conn = _get_oa_db()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """SELECT id, supplier_name
-                   FROM yh_supplier
-                   WHERE delete_time IS NULL
-                   ORDER BY id""",
-            )
-            rows = [
-                {"oa_supplier_id": row["id"], "supplier_name": row["supplier_name"]}
-                for row in cur.fetchall()
-            ]
-        finally:
-            conn.close()
-        _supplier_cache = (now, rows)
-
+    """返回供应商列表供前端下拉选择。读本地快照表，支持keyword模糊搜索。"""
+    keyword = keyword.strip()
+    where, params, limit = "", [], ""
     if keyword:
-        kw = keyword.lower()
-        return [r for r in rows if kw in r["supplier_name"].lower()][:50]
+        where = " WHERE supplier_name LIKE %s"
+        params = [f"%{keyword}%"]
+        limit = " LIMIT 50"  # 和原来一致：搜索时只回前 50 条
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT oa_supplier_id, supplier_name FROM oa_suppliers{where}"
+            f" ORDER BY oa_supplier_id{limit}",
+            params,
+        )
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+    if not rows and not keyword:
+        # 表空说明从没同步过，直连 OA 兜底，别让下拉框空着
+        logger.warning("[供应商] 本地 oa_suppliers 为空，回退直连 OA，请执行 supplier_sync")
+        rows = _fetch_oa_suppliers()
     return rows
 
 
 @app.get("/api/oa/suppliers/{supplier_id}")
 async def get_oa_supplier(supplier_id: int):
-    """返回OA供应商详情：名称+开票能力+税点。从 yh_supplier_detail 聚合。"""
-    conn = _get_oa_db()
+    """返回供应商开票能力和税点，读本地快照表。"""
+    conn = get_db()
     try:
         cur = conn.cursor()
         cur.execute(
-            """SELECT s.id as oa_supplier_id, s.supplier_name,
-                      MAX(d.is_special_invoice) as is_special_invoice,
-                      MAX(d.is_normal_invoice) as is_normal_invoice,
-                      MAX(d.is_no_invoice) as is_no_invoice,
-                      GROUP_CONCAT(DISTINCT CASE WHEN d.special_tax_point > '' THEN d.special_tax_point END) as special_tax_point,
-                      GROUP_CONCAT(DISTINCT CASE WHEN d.normal_tax_point > '' THEN d.normal_tax_point END) as normal_tax_point,
-                      GROUP_CONCAT(DISTINCT CASE WHEN d.no_tax_point > '' THEN d.no_tax_point END) as no_tax_point
-               FROM yh_supplier s
-               LEFT JOIN yh_supplier_detail d ON s.id = d.supplier_id AND d.delete_time IS NULL
-               WHERE s.id=%s AND s.delete_time IS NULL
-               GROUP BY s.id, s.supplier_name""",
+            """SELECT oa_supplier_id, supplier_name, is_special_invoice,
+                      is_normal_invoice, is_no_invoice,
+                      special_tax_point, normal_tax_point, no_tax_point
+                 FROM oa_suppliers WHERE oa_supplier_id=%s""",
             (supplier_id,),
         )
         row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="供应商不存在")
-        return {
-            "oa_supplier_id": row["oa_supplier_id"],
-            "supplier_name": row["supplier_name"],
-            "is_special_invoice": bool(row["is_special_invoice"]),
-            "is_normal_invoice": bool(row["is_normal_invoice"]),
-            "is_no_invoice": bool(row["is_no_invoice"]),
-            "special_tax_point": row["special_tax_point"],
-            "normal_tax_point": row["normal_tax_point"],
-            "no_tax_point": row["no_tax_point"],
-        }
     finally:
         conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="供应商不存在")
+    row["is_special_invoice"] = bool(row["is_special_invoice"])
+    row["is_normal_invoice"] = bool(row["is_normal_invoice"])
+    row["is_no_invoice"] = bool(row["is_no_invoice"])
+    return row

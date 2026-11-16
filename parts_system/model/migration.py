@@ -601,3 +601,22 @@ def ensure_part_inquiries_table(conn):
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='询价记录与SPU/SKU的匹配关系'"""
     )
     conn.commit()
+
+
+def ensure_oa_suppliers_table(conn):
+    """确保 OA 供应商快照表存在；只建表，数据由同步脚本从 OA 覆盖写入。"""
+    cursor = conn.cursor()
+    cursor.execute(
+        """CREATE TABLE IF NOT EXISTS oa_suppliers (
+            oa_supplier_id INT NOT NULL COMMENT 'OA供应商ID，对应oa_yixiuti.yh_supplier.id',
+            supplier_name VARCHAR(255) NOT NULL COMMENT '供应商名称',
+            is_special_invoice TINYINT(1) NOT NULL DEFAULT 0 COMMENT '可否开专票：1=可开，0=不可开。取自OA yh_supplier_detail 多条明细的MAX，为0时前端禁用专票价格输入',
+            is_normal_invoice TINYINT(1) NOT NULL DEFAULT 0 COMMENT '可否开普票：1=可开，0=不可开。取自OA yh_supplier_detail 多条明细的MAX，为0时前端禁用普票价格输入',
+            is_no_invoice TINYINT(1) NOT NULL DEFAULT 0 COMMENT '可否不开票：1=可以不开发票（此时无税点），0=必须开票。取自OA yh_supplier_detail 多条明细的MAX',
+            special_tax_point VARCHAR(64) NULL COMMENT '专票税点，保留OA原值如13',
+            normal_tax_point VARCHAR(64) NULL COMMENT '普票税点',
+            no_tax_point VARCHAR(64) NULL COMMENT '不开票税点',
+            PRIMARY KEY (oa_supplier_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='OA供应商与开票能力快照'"""
+    )
+    conn.commit()
