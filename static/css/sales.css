@@ -201,11 +201,7 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-image { width: 124px; height: 124px; flex: 0 0 124px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid #dfe6ef; border-radius: 11px; background: #f8faff; }
 .sales-detail-image img { width: 120px; height: 120px; object-fit: contain; transition: transform .15s ease; }
 .sales-detail-image img:hover { transform: scale(1.03); }
-.sales-detail-summary { flex: 1; display: grid; grid-template-columns: 110px minmax(180px,1fr) 110px minmax(180px,1fr); align-items: center; gap: 14px 10px; font-size: 16px; }
-.sales-detail-summary > div { display: contents; }
-.sales-detail-summary label, .sales-detail-info-grid label { color: #536177; text-align: right; white-space: nowrap;}
-.sales-detail-summary strong { color: #1e2c43; font-size: 18px; }
-.sales-detail-summary span { color: #35445b; }
+/* 摘要区布局由文件末尾的改版样式接管，这里不再保留旧的 grid 规则 */
 .sales-detail-price { color: var(--sales-price); font-size: 22px; }
 .sales-detail-quote-strip { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; padding: 16px 28px; border-bottom: 1px solid #e7edf5; background: #fbfcff; }
 .sales-detail-quote-strip > div { min-height: 66px; display: flex; flex-direction: column; justify-content: center; gap: 7px; padding: 10px 14px; border: 1px solid #dde7f4; border-radius: 9px; background: #fff; }
@@ -508,6 +504,130 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .inquiry-chat-item input, .inquiry-chat-item select { height: 26px; padding: 0 8px; color: #606266; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; outline: none; font: inherit; font-size: 12px; }
 .inquiry-chat-item input { width: 84px; }
 .inquiry-chat-item input:focus, .inquiry-chat-item select:focus { border-color: var(--sales-blue); }
+
+/* ============ 详情弹窗改版：对齐 docs/prototype-sales-detail.html ============ */
+.sales-detail-modal { display: flex; flex-direction: column; overflow: hidden; width: min(1360px, 96vw); height: min(920px, 94vh); border: 1px solid #e8ecf0; border-radius: 10px; background: #fff; font-size: 13px; box-shadow: 0 20px 60px rgba(15,23,42,.24); }
+.sales-detail-header { min-height: 54px; padding: 0 20px; border-bottom: 1px solid #e8ecf0; }
+.sales-detail-header h2 { font-size: 16px; }
+.sales-detail-close { width: 30px; height: 30px; color: #718096; border-radius: 6px; background: transparent; font-size: 20px; }
+.sales-detail-scroll { padding: 0; background: #f5f7fa; }
+
+/* 商品头部：图库 + 摘要 + 价格盒 */
+.sales-detail-head { display: flex; gap: 24px; padding: 20px; background: #fff; border-bottom: 8px solid #f5f7fa; }
+.sales-detail-gallery { flex: 0 0 auto; display: flex; gap: 10px; }
+.sales-detail-image-wrap { position: relative; flex: 0 0 228px; width: 228px; height: 228px; }
+.sales-detail-image { width: 228px; height: 228px; flex: 0 0 228px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #e8ecf0; border-radius: 8px; background: #f7fafc; }
+.sales-detail-image img { width: 224px; height: 224px; object-fit: contain; }
+/* 图片多的时候竖向排列，超出高度在列内滚动 */
+.sales-detail-thumbs { order: -1; flex: 0 0 54px; width: 54px; max-height: 228px; display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; }
+.sales-detail-thumbs::-webkit-scrollbar { width: 4px; }
+.sales-detail-thumbs::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 2px; }
+.sales-detail-thumb { flex: 0 0 54px; width: 54px; height: 54px; padding: 2px; overflow: hidden; border: 2px solid #e8ecf0; border-radius: 6px; background: #f7fafc; cursor: pointer; }
+.sales-detail-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.sales-detail-thumb.active { border-color: #4285f4; }
+.sales-detail-nav { position: absolute; top: 50%; z-index: 2; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: 1px solid #dfe6ef; border-radius: 50%; background: rgba(255,255,255,.92); color: #475569; font-size: 16px; line-height: 1; transform: translateY(-50%); cursor: pointer; }
+.sales-detail-nav:hover { border-color: #4285f4; color: #4285f4; }
+.sales-detail-nav.prev { left: 6px; }
+.sales-detail-nav.next { right: 6px; }
+.sales-detail-nav[hidden] { display: none; }
+
+.sales-detail-summary { flex: 1; min-width: 0; display: block; }
+.sales-detail-name { margin: 0; color: #1a202c; font-size: 18px; font-weight: 600; line-height: 1.4; }
+.sales-detail-meta { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0 0; color: #718096; font-size: 12.5px; }
+.sales-detail-meta b { color: #4a5568; font-weight: 500; }
+
+.sales-detail-price-box { display: flex; align-items: flex-end; gap: 30px; margin-top: 12px; padding: 12px 16px; border: 1px solid #fde2e2; border-radius: 8px; background: #fef7f7; }
+.sales-detail-price-main { display: flex; align-items: baseline; gap: 8px; }
+.sales-detail-price-label { color: #9b6a6a; font-size: 12px; }
+.sales-detail-price { color: #dc2626; font-size: 28px; font-weight: 700; letter-spacing: -.5px; }
+.sales-detail-price-extra { display: flex; flex-wrap: wrap; gap: 4px 22px; padding-bottom: 5px; color: #9b6a6a; font-size: 14px; }
+.sales-detail-price-extra b { color: #a84545; font-size: 15px; font-weight: 600; }
+
+.sales-detail-attrs { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 12px; color: #4a5568; font-size: 12.5px; }
+.sales-detail-attrs > div { display: flex; gap: 5px; min-width: 0; }
+.sales-detail-attrs label { color: #718096; white-space: nowrap; }
+.sales-detail-attrs span { word-break: break-all; }
+
+/* 标签页 */
+.sales-detail-tabs { padding: 16px 20px 24px; background: #fff; }
+.sales-detail-tab-nav { display: flex; gap: 24px; border-bottom: 1px solid #e8ecf0; }
+.sales-detail-tab { position: relative; padding: 0 0 10px; border: 0; background: none; color: #718096; font-size: 13.5px; font-weight: 500; }
+.sales-detail-tab::after { content: ''; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px 2px 0 0; background: transparent; }
+.sales-detail-tab.active { color: #4285f4; font-weight: 600; }
+.sales-detail-tab.active::after { background: #4285f4; }
+.sales-detail-tab em { margin-left: 5px; padding: 1px 6px; border-radius: 4px; background: #f2f4f7; color: #718096; font-size: 11px; font-style: normal; font-weight: 400; }
+.sales-detail-tab.active em { background: #eef4ff; color: #4285f4; }
+.sales-detail-panel { padding-top: 14px; }
+.sales-detail-panel[hidden] { display: none; }
+
+/* 配件库信息：三列分行 */
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 0 24px; padding: 0; font-size: 13px; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > div { min-height: 40px; display: grid; grid-template-columns: 92px minmax(0,1fr); grid-column: auto; align-items: center; gap: 0 10px; padding: 0; border: 0; border-bottom: 1px solid #f0f3f7; border-radius: 0; background: transparent; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid label { color: #718096; text-align: left; font-size: 12.5px; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid span { padding-left: 0; color: #4a5568; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid .sales-detail-wide { grid-column: span 2; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid .sales-detail-full { grid-column: 1 / -1; }
+.sales-detail-info-empty { color: #b6c0cd; }
+/* 长文本字段整行展示，阅读时不用来回跳列 */
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > .sales-detail-full { grid-template-columns: 92px minmax(0, 1fr); align-items: start; padding: 9px 0; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > .sales-detail-full > label { padding-top: 2px; }
+
+.sales-detail-subtitle { min-height: 0; margin-bottom: 9px; padding: 0; border: 0; background: transparent; color: #718096; font-size: 12.5px; }
+.sales-detail-subtitle strong { font-weight: 500; }
+.sales-detail-subtitle strong::before { display: none; }
+/* 上面那条特异性不够，会被旧的 :is() 规则压住，这里再声明一遍 */
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-subtitle { min-height: 0; margin-bottom: 9px; padding: 0; border: 0; background: transparent; color: #718096; font-size: 12.5px; }
+.sales-detail-parts-prices { margin-top: 16px; }
+.sales-detail-parts-prices .sales-detail-subtitle { display: flex; align-items: center; justify-content: space-between; }
+.sales-detail-chat { border: 1px solid #e8ecf0; border-radius: 8px; background: #fff; box-shadow: none; }
+.sales-detail-table-wrap { padding: 0; }
+.sales-detail-table-wrap table { font-size: 13px; }
+
+/* 头部面包屑 */
+.sales-detail-crumb-sep { color: #c3ccd9; font-size: 13px; }
+.sales-detail-crumb-current { max-width: 340px; overflow: hidden; color: #4a5568; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 规格选择 */
+.sales-detail-variant-picker { margin-top: 16px; }
+.sales-detail-variant-picker[hidden] { display: none; }
+.sales-detail-variant-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; color: #718096; font-size: 12.5px; }
+.sales-detail-variant-head em { color: #4285f4; font-size: 12px; font-style: normal; font-weight: 600; }
+.sales-detail-spec-groups { display: flex; flex-direction: column; gap: 10px; }
+.sales-detail-spec-group { display: flex; align-items: flex-start; gap: 14px; }
+.sales-detail-spec-group-label { flex: 0 0 76px; padding-top: 6px; color: #718096; font-size: 12.5px; line-height: 1.4; }
+.sales-detail-spec-values { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.sales-detail-spec-option { padding: 5px 14px; border: 1px solid transparent; border-radius: 4px; background: #f5f7fa; color: #4a5568; font-size: 12.5px; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
+.sales-detail-spec-option:hover { color: #4285f4; background: #eef4ff; }
+.sales-detail-spec-option.active { border-color: #4285f4; background: #fff; color: #4285f4; font-weight: 500; }
+
+/* flex 会盖掉 hidden 属性，这里补回来 */
+.sales-detail-attrs > div[hidden] { display: none; }
+
+/* ============ 询价记录来源：保持改版前的排版 ============ */
+.sales-detail-body[hidden] { display: none; }
+.sales-detail-body[data-sales-body="inquiry"] { padding: 18px; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-summary { flex: 1; display: grid; grid-template-columns: 110px minmax(180px,1fr) 110px minmax(180px,1fr); align-items: center; gap: 14px 10px; font-size: 16px; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-summary > div { display: contents; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-summary label { color: #536177; text-align: right; white-space: nowrap; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-summary strong { color: #1e2c43; font-size: 18px; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-summary span { color: #35445b; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-price { color: var(--sales-price); font-size: 22px; font-weight: 700; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-image { width: 124px; height: 124px; flex: 0 0 124px; border-radius: 11px; background: #f8faff; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-image img { width: 120px; height: 120px; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-subtitle { min-height: 49px; padding: 0 24px; color: #263650; border-bottom: 1px solid #e8edf4; background: #fff; font-size: 15px; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-info-grid { display: grid; grid-template-columns: repeat(8, minmax(0,1fr)); gap: 0; padding: 0 24px 14px; font-size: 13px; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-info-grid > div { min-height: 43px; display: grid; grid-template-columns: 115px minmax(0,1fr); grid-column: span 2; align-items: center; gap: 0; padding: 0; border: 0; border-bottom: 1px solid #edf1f6; border-radius: 0; background: #fff; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-info-grid label { color: #536177; text-align: right; font-size: 13px; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-info-grid span { padding-left: 10px; color: #43516a; line-height: 1.5; font-size: 13px; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-info-grid .sales-detail-wide { grid-column: span 4; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-info-grid .sales-detail-full { grid-column: 1 / -1; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-chat { margin-top: 12px; border-radius: 10px; box-shadow: 0 5px 18px rgba(37,67,112,.05); }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-section-title strong { font-size: 15px; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-section-title span { padding: 3px 8px; font-size: 11px; }
+.sales-detail-body[data-sales-body="inquiry"] .sales-detail-table-wrap table { font-size: 13px; }
+.sales-detail-price-empty { min-height: 64px; display: flex; align-items: center; justify-content: center; color: #a0aec0; border: 1px dashed #e2e8f0; border-radius: 8px; font-size: 13px; }
+.sales-detail-parts-prices .sales-detail-price-loading { margin: 0; }
+.sales-detail-parts-prices .sales-detail-variant-table-wrap { padding: 0; }
 .inquiry-chat-item span { color: #909399; }
 .inquiry-chat-check { display: inline-flex; align-items: center; gap: 5px; color: #606266; font-size: 12px; cursor: pointer; }
 .inquiry-hint { display: block; margin-top: 6px; color: #909399; font-size: 12px; }

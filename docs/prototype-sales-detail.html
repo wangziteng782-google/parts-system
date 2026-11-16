@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>原型 - 配件商品详情（商城排版）</title>
+<style>
+    /* 变量与字体沿用 static/css/base.css，价格色沿用系统 --price-red */
+    :root {
+        --bg: #f5f7fa;
+        --card-bg: #fff;
+        --border: #e8ecf0;
+        --text: #1a202c;
+        --text-secondary: #4a5568;
+        --text-light: #718096;
+        --text-muted: #a0aec0;
+        --accent: #4285f4;
+        --accent-hover: #3367d6;
+        --accent-soft: #eef4ff;
+        --success: #34a853;
+        --price-red: #dc2626;
+        --shadow: 0 1px 4px rgba(0, 0, 0, .05);
+    }
+    * { box-sizing: border-box; }
+    body {
+        min-width: 1080px;
+        min-height: 100vh;
+        margin: 0;
+        color: var(--text);
+        background: var(--bg);
+        font-family: 'PingFang SC', -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        font-size: 13px;
+    }
+    button { font: inherit; cursor: pointer; }
+    h1 { margin: 0; }
+
+    .thin-scroll { scrollbar-width: thin; scrollbar-color: #cfd6e0 transparent; }
+    .thin-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+    .thin-scroll::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 4px; }
+    .thin-scroll::-webkit-scrollbar-track { background: transparent; }
+
+    /* ============ 弹窗骨架 ============ */
+    .overlay {
+        position: fixed; inset: 0; z-index: 5600;
+        display: flex; align-items: center; justify-content: center;
+        padding: 18px; background: rgba(17, 28, 45, .6);
+    }
+    .modal {
+        width: min(1360px, 96vw); height: min(920px, 94vh);
+        display: flex; flex-direction: column; overflow: hidden;
+        border: 1px solid var(--border); border-radius: 10px; background: var(--card-bg);
+        box-shadow: 0 20px 60px rgba(15, 23, 42, .24);
+    }
+
+    .modal-header {
+        flex: 0 0 auto; min-height: 54px;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--card-bg);
+    }
+    .crumb { display: flex; align-items: center; gap: 8px; color: var(--text-light); font-size: 13px; }
+    .crumb-sep { color: var(--text-muted); }
+    .crumb-current { color: var(--text); font-weight: 500; }
+    .badge-source {
+        padding: 2px 8px; border-radius: 4px;
+        background: #e9f7ef; color: #1e8e4b; font-size: 11px; font-weight: 600;
+    }
+    .icon-button {
+        width: 30px; height: 30px; padding: 0; color: var(--text-light);
+        border: 0; border-radius: 6px; background: transparent; font-size: 18px; line-height: 1;
+    }
+    .icon-button:hover { color: var(--text); background: #f2f4f7; }
+
+    .modal-body { flex: 1; min-height: 0; overflow: auto; }
+
+    /* ============ 商品头部 ============ */
+    .product-head {
+        display: flex; gap: 24px;
+        padding: 20px; background: var(--card-bg);
+        border-bottom: 8px solid var(--bg);
+    }
+    .product-gallery { flex: 0 0 228px; }
+    .gallery-main {
+        width: 228px; height: 228px;
+        display: flex; align-items: center; justify-content: center;
+        border: 1px solid var(--border); border-radius: 8px; background: #f7fafc;
+    }
+    .gallery-thumbs { display: flex; gap: 6px; margin-top: 8px; }
+    .gallery-thumb {
+        width: 54px; height: 54px;
+        display: flex; align-items: center; justify-content: center;
+        border: 2px solid var(--border); border-radius: 6px; background: #f7fafc;
+        cursor: pointer;
+    }
+    .gallery-thumb.active { border-color: var(--accent); }
+
+    .product-summary { flex: 1; min-width: 0; }
+    .product-title { color: var(--text); font-size: 18px; font-weight: 600; line-height: 1.4; }
+    .product-meta {
+        display: flex; flex-wrap: wrap; gap: 4px 18px;
+        margin: 8px 0 0; color: var(--text-light); font-size: 12.5px;
+    }
+    .product-meta b { color: var(--text-secondary); font-weight: 500; }
+
+    .price-box {
+        display: flex; align-items: flex-end; gap: 30px;
+        margin-top: 12px; padding: 12px 16px;
+        border: 1px solid #fde2e2; border-radius: 8px; background: #fef7f7;
+    }
+    .price-box-main { display: flex; align-items: baseline; gap: 8px; }
+    .price-box-label { color: #9b6a6a; font-size: 12px; }
+    .price-box-value { color: var(--price-red); font-size: 28px; font-weight: 700; letter-spacing: -.5px; }
+    .price-box-extra {
+        display: flex; flex-wrap: wrap; gap: 4px 22px;
+        padding-bottom: 5px; color: #9b6a6a; font-size: 14px;
+    }
+    .price-box-extra b { color: #a84545; font-size: 15px; font-weight: 600; }
+
+    .product-attrs {
+        display: flex; flex-wrap: wrap; gap: 6px 24px;
+        margin-top: 12px; color: var(--text-secondary); font-size: 12.5px;
+    }
+    .product-attrs div { display: flex; gap: 5px; }
+    .product-attrs label { color: var(--text-light); }
+
+    /* ============ 规格选择 ============ */
+    .variant-picker { margin-top: 16px; }
+    .variant-picker-head {
+        margin-bottom: 9px; color: var(--text-light); font-size: 12.5px;
+    }
+
+    .spec-groups { display: flex; flex-direction: column; gap: 10px; }
+    .spec-group { display: flex; align-items: flex-start; gap: 14px; }
+    .spec-group-label {
+        flex: 0 0 76px; padding-top: 6px;
+        color: var(--text-light); font-size: 12.5px; line-height: 1.4;
+    }
+    .spec-options { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+    .spec-option {
+        padding: 5px 14px;
+        border: 1px solid transparent; border-radius: 4px;
+        background: #f5f5f5; color: var(--text-secondary);
+        font-size: 12.5px; line-height: 1.5;
+        transition: border-color .15s, background .15s, color .15s;
+    }
+    .spec-option:hover { color: var(--accent); background: #eef4ff; }
+    .spec-option.active {
+        border-color: var(--accent); background: var(--card-bg);
+        color: var(--accent); font-weight: 500;
+    }
+
+    /* ============ 标签页 ============ */
+    .detail-tabs { padding: 16px 20px 24px; }
+    .tab-nav { display: flex; gap: 24px; border-bottom: 1px solid var(--border); }
+    .tab-link {
+        position: relative; padding: 0 0 10px;
+        border: 0; background: none; color: var(--text-light);
+        font-size: 13.5px; font-weight: 500;
+    }
+    .tab-link::after {
+        content: ""; position: absolute; right: 0; bottom: -1px; left: 0;
+        height: 2px; border-radius: 2px 2px 0 0; background: transparent;
+    }
+    .tab-link:hover { color: var(--text-secondary); }
+    .tab-link.active { color: var(--accent); font-weight: 600; }
+    .tab-link.active::after { background: var(--accent); }
+    .tab-link em {
+        margin-left: 5px; padding: 1px 6px; border-radius: 4px;
+        background: #f2f4f7; color: var(--text-light); font-size: 11px; font-style: normal; font-weight: 400;
+    }
+    .tab-link.active em { background: var(--accent-soft); color: var(--accent); }
+
+    .tab-panel { padding-top: 14px; }
+    .tab-panel[hidden] { display: none; }
+
+    /* 询价记录：工具条 */
+    .panel-bar {
+        display: flex; align-items: center; justify-content: space-between; gap: 18px;
+        padding: 10px 14px; margin-bottom: 12px;
+        border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg);
+    }
+    .panel-context { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+    .panel-context label { flex: 0 0 auto; color: var(--text-light); font-size: 12px; }
+    .panel-context span { color: var(--text); font-size: 13px; font-weight: 500; word-break: break-all; }
+    .stat-strip { flex: 0 0 auto; display: flex; }
+    .stat-strip > div {
+        display: flex; flex-direction: column; gap: 2px;
+        padding: 0 16px; border-left: 1px solid var(--border);
+    }
+    .stat-strip > div:first-child { border-left: 0; padding-left: 0; }
+    .stat-strip > div:last-child { padding-right: 0; }
+    .stat-strip label { color: var(--text-muted); font-size: 11px; }
+    .stat-strip b { color: var(--text); font-size: 13px; font-weight: 600; white-space: nowrap; }
+    .stat-strip .is-price b { color: var(--price-red); }
+
+    /* 询价记录：卡片 */
+    .quote-item {
+        overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg);
+    }
+    .quote-item + .quote-item { margin-top: 10px; }
+    .quote-item:hover { border-color: #d8dee7; }
+    .quote-head {
+        display: flex; align-items: center; gap: 10px;
+        padding: 9px 14px; background: #fafbfd; border-bottom: 1px solid var(--border);
+    }
+    .quote-date { color: var(--text-light); font-size: 12px; }
+    .quote-title { color: var(--text); font-size: 13px; font-weight: 500; }
+    .quote-qty {
+        padding: 1px 6px; border-radius: 4px;
+        background: var(--accent-soft); color: var(--accent); font-size: 11px;
+    }
+    .quote-price { margin-left: auto; color: var(--price-red); font-size: 15px; font-weight: 700; }
+
+    .quote-meta {
+        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px 26px; padding: 14px 16px;
+    }
+    .quote-meta > div { display: flex; gap: 8px; min-width: 0; font-size: 13px; line-height: 1.7; }
+    .quote-meta > div.wide { grid-column: 1 / -1; }
+    .quote-meta label { flex: 0 0 60px; color: var(--text-light); }
+    .quote-meta span { flex: 1; color: var(--text); word-break: break-all; }
+
+    .quote-chats { padding: 10px 14px 12px; border-top: 1px dashed var(--border); background: #fafbfd; }
+    .quote-chats-head {
+        display: flex; align-items: center; gap: 6px;
+        margin-bottom: 8px; color: var(--text-secondary); font-size: 12px; font-weight: 500;
+    }
+    .quote-chats-head em {
+        padding: 0 6px; border-radius: 4px;
+        background: #eef1f5; color: var(--text-light); font-size: 11px; font-style: normal; font-weight: 400;
+    }
+    .chat-item {
+        padding: 7px 10px; border-radius: 6px;
+        background: var(--card-bg); border: 1px solid #eef1f5;
+    }
+    .chat-item + .chat-item { margin-top: 6px; }
+    .chat-head {
+        display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+        color: var(--text-muted); font-size: 12px;
+    }
+    .chat-head b { color: var(--text); font-size: 12.5px; font-weight: 500; }
+    .chat-text { margin-top: 3px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; word-break: break-all; }
+    .chat-empty { color: var(--text-muted); font-size: 12px; }
+
+    .panel-empty { padding: 48px 20px; text-align: center; color: var(--text-light); font-size: 13px; line-height: 1.9; }
+    .panel-empty b { display: block; margin-bottom: 4px; color: var(--text-secondary); font-size: 13.5px; font-weight: 500; }
+
+    /* 配件库信息 */
+    .info-table { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 24px; }
+    .info-row {
+        display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center;
+        min-height: 38px; border-bottom: 1px solid #f0f3f7;
+    }
+    .info-row.full { grid-column: 1 / -1; }
+    .info-row label { color: var(--text-light); font-size: 12.5px; }
+    .info-row span { color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+    .info-row .is-empty { color: var(--text-muted); }
+
+    /* ============ 底部 ============ */
+    .modal-footer {
+        flex: 0 0 auto; min-height: 54px;
+        display: flex; align-items: center; justify-content: space-between; gap: 20px;
+        padding: 0 20px; border-top: 1px solid var(--border); background: var(--card-bg);
+    }
+    .footer-tip { display: flex; flex-direction: column; gap: 1px; }
+    .footer-tip strong { color: var(--text); font-size: 13px; font-weight: 500; }
+    .footer-tip span { color: var(--text-light); font-size: 12px; }
+    .button-primary {
+        padding: 7px 16px; border: 0; border-radius: 6px;
+        background: var(--accent); color: #fff; font-size: 13px; font-weight: 500;
+    }
+    .button-primary:hover { background: var(--accent-hover); }
+</style>
+</head>
+<body>
+
+<div class="overlay">
+    <div class="modal">
+
+        <header class="modal-header">
+            <div class="crumb">
+                <span>配件商品详情</span>
+                <span class="crumb-sep">/</span>
+                <span>电路板与功能模块</span>
+                <span class="crumb-sep">/</span>
+                <span class="crumb-current">轿厢显示板</span>
+                <span class="badge-source">配件库</span>
+            </div>
+            <button class="icon-button" title="关闭">×</button>
+        </header>
+
+        <div class="modal-body thin-scroll">
+            <section class="product-head">
+                <div class="product-gallery">
+                    <div class="gallery-main">
+                        <svg width="132" height="132" viewBox="0 0 96 96" role="img" aria-label="产品图片占位">
+                            <rect x="6" y="6" width="84" height="84" rx="8" fill="#eef2f8"/>
+                            <rect x="20" y="26" width="56" height="44" rx="4" fill="#dbe4f0"/>
+                            <rect x="26" y="34" width="18" height="10" rx="2" fill="#b9c7db"/>
+                            <circle cx="62" cy="56" r="7" fill="#b9c7db"/>
+                        </svg>
+                    </div>
+                    <div class="gallery-thumbs">
+                        <div class="gallery-thumb active">
+                            <svg width="32" height="32" viewBox="0 0 96 96"><rect x="10" y="16" width="76" height="64" rx="6" fill="#dbe4f0"/><rect x="22" y="30" width="30" height="14" rx="3" fill="#b9c7db"/></svg>
+                        </div>
+                        <div class="gallery-thumb">
+                            <svg width="32" height="32" viewBox="0 0 96 96"><rect x="10" y="16" width="76" height="64" rx="6" fill="#dbe4f0"/><circle cx="48" cy="48" r="16" fill="#b9c7db"/></svg>
+                        </div>
+                        <div class="gallery-thumb">
+                            <svg width="32" height="32" viewBox="0 0 96 96"><rect x="10" y="16" width="76" height="64" rx="6" fill="#dbe4f0"/><rect x="22" y="52" width="52" height="8" rx="4" fill="#b9c7db"/></svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="product-summary">
+                    <h1 class="product-title">轿厢显示板</h1>
+                    <p class="product-meta">
+                        <span>规格型号 <b>KM887283G01</b></span>
+                        <span>品牌 <b>优迈</b></span>
+                        <span>分类 <b>电路板与功能模块</b></span>
+                        <span>质保 <b>12 个月</b></span>
+                    </p>
+
+                    <div class="price-box">
+                        <div class="price-box-main">
+                            <span class="price-box-label">不含票价</span>
+                            <strong class="price-box-value" id="heroPrice">¥112.80</strong>
+                        </div>
+                        <div class="price-box-extra">
+                            <span>含专票 <b id="heroSpecial">¥126.22</b></span>
+                            <span>含普票 <b id="heroCommon">¥121.50</b></span>
+                        </div>
+                    </div>
+
+                    <div class="product-attrs">
+                        <div><label>适用电梯</label><span id="heroElevator">优迈</span></div>
+                        <div><label>替代型号</label><span>KM887283G02</span></div>
+                        <div><label>发货地</label><span id="heroOrigin">南京</span></div>
+                    </div>
+
+                    <div class="variant-picker">
+                        <div class="variant-picker-head">商品规格</div>
+                        <div class="spec-groups" id="skuGrid"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="detail-tabs">
+                <nav class="tab-nav" id="tabNav">
+                    <button class="tab-link active" data-tab="info">配件库信息</button>
+                    <button class="tab-link" data-tab="q">询价记录 <em id="tabQCount">0</em></button>
+                </nav>
+
+                <div class="tab-panel" data-panel="q" hidden>
+                    <div class="panel-bar">
+                        <div class="panel-context">
+                            <label>当前规格</label>
+                            <span id="qSku">—</span>
+                        </div>
+                        <div class="stat-strip" id="qSummary" hidden>
+                            <div class="is-price"><label>最近报价</label><b id="qLatest">—</b></div>
+                            <div><label>报价区间</label><b id="qRange">—</b></div>
+                            <div><label>询价次数</label><b id="qTimes">—</b></div>
+                        </div>
+                    </div>
+                    <div class="quote-list" id="qList"></div>
+                </div>
+
+                <div class="tab-panel" data-panel="info">
+                    <div class="info-table">
+                        <div class="info-row"><label>产品品牌</label><span>优迈</span></div>
+                        <div class="info-row"><label>产品分类</label><span>电路板与功能模块</span></div>
+                        <div class="info-row"><label>质保期限</label><span>12个月</span></div>
+
+                        <div class="info-row"><label>适用电梯品牌</label><span>优迈</span></div>
+                        <div class="info-row"><label>替代型号</label><span>KM887283G02</span></div>
+                        <div class="info-row"><label>发货地</label><span>南京</span></div>
+
+                        <div class="info-row"><label>发货时间</label><span>48小时</span></div>
+                        <div class="info-row"><label>报价有效期</label><span>180天</span></div>
+                        <div class="info-row"><label>每日截单时间</label><span class="is-empty">—</span></div>
+
+                        <div class="info-row"><label>报价时间</label><span>2026-09-30</span></div>
+                        <div class="info-row"><label>采购运费</label><span class="is-empty">—</span></div>
+                        <div class="info-row"><label>更新人</label><span>李强</span></div>
+
+                        <div class="info-row"><label>运费备注</label><span>不含运费</span></div>
+                        <div class="info-row"><label>更新时间</label><span>2026-09-30 10:37</span></div>
+                        <div class="info-row"><label>商品备注</label><span class="is-empty">—</span></div>
+
+                        <div class="info-row"><label>补充备注</label><span class="is-empty">—</span></div>
+                        <div class="info-row"><label>注意事项</label><span class="is-empty">—</span></div>
+
+                        <div class="info-row full"><label>技术参数</label><span>额定电压 DC24V，通讯方式 RS485</span></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <footer class="modal-footer">
+            <div class="footer-tip">
+                <strong>发现商品信息有误？</strong>
+                <span>欢迎提交问题，帮助我们持续完善配件资料</span>
+            </div>
+            <button class="button-primary">我要反馈</button>
+        </footer>
+
+    </div>
+</div>
+
+<script>
+    // 纯原型假数据：按规格组合分组，每条询价带完整信息和沟通记录
+    const SKU_DATA = {
+        s1: {
+            label: '性质：原厂；颜色：黑屏；适用电梯：优迈',
+            noTax: '¥112.80', special: '¥126.22', common: '¥121.50',
+            freight: '¥12.00', origin: '南京', elevator: '优迈',
+            items: [
+                {
+                    date: '2026-10-28', price: '¥118.00', qty: '2 件',
+                    name: '显示板', spec: 'KM887283G01 黑屏', eleType: 'KM887283G01', brand: '优迈',
+                    customer: '南京地铁 3 号线维保', sales: '王芳',
+                    inquiryTime: '2026-10-28 09:20', quoteTime: '2026-10-28 16:20',
+                    freight: '¥12.00', matchedBy: '张伟', matchedAt: '2026-10-29 09:12',
+                    chats: [
+                        { who: '王芳', time: '10-27 14:20', text: '客户要现货，周三前能发出来吗？屏是黑底白字的那版。' },
+                        { who: '李强', time: '10-27 10:05', text: '已联系优迈厂家，有货，走顺丰，运费 12 元。' }
+                    ]
+                },
+                {
+                    date: '2026-10-21', price: '¥122.50', qty: '1 件',
+                    name: '轿厢显示板', spec: 'KM887283G01 黑屏', eleType: 'KM887283G01', brand: '优迈',
+                    customer: '苏州恒达电梯工程', sales: '李强',
+                    inquiryTime: '2026-10-21 11:40', quoteTime: '2026-10-21 17:05',
+                    freight: '¥0.00', matchedBy: '张伟', matchedAt: '2026-10-22 16:40',
+                    chats: [
+                        { who: '李强', time: '10-21 15:30', text: '这家之前买过同款，按老价格报的，包邮。' }
+                    ]
+                },
+                {
+                    date: '2026-09-14', price: '¥115.00', qty: '4 件',
+                    name: '显示板', spec: 'KM887283', eleType: 'KM887283', brand: '优迈',
+                    customer: '杭州西奥维保中心', sales: '张敏',
+                    inquiryTime: '2026-09-14 08:50', quoteTime: '2026-09-14 14:10',
+                    freight: '¥18.00', matchedBy: '陈磊', matchedAt: '2026-09-15 10:05',
+                    chats: []
+                }
+            ]
+        },
+        s2: {
+            label: '性质：原厂；适用电梯：西子奥的斯；颜色：黑屏',
+            noTax: '¥182.50', special: '¥204.00', common: '¥196.80',
+            freight: '¥0.00', origin: '宁波', elevator: '西子奥的斯',
+            items: [
+                {
+                    date: '2026-10-17', price: '¥204.00', qty: '1 件',
+                    name: '显示板', spec: 'XAA23580A1', eleType: 'XAA23580A1', brand: '西子奥的斯',
+                    customer: '宁波奥的斯服务商', sales: '陈磊',
+                    inquiryTime: '2026-10-17 10:15', quoteTime: '2026-10-17 15:40',
+                    freight: '¥0.00', matchedBy: '陈磊', matchedAt: '2026-10-18 14:22',
+                    chats: [
+                        { who: '陈磊', time: '10-17 11:02', text: '确认是原厂件，客户要开发票。' }
+                    ]
+                }
+            ]
+        },
+        s3: {
+            label: '性质：原厂；适用电梯：速捷；颜色：黑屏',
+            noTax: '¥115.00', special: '¥128.50', common: '¥123.90',
+            freight: '¥12.00', origin: '南京', elevator: '速捷',
+            items: []
+        },
+        s4: {
+            label: '性质：原厂；颜色：黑屏；适用电梯：日立',
+            noTax: '¥118.00', special: '¥132.00', common: '¥127.20',
+            freight: '¥12.00', origin: '南京', elevator: '日立',
+            items: []
+        }
+    };
+
+    const els = {
+        price: document.getElementById('heroPrice'),
+        special: document.getElementById('heroSpecial'),
+        common: document.getElementById('heroCommon'),
+        elevator: document.getElementById('heroElevator'),
+        origin: document.getElementById('heroOrigin'),
+        grid: document.getElementById('skuGrid'),
+        qSku: document.getElementById('qSku'),
+        qSummary: document.getElementById('qSummary'),
+        qLatest: document.getElementById('qLatest'),
+        qRange: document.getElementById('qRange'),
+        qTimes: document.getElementById('qTimes'),
+        qList: document.getElementById('qList'),
+        tabQCount: document.getElementById('tabQCount')
+    };
+
+    const money = value => parseFloat(String(value).replace(/[^\d.]/g, '')) || 0;
+    const escapeHtml = value => String(value ?? '')
+        .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
+    // 「性质：原厂；颜色：黑屏」→「原厂 黑屏」，只保留规格值
+    const specValues = label => String(label || '')
+        .split('；')
+        .map(part => {
+            const index = part.indexOf('：');
+            return (index < 0 ? part : part.slice(index + 1)).trim();
+        })
+        .filter(Boolean)
+        .join(' ');
+
+    let activeSku = Object.keys(SKU_DATA)[0];
+
+    // 「性质：原厂；颜色：黑屏」→ [{ key: '性质', value: '原厂' }, ...]
+    const parseSpecs = label => String(label || '')
+        .split('；')
+        .map(part => {
+            const index = part.indexOf('：');
+            return index < 0
+                ? null
+                : { key: part.slice(0, index).trim(), value: part.slice(index + 1).trim() };
+        })
+        .filter(Boolean);
+
+    // 所有规格组合按属性维度归并，得到 性质 / 颜色 / 适用电梯 等分组
+    function buildDimensions() {
+        const dims = new Map();
+        Object.values(SKU_DATA).forEach(sku => {
+            parseSpecs(sku.label).forEach(({ key, value }) => {
+                if (!dims.has(key)) dims.set(key, []);
+                const values = dims.get(key);
+                if (!values.includes(value)) values.push(value);
+            });
+        });
+        return [...dims.entries()];
+    }
+
+    function renderSkuGrid() {
+        const activeSpecs = parseSpecs(SKU_DATA[activeSku].label);
+        els.grid.innerHTML = buildDimensions().map(([key, values]) => `
+            <div class="spec-group">
+                <span class="spec-group-label">${escapeHtml(key)}</span>
+                <div class="spec-options">
+                    ${values.map(value => {
+                        const on = activeSpecs.some(spec => spec.key === key && spec.value === value);
+                        return `<button type="button" class="spec-option${on ? ' active' : ''}" data-key="${escapeHtml(key)}" data-value="${escapeHtml(value)}">${escapeHtml(value)}</button>`;
+                    }).join('')}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderHero() {
+        const sku = SKU_DATA[activeSku];
+        els.price.textContent = sku.noTax;
+        els.special.textContent = sku.special;
+        els.common.textContent = sku.common;
+        els.elevator.textContent = sku.elevator;
+        els.origin.textContent = sku.origin;
+    }
+
+    function renderQuoteCard(item) {
+        const meta = [
+            ['客户', item.customer],
+            ['销售', item.sales],
+            ['数量', item.qty],
+            ['询价时间', item.inquiryTime],
+            ['报价时间', item.quoteTime],
+            ['运费', item.freight],
+            ['规格型号', item.spec],
+            ['产品型号', item.eleType],
+            ['品牌', item.brand],
+            ['关联', item.matchedBy + ' · ' + item.matchedAt, 'wide']
+        ].map(([label, value, extra]) => `
+            <div${extra ? ` class="${extra}"` : ''}><label>${label}</label><span>${escapeHtml(value || '—')}</span></div>
+        `).join('');
+
+        const chats = item.chats.length
+            ? item.chats.map(chat => `
+                <div class="chat-item">
+                    <div class="chat-head"><b>${escapeHtml(chat.who)}</b><span>${escapeHtml(chat.time)}</span></div>
+                    <div class="chat-text">${escapeHtml(chat.text)}</div>
+                </div>
+            `).join('')
+            : '<div class="chat-empty">这笔询价没有沟通记录</div>';
+
+        return `
+            <div class="quote-item">
+                <div class="quote-head">
+                    <span class="quote-date">${item.date}</span>
+                    <span class="quote-title">${escapeHtml(item.name)}</span>
+                    <span class="quote-qty">${escapeHtml(item.qty)}</span>
+                    <span class="quote-price">${item.price}</span>
+                </div>
+                <div class="quote-meta">${meta}</div>
+                <div class="quote-chats">
+                    <div class="quote-chats-head">沟通记录 <em>${item.chats.length} 条</em></div>
+                    ${chats}
+                </div>
+            </div>
+        `;
+    }
+
+    function renderQuotePanel() {
+        const sku = SKU_DATA[activeSku];
+        els.tabQCount.textContent = sku.items.length ? sku.items.length : '0';
+        els.qSku.textContent = specValues(sku.label);
+
+        if (!sku.items.length) {
+            els.qSummary.hidden = true;
+            els.qList.innerHTML = '<div class="panel-empty"><b>该规格组合还没有历史询价</b>在询价匹配页选中本规格保存后，这里会自动出现对应的询价</div>';
+            return;
+        }
+
+        const prices = sku.items.map(item => money(item.price));
+        const min = Math.min(...prices);
+        const max = Math.max(...prices);
+        els.qLatest.textContent = sku.items[0].price;
+        els.qRange.textContent = min === max ? sku.items[0].price : `¥${min.toFixed(2)} ~ ¥${max.toFixed(2)}`;
+        els.qTimes.textContent = sku.items.length + ' 次';
+        els.qSummary.hidden = false;
+        els.qList.innerHTML = sku.items.map(renderQuoteCard).join('');
+    }
+
+    function selectSku(key) {
+        if (!SKU_DATA[key]) return;
+        activeSku = key;
+        renderSkuGrid();
+        renderHero();
+        renderQuotePanel();
+    }
+
+    els.grid.addEventListener('click', event => {
+        const option = event.target.closest('.spec-option');
+        if (!option) return;
+        const { key, value } = option.dataset;
+        // 点某个属性值，切到包含该值的规格组合
+        const matched = Object.keys(SKU_DATA).find(skuKey =>
+            parseSpecs(SKU_DATA[skuKey].label).some(spec => spec.key === key && spec.value === value)
+        );
+        if (matched) selectSku(matched);
+    });
+
+    document.getElementById('tabNav').addEventListener('click', event => {
+        const button = event.target.closest('.tab-link');
+        if (!button) return;
+        document.querySelectorAll('.tab-link').forEach(btn => btn.classList.toggle('active', btn === button));
+        document.querySelectorAll('.tab-panel').forEach(panel => {
+            panel.hidden = panel.dataset.panel !== button.dataset.tab;
+        });
+    });
+
+    renderSkuGrid();
+    renderHero();
+    renderQuotePanel();
+</script>
+</body>
+</html>

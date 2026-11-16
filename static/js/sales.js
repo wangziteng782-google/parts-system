@@ -367,25 +367,24 @@ function variantDetailValue(quote, field, fallback) {
 function renderSalesDetailInfo(item, source, sourceLabel, quote = null) {
     const fields = source === 'parts'
         ? [
-            ['商品品牌：', item.product_brand],
-            ['产品分类：', item.product_type],
-            ['质保期限：', variantDetailValue(quote, 'warranty_time', item.warranty)],
-            ['适用电梯品牌：', item.applicable_elevator_brand],
-            ['替代型号：', item.substitute_model],
-            ['发货地：', variantDetailValue(quote, 'shipping_origin', item.shipping_origin)],
-            ['发货时间：', variantDetailValue(quote, 'shipping_time', item.shipping_time)],
-            ['报价有效期：', variantDetailValue(quote, 'expire_date', item.quote_validity)],
-            ['每日截单时间：', variantDetailValue(quote, 'daily_order_time', item.daily_cutoff_time)],
-            ['报价时间：', quote?.quote_time],
-            ['采购运费：', quote ? detailAmountText(quote.purchase_shipping) : ''],
-            ['更新人：', item.updater || item.filler],
-            ['更新时间：', quote?.update_time ? formatSalesDate(quote.update_time) : (item.quote_updated_at ? formatSalesDate(item.quote_updated_at) : '')],
-            ['运费备注：', quote?.freight_remark, 'wide'],
-            ['注意事项：', item.precautions, 'full'],
-            ['技术参数：', item.technical_params, 'full'],
-            ['商品备注：', item.remark, 'wide'],
-            ['补充备注：', item.remark_2, 'wide'],
-            ['数据来源：', sourceLabel],
+            ['商品品牌', item.product_brand],
+            ['产品分类', item.product_type],
+            ['质保期限', variantDetailValue(quote, 'warranty_time', item.warranty)],
+            ['适用电梯品牌', item.applicable_elevator_brand],
+            ['替代型号', item.substitute_model],
+            ['发货地', variantDetailValue(quote, 'shipping_origin', item.shipping_origin)],
+            ['发货时间', variantDetailValue(quote, 'shipping_time', item.shipping_time)],
+            ['报价有效期', variantDetailValue(quote, 'expire_date', item.quote_validity)],
+            ['每日截单时间', variantDetailValue(quote, 'daily_order_time', item.daily_cutoff_time)],
+            ['报价时间', quote?.quote_time],
+            ['采购运费', quote ? detailAmountText(quote.purchase_shipping) : ''],
+            ['更新人', item.updater || item.filler],
+            ['更新时间', quote?.update_time ? formatSalesDate(quote.update_time) : (item.quote_updated_at ? formatSalesDate(item.quote_updated_at) : '')],
+            ['运费备注', quote?.freight_remark],
+            ['商品备注', item.remark, 'full'],
+            ['补充备注', item.remark_2, 'full'],
+            ['注意事项', item.precautions, 'full'],
+            ['技术参数', item.technical_params, 'full'],
         ]
         : [
             ['售价：', detailAmountText(item.display_price)],
@@ -414,12 +413,19 @@ function renderSalesDetailInfo(item, source, sourceLabel, quote = null) {
     const visibleFields = source === 'parts'
         ? fields
         : fields.filter(([, value]) => detailValue(value));
-    salesEls.detailInfoTitle.textContent = source === 'parts' ? '配件库信息' : '询价信息';
-    salesEls.detailInfoGrid.innerHTML = visibleFields.map(([label, value, width = '']) => `
+    if (salesEls.detailInfoTitle) {
+        salesEls.detailInfoTitle.textContent = source === 'parts' ? '配件库信息' : '询价信息';
+    }
+    const infoTabButton = document.querySelector('[data-sales-tab="info"]');
+    if (infoTabButton) infoTabButton.textContent = source === 'parts' ? '配件库信息' : '询价信息';
+    salesEls.detailInfoGrid.innerHTML = visibleFields.map(([label, value, width = '']) => {
+        const text = detailValue(value);
+        return `
         <div class="${width ? `sales-detail-${width}` : ''}">
             <label>${escapeSalesHtml(label)}</label>
-            <span>${escapeSalesHtml(value)}</span>
-        </div>`).join('');
+            <span class="${text ? '' : 'sales-detail-info-empty'}">${escapeSalesHtml(text || '—')}</span>
+        </div>`;
+    }).join('');
 }
 
 function setSalesDetailText(id, value) {
@@ -459,63 +465,211 @@ function renderSalesCommunicationRows(items) {
     }).join('');
 }
 
+// 沟通记录要同时写新版和新版之外的旧版表格
+function setSalesChatContent(countText, rowsHtml) {
+    if (salesEls.detailChatCount) salesEls.detailChatCount.textContent = countText;
+    if (salesEls.detailChatBody) salesEls.detailChatBody.innerHTML = rowsHtml;
+    const legacyCount = document.getElementById('salesDetailChatCountLegacy');
+    if (legacyCount) legacyCount.textContent = countText;
+    const legacyBody = document.getElementById('salesDetailChatBodyLegacy');
+    if (legacyBody) legacyBody.innerHTML = rowsHtml;
+}
+
 async function loadSalesCommunications(orderGoodsId) {
     activeSalesDetailOrderGoodsId = orderGoodsId;
-    salesEls.detailChatCount.textContent = '加载中';
-    salesEls.detailChatBody.innerHTML = '<tr><td colspan="6" class="sales-detail-empty">正在加载沟通记录...</td></tr>';
+    setSalesChatContent('加载中', '<tr><td colspan="6" class="sales-detail-empty">正在加载沟通记录...</td></tr>');
     try {
         const data = await salesRequest(`/api/sales/inquiry-communications?order_goods_id=${encodeURIComponent(orderGoodsId)}`);
         if (activeSalesDetailOrderGoodsId !== orderGoodsId) return;
         const items = data.items || [];
-        salesEls.detailChatCount.textContent = `${items.length} 条`;
-        salesEls.detailChatBody.innerHTML = renderSalesCommunicationRows(items);
+        setSalesChatContent(`${items.length} 条`, renderSalesCommunicationRows(items));
     } catch (error) {
         if (activeSalesDetailOrderGoodsId !== orderGoodsId) return;
-        salesEls.detailChatCount.textContent = '加载失败';
-        salesEls.detailChatBody.innerHTML = `<tr><td colspan="6" class="sales-detail-empty">${escapeSalesHtml(error.message)}</td></tr>`;
+        setSalesChatContent('加载失败', `<tr><td colspan="6" class="sales-detail-empty">${escapeSalesHtml(error.message)}</td></tr>`);
     }
 }
 
+// 「性质：原厂；颜色：黑屏」→ [{ key: '性质', value: '原厂' }, ...]
+function parseSalesSpecs(label) {
+    return String(label || '')
+        .split(/[;；]/)
+        .map(part => {
+            const index = part.search(/[:：]/);
+            if (index < 0) return null;
+            const key = part.slice(0, index).trim();
+            const value = part.slice(index + 1).trim();
+            return key && value ? { key, value } : null;
+        })
+        .filter(Boolean);
+}
+
+let activeSalesSpecMap = {};
+
+function specsToMap(specs) {
+    return Object.fromEntries(specs.map(spec => [spec.key, spec.value]));
+}
+
+// 所有规格组合按属性维度归并，收集每个维度出现过的值
+function collectSpecDimensions(items) {
+    const dimensions = new Map();
+    items.forEach(item => {
+        parseSalesSpecs(item.specification).forEach(({ key, value }) => {
+            if (!dimensions.has(key)) dimensions.set(key, []);
+            const values = dimensions.get(key);
+            if (!values.includes(value)) values.push(value);
+        });
+    });
+    return dimensions;
+}
+
+// 规格按属性维度归并，每个维度一行值按钮，全部可点（不置灰）
+// 有的值只存在于别的组合里，禁掉就等于选不到，点下去由 selectSalesSpecValue 自动适配其它维度
+// activeSalesSpecMap 由 loadSalesPartVariantQuotes / selectSalesVariantQuote 维护
 function renderSalesVariantPrices(items) {
-    const showActions = items.length > 1;
-    const rows = items.map((item, index) => `<tr data-variant-index="${index}">
-        <td>${escapeSalesHtml(detailValue(item.specification))}${item.is_discontinued ? '<span class="list-discontinued-tag">已停产</span>' : ''}</td>
-        <td class="sales-detail-variant-price">${escapeSalesHtml(detailAmountText(item.no_tax_price) || '—')}</td>
-        <td class="sales-detail-variant-price">${escapeSalesHtml(detailAmountText(item.special_invoice_price) || '—')}</td>
-        <td class="sales-detail-variant-price">${escapeSalesHtml(detailAmountText(item.general_invoice_price) || '—')}</td>
-        ${showActions ? `<td><button type="button" class="sales-variant-select" onclick="selectSalesVariantQuote(${index})">查看</button></td>` : ''}
-    </tr>`).join('');
-    return `<div class="sales-detail-variant-table-wrap"><table>
-        <thead><tr><th>规格组合</th><th>不含票单价</th><th>含专票</th><th>含普票</th>${showActions ? '<th>操作</th>' : ''}</tr></thead>
-        <tbody>${rows}</tbody>
-    </table></div>`;
+    if (!items.length) {
+        return '<div class="sales-detail-price-empty">该产品暂无规格报价</div>';
+    }
+    const dimensions = collectSpecDimensions(items);
+    if (!dimensions.size) {
+        // 规格串解析不出属性时，退化成一条一行
+        return items.map((item, index) => `
+            <div class="sales-detail-spec-group">
+                <span class="sales-detail-spec-group-label">规格${index + 1}</span>
+                <div class="sales-detail-spec-values">
+                    <button type="button" class="sales-detail-spec-option"
+                            onclick="selectSalesVariantQuote(${index})">${escapeSalesHtml(detailValue(item.specification))}</button>
+                </div>
+            </div>`).join('');
+    }
+    return [...dimensions.entries()].map(([key, values]) => `
+        <div class="sales-detail-spec-group">
+            <span class="sales-detail-spec-group-label">${escapeSalesHtml(key)}</span>
+            <div class="sales-detail-spec-values">
+                ${values.map(value => `<button type="button" class="sales-detail-spec-option${activeSalesSpecMap[key] === value ? ' active' : ''}"
+                                data-spec-key="${escapeSalesHtml(key)}" data-spec-value="${escapeSalesHtml(value)}"
+                                onclick="selectSalesSpecValue(this)">${escapeSalesHtml(value)}</button>`).join('')}
+            </div>
+        </div>`).join('');
+}
+
+// 点某个属性值：其它维度保持不变优先，凑不出组合时退到只按这一维匹配
+function selectSalesSpecValue(button) {
+    const key = button.dataset.specKey;
+    const value = button.dataset.specValue;
+    if (!key || !value) return;
+    const specsOf = item => parseSalesSpecs(item.specification);
+    const has = (specs, k, v) => specs.some(spec => spec.key === k && spec.value === v);
+    const probe = Object.entries({ ...activeSalesSpecMap, [key]: value });
+    const index = activeSalesVariantQuotes.findIndex(item => {
+        const specs = specsOf(item);
+        return probe.every(([k, v]) => has(specs, k, v));
+    });
+    // 该值在当前其它维度取值下没有组合（常见于「110V 只有二手」这种），只按这一维找
+    const relaxed = index >= 0 ? index
+        : activeSalesVariantQuotes.findIndex(item => has(specsOf(item), key, value));
+    if (relaxed >= 0) selectSalesVariantQuote(relaxed);
 }
 
 function selectSalesVariantQuote(index) {
     const quote = activeSalesVariantQuotes[index];
     if (!quote || !activeSalesDetailItem) return;
-    document.querySelectorAll('.sales-detail-variant-table-wrap tbody tr').forEach((row, rowIndex) => {
-        row.classList.toggle('selected', rowIndex === index);
-        const button = row.querySelector('.sales-variant-select');
-        if (button) button.textContent = rowIndex === index ? '已选择' : '查看';
-    });
-    const price = quote.no_tax_price || quote.special_invoice_price || quote.general_invoice_price;
-    setSalesDetailText('salesDetailSpecification', detailValue(quote.specification));
-    setSalesDetailText('salesDetailPrice', detailPriceText(price) || '价格待定');
+    // 选中的规格可能带动其它维度变化，整块重渲染
+    activeSalesSpecMap = specsToMap(parseSalesSpecs(quote.specification));
+    salesEls.detailPartsPriceContent.innerHTML = renderSalesVariantPrices(activeSalesVariantQuotes);
+    setSalesDetailPrices(quote.no_tax_price, quote.special_invoice_price, quote.general_invoice_price);
     renderSalesDetailInfo(activeSalesDetailItem, 'parts', '来自配件库', quote);
 }
 
-function renderSalesPartsMainPrices(summary = {}) {
-    const specialInvoice = detailAmountText(summary.purchase_special_invoice) || '—';
-    const generalInvoice = detailAmountText(summary.purchase_general_invoice) || '—';
-    const fields = [
-        ['进项专票', specialInvoice],
-        ['进项普票', generalInvoice],
-        ['采购运费', detailAmountText(summary.purchase_shipping)],
-    ];
-    return `<div class="sales-detail-main-price-grid">${fields.map(([label, value]) => `
-        <div><label>${label}</label><strong>${escapeSalesHtml(value)}</strong></div>
-    `).join('')}</div>`;
+let activeSalesDetailImages = [];
+let activeSalesDetailImageIndex = 0;
+
+// 价格盒：不含票价用大字，含专票、含普票跟在后头
+function setSalesDetailPrices(noTax, special, general) {
+    setSalesDetailText('salesDetailPrice', detailPriceText(noTax) || '价格待定');
+    setSalesDetailText('salesDetailSpecialPrice', detailAmountText(special) || '—');
+    setSalesDetailText('salesDetailGeneralPrice', detailAmountText(general) || '—');
+}
+
+function switchSalesDetailTab(name) {
+    document.querySelectorAll('.sales-detail-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.salesTab === name);
+    });
+    document.querySelectorAll('.sales-detail-panel').forEach(panel => {
+        panel.hidden = panel.dataset.salesPanel !== name;
+    });
+}
+
+// 询价来源沿用改版前的排版，配件库才用新结构
+function switchSalesDetailBody(mode, item) {
+    const partsBody = document.querySelector('[data-sales-body="parts"]');
+    const inquiryBody = document.querySelector('[data-sales-body="inquiry"]');
+    if (!partsBody || !inquiryBody) return;
+    const isInquiry = mode === 'inquiry';
+    partsBody.hidden = isInquiry;
+    inquiryBody.hidden = !isInquiry;
+    if (!isInquiry || !item) return;
+
+    const setText = (id, text) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text || '';
+    };
+    setText('salesDetailNameLegacy', item.product_name);
+    setText('salesDetailModelLegacy', salesText(item.model));
+    setText('salesDetailSpecificationLegacy', salesText(item.specification));
+    setText('salesDetailPriceLegacy', detailPriceText(item.display_price) || '价格待完善');
+    setText('salesDetailQuotationTypeLegacy', quotationTypeText(item.quotation_type));
+    setText('salesDetailPostFeePurchaseLegacy', detailAmountText(item.post_fee_purchase));
+    setText('salesDetailPostFeeHasTaxPurchaseLegacy', detailAmountText(item.post_fee_has_tax_purchase));
+
+    const legacyImage = document.getElementById('salesDetailImageLegacy');
+    if (legacyImage) legacyImage.src = safeSalesImage(item.image);
+
+    // 字段渲染不复制一份，直接搬新版那棵子树
+    const legacyGrid = document.getElementById('salesDetailInfoGridLegacy');
+    if (legacyGrid) legacyGrid.innerHTML = salesEls.detailInfoGrid.innerHTML;
+}
+
+function renderSalesDetailThumbs(images) {
+    activeSalesDetailImages = images;
+    activeSalesDetailImageIndex = 0;
+    const multiple = images.length > 1;
+    const prev = document.getElementById('salesDetailImagePrev');
+    const next = document.getElementById('salesDetailImageNext');
+    if (prev) prev.hidden = !multiple;
+    if (next) next.hidden = !multiple;
+    const wrap = document.getElementById('salesDetailThumbs');
+    if (!wrap) return;
+    // 单图不占位置，和原型一致
+    if (!multiple) {
+        wrap.innerHTML = '';
+        return;
+    }
+    wrap.innerHTML = images.map((url, index) => `
+        <button type="button" class="sales-detail-thumb${index === 0 ? ' active' : ''}"
+                onclick="selectSalesDetailImage(${index})" aria-label="第 ${index + 1} 张图片">
+            <img src="${escapeSalesHtml(safeSalesImage(url))}" alt="商品图片 ${index + 1}" loading="lazy"
+                 onerror="this.src='/static/img/site-logo.png';this.onerror=null">
+        </button>`).join('');
+}
+
+function selectSalesDetailImage(index) {
+    const url = activeSalesDetailImages[index];
+    if (!url) return;
+    activeSalesDetailImageIndex = index;
+    const image = document.getElementById('salesDetailImage');
+    if (image) image.src = safeSalesImage(url);
+    document.querySelectorAll('.sales-detail-thumb').forEach((thumb, i) => {
+        thumb.classList.toggle('active', i === index);
+    });
+}
+
+// 主图左右切换，缩略图列跟着滚动到可见位置
+function stepSalesDetailImage(delta) {
+    const count = activeSalesDetailImages.length;
+    if (count < 2) return;
+    selectSalesDetailImage((activeSalesDetailImageIndex + delta + count) % count);
+    const active = document.querySelector('.sales-detail-thumb.active');
+    if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest' });
 }
 
 async function loadSalesPartVariantQuotes(partId, item) {
@@ -527,12 +681,14 @@ async function loadSalesPartVariantQuotes(partId, item) {
         if (activeSalesDetailPartId !== partId) return;
         const items = data.items || [];
         activeSalesVariantQuotes = items;
+        activeSalesSpecMap = items[0] ? specsToMap(parseSalesSpecs(items[0].specification)) : {};
         if (items.length) {
             salesEls.detailPartsPriceContent.innerHTML = renderSalesVariantPrices(items);
             selectSalesVariantQuote(0);
         } else {
+            // 没有规格组合报价就留空态，不拿进项票、采购运费这类成本数据凑数
             activeSalesVariantQuotes = [];
-            salesEls.detailPartsPriceContent.innerHTML = renderSalesPartsMainPrices(item.part_price_summary);
+            salesEls.detailPartsPriceContent.innerHTML = '<div class="sales-detail-price-empty">该产品暂无规格报价</div>';
         }
     } catch (error) {
         if (activeSalesDetailPartId !== partId) return;
@@ -555,32 +711,52 @@ function openSalesProductDetail(index) {
     sourceBadgeWrap.innerHTML = `<span class="source-badge ${source}">${sourceLabel}</span>${isSubstitute ? '<span class="source-badge substitute">替代品</span>' : ''}`;
     setSalesDetailText('salesDetailTitle', source === 'inquiry' ? '询价商品详情' : '配件商品详情');
     setSalesDetailText('salesDetailName', item.product_name);
+    setSalesDetailText('salesDetailCrumbName', salesText(item.product_name));
     setSalesDetailText('salesDetailModel', salesText(item.model));
-    setSalesDetailText('salesDetailSpecification', salesText(item.specification));
-    setSalesDetailText('salesDetailPrice', detailPriceText(item.display_price) || '价格待完善');
-    setSalesDetailText(
-        'salesDetailQuotationType',
-        source === 'inquiry' ? quotationTypeText(item.quotation_type) : '',
-    );
-    setSalesDetailText(
-        'salesDetailPostFeePurchase',
-        source === 'inquiry' ? detailAmountText(item.post_fee_purchase) : '',
-    );
+    setSalesDetailText('salesDetailBrand', salesText(item.product_brand));
+    setSalesDetailText('salesDetailCategory', salesText(item.product_type));
+    setSalesDetailText('salesDetailWarranty', salesText(item.warranty));
+    setSalesDetailText('salesDetailElevator', salesText(item.applicable_elevator_brand));
+    setSalesDetailText('salesDetailSubstitute', salesText(item.substitute_model));
+    setSalesDetailText('salesDetailOrigin', salesText(item.shipping_origin));
+    setSalesDetailPrices(item.display_price, item.special_price, item.general_price);
+    const isInquiry = source === 'inquiry';
+    setSalesDetailText('salesDetailQuotationType', isInquiry ? quotationTypeText(item.quotation_type) : '');
+    setSalesDetailText('salesDetailPostFeePurchase', isInquiry ? detailAmountText(item.post_fee_purchase) : '');
     setSalesDetailText(
         'salesDetailPostFeeHasTaxPurchase',
-        source === 'inquiry' ? detailAmountText(item.post_fee_has_tax_purchase) : '',
+        isInquiry ? detailAmountText(item.post_fee_has_tax_purchase) : '',
     );
+    setSalesDetailText('salesDetailPriceLabel', isInquiry ? '销售参考价' : '不含票价');
+    ['salesDetailElevatorWrap', 'salesDetailSubstituteWrap', 'salesDetailOriginWrap'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.hidden = isInquiry;
+    });
+    document.getElementById('salesDetailQuotationWrap').hidden = !isInquiry;
+    document.getElementById('salesDetailPostFeeWrap').hidden = !isInquiry;
+    document.getElementById('salesDetailPostFeeTaxWrap').hidden = !isInquiry;
     renderSalesDetailInfo(item, source, sourceLabel);
+    switchSalesDetailTab('info');
+    switchSalesDetailBody(source, item);
     const detailImage = document.getElementById('salesDetailImage');
     detailImage.src = safeSalesImage(item.image);
     const images = (item.images && item.images.length) ? item.images : [item.image || '/static/img/site-logo.png'];
+    renderSalesDetailThumbs(images);
     detailImage.onclick = () => openSalesImagePreview(images);
     detailImage.style.cursor = 'zoom-in';
+    const legacyImage = document.getElementById('salesDetailImageLegacy');
+    if (legacyImage) {
+        legacyImage.onclick = () => openSalesImagePreview(images);
+        legacyImage.style.cursor = 'zoom-in';
+    }
     const orderGoodsId = Number(item.order_goods_id);
     const showCommunications = source === 'inquiry' && Number.isInteger(orderGoodsId) && orderGoodsId > 0;
-    salesEls.detailChat.hidden = !showCommunications;
     activeSalesDetailOrderGoodsId = showCommunications ? orderGoodsId : null;
-    if (showCommunications) loadSalesCommunications(orderGoodsId);
+    if (showCommunications) {
+        loadSalesCommunications(orderGoodsId);
+    } else {
+        setSalesChatContent('0 条', '<tr><td colspan="6" class="sales-detail-empty">这笔询价没有沟通记录</td></tr>');
+    }
     const partId = Number(item.id);
     const loadVariantQuotes = source === 'parts' && Number.isInteger(partId) && partId > 0;
     activeSalesDetailPartId = loadVariantQuotes ? partId : null;
