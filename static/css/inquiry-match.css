@@ -917,6 +917,19 @@ img.im-record-thumb:hover {
     color: var(--accent);
 }
 
+/* 当前已选条件下凑不出规格组合的值，置灰不可点 */
+.im-sku-value.is-disabled {
+    border-style: dashed;
+    color: #c0c4cc;
+    background: #fafafa;
+    cursor: not-allowed;
+}
+
+.im-sku-value.is-disabled:hover {
+    border-color: #d0d7de;
+    color: #c0c4cc;
+}
+
 .im-sku-value.selected {
     border-color: var(--accent);
     background: #e8f0fe;

@@ -562,6 +562,25 @@ function resetSkuPanel() {
     updateSummary();
 }
 
+// 该规格值在当前已选条件下，是否还能凑出一个真实存在的规格组合
+function imValueAvailable(specName, value) {
+    const combos = imState.combinations || [];
+    if (!combos.length) return true;
+    // 这个规格名本来就没进任何组合（例如刚加还没配组合），不做限制
+    const inCombos = combos.some(combo => (combo.specs || []).some(spec => spec.name === specName));
+    if (!inCombos) return true;
+    return combos.some(combo => {
+        const map = {};
+        (combo.specs || []).forEach(spec => { map[spec.name] = spec.value; });
+        if (map[specName] !== value) return false;
+        return imState.specs.every(spec => {
+            const picked = imState.selectedSpecs[spec.spec_name];
+            if (!picked || spec.spec_name === specName) return true;
+            return map[spec.spec_name] === picked;
+        });
+    });
+}
+
 function renderSkuPanel() {
     const body = document.getElementById('skuBody');
     const product = imState.products.find(item => item.id === imState.selectedPartId) || {};
@@ -578,9 +597,13 @@ function renderSkuPanel() {
         const current = imState.selectedSpecs[spec.spec_name];
         const values = (spec.values || [])
             .filter(value => value.is_active !== false)
-            .map(value => `<span class="im-sku-value ${current === value.value ? 'selected' : ''}"
+            .map(value => {
+                // 选不出来的组合直接置灰，避免点完才提示“未选 SKU”
+                const disabled = !imValueAvailable(spec.spec_name, value.value);
+                return `<span class="im-sku-value${current === value.value ? ' selected' : ''}${disabled ? ' is-disabled' : ''}"
                     data-spec="${escapeHtml(spec.spec_name)}" data-value="${escapeHtml(value.value)}">
-                    ${escapeHtml(value.value)}</span>`).join('');
+                    ${escapeHtml(value.value)}</span>`;
+            }).join('');
         return `<div class="im-sku-row">
             <div class="im-sku-row-label">${escapeHtml(spec.spec_name)}</div>
             <div class="im-sku-row-values">${values || '<span class="im-muted">待填写规格值</span>'}</div>
@@ -598,6 +621,7 @@ function renderSkuPanel() {
 
     body.querySelectorAll('.im-sku-value').forEach(el => {
         el.onclick = () => {
+            if (el.classList.contains('is-disabled')) return;
             if (imIsSelectingText()) return;
             const { spec, value } = el.dataset;
             // 再点一次同一个值就是取消选择
