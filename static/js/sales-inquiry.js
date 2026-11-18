@@ -27,6 +27,12 @@ const CLIENT_CATEGORIES = ['A类', 'B类', 'C类', 'D类'];
 const CLIENT_PAGE_SIZE = 20;
 
 const inquiryState = {
+    sourceItem: null,
+    // 缺规格时选中的规格组合，当型号传给询价单
+    specText: '',
+    // 缺规格走采购，普通配件询价走工具箱
+    goodsSource: '',
+    missSpec: false,
     client: null,
     clients: [],
     clientPage: 1,
@@ -68,6 +74,15 @@ const inquiryEls = {
 };
 
 function oaToken() {
+    // 测试环境：后端把 .env 里的 OA_TEST_TOKEN 注入到页面，优先用它
+    const injected = String(window.__OA_TEST_TOKEN__ || '').trim();
+    if (injected) {
+        if (sessionStorage.getItem(OA_TOKEN_STORAGE) !== injected) {
+            sessionStorage.setItem(OA_TOKEN_STORAGE, injected);
+            localStorage.setItem(OA_TOKEN_STORAGE, injected);
+        }
+        return injected;
+    }
     const saved = sessionStorage.getItem(OA_TOKEN_STORAGE);
     if (saved) return saved;
     // ponytail: 正式环境从非 httponly cookie 读取 OA token
@@ -152,13 +167,24 @@ function openPicker() {
     searchClients(1);
 }
 
+// 从详情页发起询价时，询价层关掉后详情弹窗还开着，不能放开背景滚动
+function releaseBodyScroll() {
+    const detailOpen = document.getElementById('salesDetailOverlay')?.classList.contains('show');
+    document.body.style.overflow = detailOpen ? 'hidden' : '';
+}
+
 function closePicker() {
     inquiryEls.picker.classList.remove('show');
     inquiryEls.picker.setAttribute('aria-hidden', 'true');
-    if (!inquiryEls.overlay.classList.contains('show')) document.body.style.overflow = '';
+    if (!inquiryEls.overlay.classList.contains('show')) releaseBodyScroll();
 }
 
-async function openInquiry() {
+async function openInquiry(sourceItem = null, options = {}) {
+    inquiryState.sourceItem = sourceItem;
+    // 缺规格的入口把选中的规格组合和来源一起带进来
+    inquiryState.specText = String(options.specText || '').trim();
+    inquiryState.goodsSource = String(options.goodsSource || '').trim();
+    inquiryState.missSpec = Boolean(options.missSpec);
     inquiryState.client = null;
     inquiryState.goods = [];
     inquiryState.chatType = '主';
@@ -199,7 +225,7 @@ function closeInquiry(force = false) {
     inquiryEls.overlay.classList.remove('show');
     inquiryEls.overlay.setAttribute('aria-hidden', 'true');
     closePicker();
-    document.body.style.overflow = '';
+    releaseBodyScroll();
 }
 
 /* ---------------- 客户 ---------------- */
@@ -259,7 +285,7 @@ function renderClients(items) {
         </tr>`).join('');
 }
 
-function selectClient(client) {
+async function selectClient(client) {
     if (!client) return;
     inquiryState.client = client;
     inquiryEls.clientSelected.hidden = false;
@@ -279,7 +305,60 @@ function selectClient(client) {
     inquiryEls.overlay.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
     const keyword = document.getElementById('salesSearchInput')?.value?.trim() || salesState.keyword || '';
-    if (!inquiryState.goods.length) addGoodsRow({goods_spec: keyword});
+    // 品牌下拉存的是 OA 的 id，得先有配置才能按名字对上
+    await ensureOaConfig();
+    // 从详情页发起的询价，把该商品已有的字段带进来；没带商品就用搜索关键词垫规格型号
+    if (!inquiryState.goods.length) {
+        addGoodsRow({goods_spec: keyword, ...goodsPrefill(inquiryState.sourceItem)});
+    }
+}
+
+// 配件库商品 → OA 表单字段：只映射配件库确实有、表单也确实在填的
+function goodsPrefill(item) {
+    if (!item) return {};
+    const prefill = {};
+    const name = detailValue(item.product_name);
+    const model = detailValue(item.model);
+    // 缺规格时把选中的规格组合当型号传，价格留空让采购报
+    const specText = String(inquiryState.specText || '').trim();
+    // 主价格是配件库展示给销售的那一档，含专票价单独给「含税售价」
+    const price = detailValue(item.display_price) || detailValue(item.display_price_min);
+    const priceTax = detailValue(item.special_price);
+    const remark = detailValue(item.remark);
+    if (name) prefill.goods_name = name;
+    if (specText) {
+        prefill.goods_spec = specText;
+        prefill.goods_describe = `配件库无此规格组合（${specText}），请采购确认货期与价格`
+            + (remark ? `；${remark}` : '');
+    } else {
+        if (model) prefill.goods_spec = model;
+        if (price) prefill.goods_price = price;
+        if (priceTax) prefill.goods_price_tax = priceTax;
+        if (remark) prefill.goods_describe = remark;
+    }
+    // 品牌是 OA 的下拉（存 id），只有名字完全对上才填，避免塞个错 id
+    const factory = configIdByName('factory', item.product_brand);
+    if (factory) prefill.factory = factory;
+    const eleBrand = configIdByName('ele_brand', item.applicable_elevator_brand);
+    if (eleBrand) prefill.ele_brand = eleBrand;
+    // 用来把询价商品和配件库的 SPU/SKU 绑上，提交后回写 part_inquiries
+    if (item.id) prefill.partId = Number(item.id) || null;
+    const groupId = typeof activeSalesVariantGroupId === 'string'
+        ? activeSalesVariantGroupId.trim() : '';
+    if (groupId) prefill.variantGroupId = groupId;
+    // 配件库商品图一起带过去，采购在 OA 里能直接看到原图
+    const images = Array.isArray(item.images) && item.images.length
+        ? item.images.filter(Boolean)
+        : (detailValue(item.image) ? [item.image] : []);
+    if (images.length) prefill.remoteImages = images;
+    return prefill;
+}
+
+function configIdByName(field, name) {
+    const target = detailValue(name);
+    if (!target) return '';
+    const hit = (inquiryState.config?.[field] || []).find(option => detailValue(option.name) === target);
+    return hit ? String(hit.id) : '';
 }
 
 /* ---------------- 产品 ---------------- */
@@ -290,16 +369,17 @@ function addGoodsRow(prefill = {}) {
         ele_type: '',
         goods_spec: prefill.goods_spec || '',
         goods_type: 1,
-        source: '采购',
+        // 报价来源：缺规格走采购，配件库详情发起走工具箱，搜索无结果发起的也走采购
+        source: inquiryState.goodsSource || (inquiryState.sourceItem ? '工具箱' : '采购'),
         inquiry_time: today(),
-        factory: '',
-        ele_brand: '',
+        factory: prefill.factory || '',
+        ele_brand: prefill.ele_brand || '',
         names: '',
         ele_scene: '',
         goods_num: 1,
         goods_unit: '',
-        goods_price: '',
-        goods_price_tax: '',
+        goods_price: prefill.goods_price || '',
+        goods_price_tax: prefill.goods_price_tax || '',
         tax_rate: '',
         invoice: 0,
         invoice_company: '',
@@ -311,12 +391,17 @@ function addGoodsRow(prefill = {}) {
         is_goods_price_fee: 0,
         goods_weight: '',
         warehouse: '',
-        goods_describe: '',
+        goods_describe: prefill.goods_describe || '',
         address: '',
         post_fee_describe: '',
         total_amount_sign_remark: '',
         send_address: '',
         files: [],
+        // 配件库带过来的图，和手动上传的图一起提交
+        remoteImages: prefill.remoteImages || [],
+        // 配件库来源的 SPU/SKU，提交成功后回写 part_inquiries
+        partId: prefill.partId || null,
+        variantGroupId: prefill.variantGroupId || '',
     });
     renderGoodsRows();
     const cards = inquiryEls.goodsRows.querySelectorAll('[data-goods-index]');
@@ -388,6 +473,15 @@ const ICON_LOCATION = '<svg viewBox="0 0 1024 1024" width="14" height="14" fill=
 
 function renderGoodsRows() {
     inquiryEls.goodsRows.innerHTML = inquiryState.goods.map((good, index) => {
+        // 配件库带过来的图排在前面，和手动上传的图一样能预览、能删
+        const remoteThumbs = (good.remoteImages || []).map((url, remoteIndex) => `
+            <div class="inquiry-upload-item" data-preview-remote-image="${remoteIndex}">
+                <img src="${escapeSalesHtml(url)}" alt="">
+                <span class="inquiry-upload-actions">
+                    <button type="button" data-preview-remote-image="${remoteIndex}" title="预览">${ICON_ZOOM_IN}</button>
+                    <button type="button" data-remove-remote-image="${remoteIndex}" title="删除">${ICON_DELETE}</button>
+                </span>
+            </div>`).join('');
         const files = good.files || [];
         const thumbs = files.map((item, fileIndex) => {
             const isVideo = (item.file?.type || '').startsWith('video/');
@@ -417,6 +511,7 @@ function renderGoodsRows() {
                 <div class="inquiry-field span-3 inquiry-field-images">
                     <span class="inquiry-field-label">商品图片</span>
                     <div class="inquiry-goods-media">
+                        ${remoteThumbs}
                         ${thumbs}
                         <label class="inquiry-upload-plus" data-drop-zone title="点击上传，也可以拖拽文件进来">
                             <span>＋</span>
@@ -900,6 +995,32 @@ async function createOaChat(chat) {
     });
 }
 
+// 一键询价后把询价商品和配件库 SKU 绑上；失败只记日志，不影响询价本身
+async function reportInquiryLink(orderGoodsId, good) {
+    const partId = Number(good.partId) || 0;
+    const groupId = String(good.variantGroupId || '').trim();
+    if (!orderGoodsId || (!partId && !groupId)) return;
+    const body = JSON.stringify({
+        order_goods_id: orderGoodsId,
+        part_id: partId || null,
+        variant_group_id: groupId || null,
+    });
+    try {
+        await salesRequest('/api/sales/inquiry-links', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body,
+        });
+    } catch (error) {
+        // ponytail: 关联丢了只能人工补，日志留痕；页面要关了再兜一次
+        console.error('[inquiry-link] 关联回写失败', body, error);
+        try {
+            navigator.sendBeacon?.('/api/sales/inquiry-links',
+                new Blob([body], {type: 'application/json'}));
+        } catch (_) {}
+    }
+}
+
 function collectGoods() {
     return inquiryState.goods
         .map(good => ({
@@ -955,7 +1076,8 @@ async function submitInquiry() {
         for (const good of goods) {
             const images = [];
             for (const item of good.files) images.push(await uploadOaImage(item.file));
-            good.images = images.join(',');
+            // 配件库商品图是公网 URL，直接拼进 OA 的 images，采购能直接看到原图
+            good.images = [...(good.remoteImages || []), ...images].join(',');
         }
         // OA 只能靠沟通记录建询价单，先建单拿到单号，再把商品挂进去
         const chatRes = await createOaChat(chat);
@@ -966,6 +1088,7 @@ async function submitInquiry() {
             const goodsId = Number(created?.id || 0);
             if (!goodsId) throw new Error('创建询价商品失败');
             createdIds.push(goodsId);
+            await reportInquiryLink(goodsId, good);
         }
         showSalesToast(`询价单已生成，含 ${goods.length} 个商品`, 'success');
         closeInquiry(true);
@@ -987,7 +1110,9 @@ async function submitInquiry() {
 
 /* ---------------- 事件 ---------------- */
 
-inquiryEls.entry?.addEventListener('click', openInquiry);
+inquiryEls.entry?.addEventListener('click', () => openInquiry());
+// 配件库详情页脚的一键询价：带上当前商品，其余流程一致
+document.getElementById('salesDetailInquiryButton')?.addEventListener('click', () => openInquiry(activeSalesDetailItem));
 // 关掉询价表单回到选择客户，只有选择客户上的叉才整段退出
 inquiryEls.close?.addEventListener('click', backToClientPicker);
 inquiryEls.cancel?.addEventListener('click', backToClientPicker);
@@ -1170,10 +1295,17 @@ inquiryEls.goodsRows?.addEventListener('focusout', event => {
 });
 
 inquiryEls.goodsRows?.addEventListener('click', event => {
+    // 下拉在 <label> 里：不 preventDefault 的话，点选项会被 label 转发成对输入框的点击，
+    // 面板刚关掉又被 openSelect 打开，看起来就是“选完列表不消失”
+    const panel = event.target.closest('.inquiry-select-options');
+    if (panel) {
+        event.preventDefault();
+        const item = event.target.closest('li');
+        if (item && !item.classList.contains('is-empty')) pickSelect(item);
+        return;
+    }
     const input = event.target.closest('.inquiry-select-input');
     if (input) openSelect(input.closest('[data-select]'));
-    const item = event.target.closest('.inquiry-select-options li');
-    if (item && !item.classList.contains('is-empty')) pickSelect(item);
 });
 
 inquiryEls.goodsRows?.addEventListener('keydown', event => {
@@ -1261,6 +1393,23 @@ inquiryEls.goodsRows?.addEventListener('focusin', event => {
 inquiryEls.goodsRows?.addEventListener('click', event => {
     const cardEl = event.target.closest('[data-goods-index]');
     if (cardEl) inquiryState.activeIndex = Number(cardEl.dataset.goodsIndex);
+    const removeRemoteImage = event.target.closest('[data-remove-remote-image]');
+    if (removeRemoteImage) {
+        const card = removeRemoteImage.closest('[data-goods-index]');
+        const good = inquiryState.goods[Number(card?.dataset.goodsIndex)];
+        if (!good?.remoteImages?.length) return;
+        good.remoteImages.splice(Number(removeRemoteImage.dataset.removeRemoteImage), 1);
+        renderGoodsRows();
+        return;
+    }
+    const previewRemoteImage = event.target.closest('[data-preview-remote-image]');
+    if (previewRemoteImage) {
+        const card = previewRemoteImage.closest('[data-goods-index]');
+        const good = inquiryState.goods[Number(card?.dataset.goodsIndex)];
+        if (!good?.remoteImages?.length) return;
+        openViewer(good.remoteImages, Number(previewRemoteImage.dataset.previewRemoteImage));
+        return;
+    }
     const removeImage = event.target.closest('[data-remove-image]');
     if (removeImage) {
         const card = removeImage.closest('[data-goods-index]');

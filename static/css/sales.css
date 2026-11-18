@@ -196,6 +196,9 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-close { width: 40px; height: 40px; padding: 0; color: #718098; border: 0; border-radius: 9px; background: #f4f7fb; font-size: 30px; line-height: 1; }
 .sales-detail-close:hover { color: #fff; background: #e15b64; }
 .sales-detail-scroll { flex: 1; min-height: 0; overflow: auto; padding: 18px; }
+/* 详情弹窗不显示滚动条，鼠标滚轮和触控板照常滚动 */
+.sales-detail-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+.sales-detail-scroll::-webkit-scrollbar { width: 0; height: 0; }
 .sales-detail-card, .sales-detail-chat { border: 1px solid #dce5f0; border-radius: 13px; background: #fff; box-shadow: 0 7px 24px rgba(37,67,112,.06); }
 .sales-detail-product-row { display: flex; gap: 24px; padding: 24px 28px 20px; border-bottom: 1px solid #e7edf5; }
 .sales-detail-image { width: 124px; height: 124px; flex: 0 0 124px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid #dfe6ef; border-radius: 11px; background: #f8faff; }
@@ -244,13 +247,13 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-modal.inquiry-detail .sales-detail-section-title span { padding: 3px 8px; font-size: 11px; }
 .sales-detail-modal.inquiry-detail .sales-detail-table-wrap table { font-size: 13px; }
 .sales-detail-modal.parts-detail .sales-detail-quote-strip { display: none; }
-.sales-detail-modal.parts-detail .sales-detail-info-grid { font-size: 15px; }
+.sales-detail-modal.parts-detail .sales-detail-info-grid { font-size: 14px; }
 .sales-detail-modal.parts-detail .sales-detail-info-grid > div {
-    min-height: 47px;
-    grid-template-columns: 125px minmax(0,1fr);
+    min-height: 34px;
+    grid-template-columns: 92px minmax(0,1fr);
 }
-.sales-detail-modal.parts-detail .sales-detail-info-grid label { font-size: 15px; }
-.sales-detail-modal.parts-detail .sales-detail-info-grid span { font-size: 15px; }
+.sales-detail-modal.parts-detail .sales-detail-info-grid label { font-size: 14px; }
+.sales-detail-modal.parts-detail .sales-detail-info-grid span { font-size: 14px; }
 .sales-detail-parts-prices[hidden] { display: none; }
 .sales-detail-parts-prices .sales-detail-subtitle { justify-content: space-between; }
 .sales-detail-parts-prices .sales-detail-subtitle span { color: var(--sales-blue); font-size: 13px; font-weight: 700; }
@@ -282,6 +285,13 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-feedback-entry .sales-feedback-open { min-width: 132px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: #fff; border: 0; border-radius: 9px; background: linear-gradient(135deg, #2878f0, #4d96ff); box-shadow: 0 7px 18px rgba(40,120,240,.25); font-size: 15px; font-weight: 700; transition: .18s ease; }
 .sales-feedback-entry .sales-feedback-open svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .sales-feedback-entry .sales-feedback-open:hover { color: #fff; border: 0; background: linear-gradient(135deg, #1768dc, #3788fa); box-shadow: 0 9px 22px rgba(40,120,240,.32); transform: translateY(-1px); }
+/* 详情页脚的按钮组：一键询价 + 我要反馈并排 */
+.sales-feedback-entry .sales-detail-actions { flex-direction: row; align-items: center; gap: 10px; }
+.sales-detail-actions .sales-detail-inquiry { min-width: 122px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; color: #2878f0; border: 1px solid #a9caf8; border-radius: 9px; background: #f2f7ff; font-size: 15px; font-weight: 700; transition: .18s ease; }
+.sales-detail-actions .sales-detail-inquiry svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.sales-detail-actions .sales-detail-inquiry:hover:not(:disabled) { color: #fff; border-color: #2878f0; background: linear-gradient(135deg, #2878f0, #4d96ff); }
+.sales-detail-actions .sales-detail-inquiry[hidden] { display: none; }
+.sales-detail-actions .sales-detail-inquiry:disabled { color: #b6c0cd; border-color: #e3e9f1; background: #f5f7fa; cursor: not-allowed; }
 
 .sales-feedback-overlay { position: fixed; inset: 0; z-index: 6500; display: none; align-items: center; justify-content: center; padding: 24px; background: rgba(17,28,45,.58); backdrop-filter: blur(4px); }
 .sales-feedback-overlay.show { display: flex; }
@@ -519,10 +529,11 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-image { width: 228px; height: 228px; flex: 0 0 228px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #e8ecf0; border-radius: 8px; background: #f7fafc; }
 .sales-detail-image img { width: 224px; height: 224px; object-fit: contain; }
 /* 图片多的时候竖向排列，超出高度在列内滚动 */
-.sales-detail-thumbs { order: -1; flex: 0 0 54px; width: 54px; max-height: 228px; display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; }
+.sales-detail-thumbs { order: -1; flex: 0 0 66px; width: 66px; max-height: 228px; display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-gutter: stable; }
 .sales-detail-thumbs::-webkit-scrollbar { width: 4px; }
 .sales-detail-thumbs::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 2px; }
-.sales-detail-thumb { flex: 0 0 54px; width: 54px; height: 54px; padding: 2px; overflow: hidden; border: 2px solid #e8ecf0; border-radius: 6px; background: #f7fafc; cursor: pointer; }
+/* 宽度跟随列宽（滚动条出现时自动收窄），保证单张图片不被裁切；52px 高可让 4 张完整排下 */
+.sales-detail-thumb { flex: 0 0 52px; width: 100%; height: 52px; padding: 2px; overflow: hidden; border: 2px solid #e8ecf0; border-radius: 6px; background: #f7fafc; cursor: pointer; }
 .sales-detail-thumb img { width: 100%; height: 100%; object-fit: contain; }
 .sales-detail-thumb.active { border-color: #4285f4; }
 .sales-detail-nav { position: absolute; top: 50%; z-index: 2; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: 1px solid #dfe6ef; border-radius: 50%; background: rgba(255,255,255,.92); color: #475569; font-size: 16px; line-height: 1; transform: translateY(-50%); cursor: pointer; }
@@ -540,6 +551,8 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-price-main { display: flex; align-items: baseline; gap: 8px; }
 .sales-detail-price-label { color: #9b6a6a; font-size: 12px; }
 .sales-detail-price { color: #dc2626; font-size: 28px; font-weight: 700; letter-spacing: -.5px; }
+/* 没有价格的档位留占位，不撑大红字 */
+.sales-detail-price.is-empty { color: #c3ccd9; font-size: 20px; font-weight: 500; }
 .sales-detail-price-extra { display: flex; flex-wrap: wrap; gap: 4px 22px; padding-bottom: 5px; color: #9b6a6a; font-size: 14px; }
 .sales-detail-price-extra b { color: #a84545; font-size: 15px; font-weight: 600; }
 
@@ -548,8 +561,19 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-attrs label { color: #718096; white-space: nowrap; }
 .sales-detail-attrs span { word-break: break-all; }
 
+/* 基础信息为空时整项隐藏，不显示「—」 */
+.sales-detail-meta > span[hidden] { display: none; }
+/* 价格副项：与主价重复的隐藏，空缺的淡化 */
+.sales-detail-price-extra > span[hidden] { display: none; }
+.sales-detail-price-extra > span.is-empty b { color: #c3ccd9; font-weight: 500; }
+/* 服务承诺行：质保、发货地等，浅底标签 */
+.sales-detail-services { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.sales-detail-services[hidden] { display: none; }
+.sales-detail-service { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 4px; background: #f5f7fa; color: #718096; font-size: 12px; line-height: 1.6; }
+.sales-detail-service b { color: #1a202c; font-weight: 500; }
+
 /* 标签页 */
-.sales-detail-tabs { padding: 16px 20px 24px; background: #fff; }
+.sales-detail-tabs { padding: 16px 20px 12px; background: #fff; }
 .sales-detail-tab-nav { display: flex; gap: 24px; border-bottom: 1px solid #e8ecf0; }
 .sales-detail-tab { position: relative; padding: 0 0 10px; border: 0; background: none; color: #718096; font-size: 13.5px; font-weight: 500; }
 .sales-detail-tab::after { content: ''; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px 2px 0 0; background: transparent; }
@@ -561,10 +585,10 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-panel[hidden] { display: none; }
 
 /* 配件库信息：三列分行 */
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 0 24px; padding: 0; font-size: 13px; }
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > div { min-height: 40px; display: grid; grid-template-columns: 92px minmax(0,1fr); grid-column: auto; align-items: center; gap: 0 10px; padding: 0; border: 0; border-bottom: 1px solid #f0f3f7; border-radius: 0; background: transparent; }
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid label { color: #718096; text-align: left; font-size: 12.5px; }
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid span { padding-left: 0; color: #4a5568; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 0 24px; padding: 0; font-size: 14px; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > div { min-height: 34px; display: grid; grid-template-columns: 92px minmax(0,1fr); grid-column: auto; align-items: center; gap: 0 10px; padding: 0; border: 0; border-bottom: 1px solid #f0f3f7; border-radius: 0; background: transparent; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid label { color: #718096; text-align: left; font-size: 14px; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid span { padding-left: 0; color: #4a5568; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid .sales-detail-wide { grid-column: span 2; }
 .sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid .sales-detail-full { grid-column: 1 / -1; }
 .sales-detail-info-empty { color: #b6c0cd; }
@@ -599,6 +623,17 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-spec-option { padding: 5px 14px; border: 1px solid transparent; border-radius: 4px; background: #f5f7fa; color: #4a5568; font-size: 12.5px; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
 .sales-detail-spec-option:hover { color: #4285f4; background: #eef4ff; }
 .sales-detail-spec-option.active { border-color: #4285f4; background: #fff; color: #4285f4; font-weight: 500; }
+
+/* 弹窗底部的常驻询价引导，和 footer 之间留一条缝 */
+.sales-detail-spec-notice { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; margin: 0 24px 16px; padding: 13px 18px; border: 1px solid #ffe1a8; border-radius: 8px; background: #fffbf0; }
+.sales-detail-spec-notice[hidden] { display: none; }
+.sales-detail-spec-notice-icon { flex: 0 0 26px; height: 26px; border-radius: 50%; background: #fff1d6; color: #d48806; font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.sales-detail-spec-notice-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.sales-detail-spec-notice-body strong { color: #ad6800; font-size: 13px; }
+.sales-detail-spec-notice-body span { color: #8a6d3b; font-size: 12px; line-height: 1.5; }
+.sales-detail-spec-notice-body b { color: #ad6800; }
+.sales-detail-spec-create { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 16px; border: 1px solid #a9caf8; border-radius: 6px; background: #fff; color: var(--sales-blue); font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s; }
+.sales-detail-spec-create:hover { border-color: var(--sales-blue); background: var(--sales-blue); color: #fff; }
 
 /* flex 会盖掉 hidden 属性，这里补回来 */
 .sales-detail-attrs > div[hidden] { display: none; }

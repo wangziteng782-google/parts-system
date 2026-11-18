@@ -152,7 +152,8 @@ def _match_map() -> dict[int, dict]:
                          FROM product_variant_group_specs g
                         WHERE g.part_id=qi.part_id) AS part_sku_count
                FROM part_inquiries qi
-               LEFT JOIN parts p ON p.id=qi.part_id"""
+               LEFT JOIN parts p ON p.id=qi.part_id
+              WHERE qi.inquiry_mission_id IS NOT NULL"""
         )
         return {int(row["inquiry_mission_id"]): row for row in cursor.fetchall()}
     finally:

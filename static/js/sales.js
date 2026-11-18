@@ -54,6 +54,14 @@ let activeSalesDetailOrderGoodsId = null;
 let activeSalesDetailPartId = null;
 let activeSalesDetailItem = null;
 let activeSalesVariantQuotes = [];
+// 全量规格组合（含库里没报价的），用来判断「选了但没这个组合」
+let activeSalesVariantPool = [];
+// 当前选中的规格组合，一键询价时用它把询价和 SKU 绑上
+let activeSalesVariantGroupId = '';
+// 规格组合是否已加载完：加载完才知道「有没有规格」，加载中一律不放询价按钮
+let activeSalesVariantLoaded = false;
+// 规格选择状态：incomplete 未选满 / matched 命中且有报价 / missing 选满但拿不到报价
+let activeSalesSpecState = 'incomplete';
 
 function escapeSalesHtml(value) {
     return String(value ?? '')
@@ -433,6 +441,35 @@ function setSalesDetailText(id, value) {
     if (element) element.textContent = String(value ?? '').trim();
 }
 
+// 顶部信息项：没有值就整块隐藏
+function setSalesDetailMeta(itemId, valueId, value) {
+    const wrap = document.getElementById(itemId);
+    const target = document.getElementById(valueId);
+    const text = detailValue(value);
+    if (target) target.textContent = text;
+    if (wrap) wrap.hidden = !text;
+}
+
+// 服务承诺行：质保、发货地这类买前必看的短信息，做成购物平台那种浅底标签
+function renderSalesDetailServices(item, source) {
+    const wrap = document.getElementById('salesDetailServices');
+    if (!wrap) return;
+    if (source === 'inquiry') {
+        wrap.hidden = true;
+        wrap.innerHTML = '';
+        return;
+    }
+    const chips = [];
+    const warranty = detailValue(item.warranty);
+    const origin = detailValue(item.shipping_origin);
+    const elevator = detailValue(item.applicable_elevator_brand);
+    if (warranty) chips.push(`<span class="sales-detail-service">质保<b>${escapeSalesHtml(warranty)}</b></span>`);
+    if (origin) chips.push(`<span class="sales-detail-service">发货地<b>${escapeSalesHtml(origin)}</b></span>`);
+    if (elevator) chips.push(`<span class="sales-detail-service">适用电梯<b>${escapeSalesHtml(elevator)}</b></span>`);
+    wrap.innerHTML = chips.join('');
+    wrap.hidden = !chips.length;
+}
+
 function safeSalesAttachmentUrl(url) {
     const value = String(url ?? '').trim();
     if (!value) return '';
@@ -522,22 +559,55 @@ function collectSpecDimensions(items) {
     return dimensions;
 }
 
-// 规格按属性维度归并，每个维度一行值按钮，全部可点（不置灰）
-// 有的值只存在于别的组合里，禁掉就等于选不到，点下去由 selectSalesSpecValue 自动适配其它维度
-// activeSalesSpecMap 由 loadSalesPartVariantQuotes / selectSalesVariantQuote 维护
-function renderSalesVariantPrices(items) {
-    if (!items.length) {
-        return '<div class="sales-detail-price-empty">该产品暂无规格报价</div>';
+// 全量组合（variant_combinations）打底，有报价的组合（variant-quotes）挂上 quote
+function buildSalesVariantPool(item, quotes) {
+    const quoteByGroup = new Map();
+    for (const quote of quotes) {
+        const key = String(quote.variant_group_id || '');
+        if (key) quoteByGroup.set(key, quote);
     }
-    const dimensions = collectSpecDimensions(items);
+    const pool = [];
+    const seen = new Set();
+    for (const combo of (item?.variant_combinations || [])) {
+        const key = String(combo.variant_group_id || '');
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        pool.push({
+            variant_group_id: key,
+            specification: combo.specification || '',
+            is_discontinued: Boolean(combo.is_discontinued),
+            quote: quoteByGroup.get(key) || null,
+        });
+    }
+    // 列表接口没带全量组合时，退回只渲染有报价的组合
+    for (const quote of quotes) {
+        const key = String(quote.variant_group_id || '');
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        pool.push({
+            variant_group_id: key,
+            specification: quote.specification || '',
+            is_discontinued: false,
+            quote,
+        });
+    }
+    return pool;
+}
+
+// 规格按属性维度归并，每个维度一行值按钮，全部可点（不置灰）
+function renderSalesVariantPrices(pool) {
+    if (!pool.length) {
+        return '<div class="sales-detail-price-empty">该产品暂无规格</div>';
+    }
+    const dimensions = collectSpecDimensions(pool);
     if (!dimensions.size) {
         // 规格串解析不出属性时，退化成一条一行
-        return items.map((item, index) => `
+        return pool.map((entry, index) => `
             <div class="sales-detail-spec-group">
                 <span class="sales-detail-spec-group-label">规格${index + 1}</span>
                 <div class="sales-detail-spec-values">
-                    <button type="button" class="sales-detail-spec-option"
-                            onclick="selectSalesVariantQuote(${index})">${escapeSalesHtml(detailValue(item.specification))}</button>
+                    <button type="button" class="sales-detail-spec-option${activeSalesVariantGroupId === entry.variant_group_id ? ' active' : ''}"
+                            onclick="selectSalesVariantQuote(${index})">${escapeSalesHtml(detailValue(entry.specification))}</button>
                 </div>
             </div>`).join('');
     }
@@ -552,44 +622,126 @@ function renderSalesVariantPrices(items) {
         </div>`).join('');
 }
 
-// 点某个属性值：其它维度保持不变优先，凑不出组合时退到只按这一维匹配
+// 只改当前维度，不替用户决定别的维度，这样才可能选出库里没有的组合
 function selectSalesSpecValue(button) {
     const key = button.dataset.specKey;
     const value = button.dataset.specValue;
     if (!key || !value) return;
-    const specsOf = item => parseSalesSpecs(item.specification);
-    const has = (specs, k, v) => specs.some(spec => spec.key === k && spec.value === v);
-    const probe = Object.entries({ ...activeSalesSpecMap, [key]: value });
-    const index = activeSalesVariantQuotes.findIndex(item => {
-        const specs = specsOf(item);
-        return probe.every(([k, v]) => has(specs, k, v));
-    });
-    // 该值在当前其它维度取值下没有组合（常见于「110V 只有二手」这种），只按这一维找
-    const relaxed = index >= 0 ? index
-        : activeSalesVariantQuotes.findIndex(item => has(specsOf(item), key, value));
-    if (relaxed >= 0) selectSalesVariantQuote(relaxed);
+    activeSalesSpecMap = {...activeSalesSpecMap, [key]: value};
+    applySalesSpecSelection();
+}
+
+// 当前已选的值，按维度顺序返回
+function selectedSpecValues() {
+    const dimensions = collectSpecDimensions(activeSalesVariantPool);
+    const keys = dimensions.size ? [...dimensions.keys()] : Object.keys(activeSalesSpecMap);
+    return keys.map(key => detailValue(activeSalesSpecMap[key])).filter(Boolean);
+}
+
+// 按当前选择找组合，找不到说明库里没有这个组合
+function findSalesSpecEntry() {
+    const picks = Object.entries(activeSalesSpecMap).filter(([, value]) => detailValue(value));
+    if (!picks.length) return null;
+    return activeSalesVariantPool.find(entry => {
+        const specs = parseSalesSpecs(entry.specification);
+        return picks.every(([key, value]) => specs.some(spec => spec.key === key && spec.value === value));
+    }) || null;
+}
+
+// 有价格记录但三项价格全空时销售看不到价，同样要转采购
+function hasUsableVariantPrice(quote) {
+    if (!quote) return false;
+    return !isEmptyPrice(quote.no_tax_price)
+        || !isEmptyPrice(quote.special_invoice_price)
+        || !isEmptyPrice(quote.general_invoice_price);
+}
+
+// 规格选中后的统一判定：命中且有报价 → 可询价；选满但拿不到报价 → 引导创建询价单
+function applySalesSpecSelection(forcedEntry = null) {
+    const dimensions = collectSpecDimensions(activeSalesVariantPool);
+    const picked = Object.entries(activeSalesSpecMap).filter(([, value]) => detailValue(value));
+    const complete = Boolean(forcedEntry)
+        || (dimensions.size ? picked.length >= dimensions.size : false);
+    const entry = forcedEntry || (complete ? findSalesSpecEntry() : null);
+    const quote = entry?.quote || null;
+    const usable = hasUsableVariantPrice(quote);
+
+    activeSalesVariantGroupId = usable ? String(entry.variant_group_id) : '';
+    activeSalesSpecState = !complete ? 'incomplete' : (usable ? 'matched' : 'missing');
+
+    salesEls.detailPartsPriceContent.innerHTML = renderSalesVariantPrices(activeSalesVariantPool);
+    if (usable) {
+        setSalesDetailPrices(quote.no_tax_price, quote.special_invoice_price, quote.general_invoice_price, true);
+        renderSalesDetailInfo(activeSalesDetailItem, 'parts', '来自配件库', quote);
+    } else if (complete) {
+        // 没报价就把价格清空，别留着上一个组合的数字
+        setSalesDetailPrices('', '', '', true);
+        renderSalesDetailInfo(activeSalesDetailItem, 'parts', '来自配件库');
+    }
+    syncSalesDetailInquiryButton();
 }
 
 function selectSalesVariantQuote(index) {
-    const quote = activeSalesVariantQuotes[index];
-    if (!quote || !activeSalesDetailItem) return;
-    // 选中的规格可能带动其它维度变化，整块重渲染
-    activeSalesSpecMap = specsToMap(parseSalesSpecs(quote.specification));
-    salesEls.detailPartsPriceContent.innerHTML = renderSalesVariantPrices(activeSalesVariantQuotes);
-    setSalesDetailPrices(quote.no_tax_price, quote.special_invoice_price, quote.general_invoice_price);
-    renderSalesDetailInfo(activeSalesDetailItem, 'parts', '来自配件库', quote);
+    const entry = activeSalesVariantPool[index];
+    if (!entry || !activeSalesDetailItem) return;
+    activeSalesSpecMap = specsToMap(parseSalesSpecs(entry.specification));
+    applySalesSpecSelection(entry);
+}
+
+// 一键询价按钮 + 询价单提示条：按钮看规格状态，提示条只要有规格就常驻
+function syncSalesDetailInquiryButton() {
+    const button = document.getElementById('salesDetailInquiryButton');
+    const notice = document.getElementById('salesDetailSpecNotice');
+    if (!button) return;
+    const isParts = activeSalesDetailItem?.record_source !== 'inquiry';
+    const hasSpec = activeSalesVariantPool.length > 0;
+    // 没有规格等于不用选，直接可询价；有规格必须命中一条有报价的组合
+    const ready = activeSalesVariantLoaded && (!hasSpec || activeSalesSpecState === 'matched');
+    // 询价来源不显示；配件库来源常驻，规格没选好就置灰
+    button.hidden = !isParts;
+    button.disabled = !ready;
+    if (!notice) return;
+    // 提示条是表单的一部分，不跟着选规格才出现，销售扫一眼就能直接建单
+    const showNotice = isParts && activeSalesVariantLoaded && hasSpec;
+    notice.hidden = !showNotice;
+    if (showNotice) renderSalesSpecNoticeText();
+}
+
+function renderSalesSpecNoticeText() {
+    const target = document.getElementById('salesDetailSpecNoticeText');
+    if (!target) return;
+    const values = selectedSpecValues();
+    if (!values.length) {
+        target.innerHTML = '配件库没有的规格，可直接创建询价单，由采购确认货期与价格。';
+        return;
+    }
+    const text = escapeSalesHtml(values.join(' / '));
+    target.innerHTML = findSalesSpecEntry()
+        ? `当前选择 <b>${text}</b>，可直接创建询价单由采购确认货期与价格。`
+        : `当前选择 <b>${text}</b> 暂无对应配件，建议创建询价单由采购处理。`;
 }
 
 let activeSalesDetailImages = [];
 let activeSalesDetailImageIndex = 0;
 
-// 价格盒：不含票价用大字，含专票、含普票跟在后头
-function setSalesDetailPrices(noTax, special, general) {
+// 价格盒：不含票价用大字，含专票、含普票跟在后面
+// showAll（配件库来源）：固定展示三种价格，缺的留「—」，不再用含票价兜底主价
+function setSalesDetailPrices(noTax, special, general, showAll = false) {
     const label = document.getElementById('salesDetailPriceLabel');
+    const priceEl = document.getElementById('salesDetailPrice');
     const noTaxText = detailPriceText(noTax);
     const specialText = detailAmountText(special);
     const generalText = detailAmountText(general);
-    // 有的组合只录了含票价，这时用含票兜底并改标签，否则「价格待定」和旁边的 ¥230 自相矛盾
+    if (showAll) {
+        setSalesDetailText('salesDetailPrice', noTaxText || '—');
+        if (priceEl) priceEl.classList.toggle('is-empty', !noTaxText);
+        if (label) label.textContent = '不含票价';
+        setSalesPriceExtra('salesDetailSpecialWrap', 'salesDetailSpecialPrice', specialText, '');
+        setSalesPriceExtra('salesDetailGeneralWrap', 'salesDetailGeneralPrice', generalText, '');
+        return;
+    }
+    if (priceEl) priceEl.classList.remove('is-empty');
+    // 询价来源：有的组合只录了含票价，这时用含票兜底并改标签，否则「价格待定」和旁边的 ¥230 自相矛盾
     const fallback = specialText || generalText;
     setSalesDetailText('salesDetailPrice', noTaxText || fallback || '价格待定');
     if (label) {
@@ -597,8 +749,24 @@ function setSalesDetailPrices(noTax, special, general) {
             : specialText ? '含专票价'
             : generalText ? '含普票价' : '不含票价';
     }
-    setSalesDetailText('salesDetailSpecialPrice', specialText || '—');
-    setSalesDetailText('salesDetailGeneralPrice', generalText || '—');
+    // 主价已经拿含票价兜底时，右侧不再重复同一个数字
+    const duplicated = noTaxText ? '' : fallback;
+    setSalesPriceExtra('salesDetailSpecialWrap', 'salesDetailSpecialPrice', specialText, duplicated);
+    setSalesPriceExtra('salesDetailGeneralWrap', 'salesDetailGeneralPrice', generalText, duplicated);
+}
+
+function setSalesPriceExtra(wrapId, valueId, text, duplicated) {
+    const wrap = document.getElementById(wrapId);
+    const target = document.getElementById(valueId);
+    if (!wrap || !target) return;
+    if (text && text === duplicated) {
+        wrap.hidden = true;
+        target.textContent = '';
+        return;
+    }
+    wrap.hidden = false;
+    wrap.classList.toggle('is-empty', !text);
+    target.textContent = text || '—';
 }
 
 function switchSalesDetailTab(name) {
@@ -696,17 +864,26 @@ async function loadSalesPartVariantQuotes(partId, item) {
         if (activeSalesDetailPartId !== partId) return;
         const items = data.items || [];
         activeSalesVariantQuotes = items;
-        activeSalesSpecMap = items[0] ? specsToMap(parseSalesSpecs(items[0].specification)) : {};
-        if (items.length) {
-            salesEls.detailPartsPriceContent.innerHTML = renderSalesVariantPrices(items);
-            selectSalesVariantQuote(0);
-        } else {
-            // 没有规格组合报价就留空态，不拿进项票、采购运费这类成本数据凑数
-            activeSalesVariantQuotes = [];
-            salesEls.detailPartsPriceContent.innerHTML = '<div class="sales-detail-price-empty">该产品暂无规格报价</div>';
-        }
+        activeSalesVariantPool = buildSalesVariantPool(item, items);
+        // 不默认选中第一条，等用户自己点选，避免询价绑到错误的 SKU
+        activeSalesSpecMap = {};
+        activeSalesVariantGroupId = '';
+        activeSalesSpecState = 'incomplete';
+        activeSalesVariantLoaded = true;
+        syncSalesDetailInquiryButton();
+        salesEls.detailPartsPriceContent.innerHTML = activeSalesVariantPool.length
+            ? renderSalesVariantPrices(activeSalesVariantPool)
+            : '<div class="sales-detail-price-empty">该产品暂无规格</div>';
     } catch (error) {
         if (activeSalesDetailPartId !== partId) return;
+        // 拉不到规格就清空选中，别把上一个商品的 SKU 带进询价
+        activeSalesVariantQuotes = [];
+        activeSalesVariantPool = [];
+        activeSalesSpecMap = {};
+        activeSalesVariantGroupId = '';
+        activeSalesSpecState = 'incomplete';
+        activeSalesVariantLoaded = false;
+        syncSalesDetailInquiryButton();
         salesEls.detailPriceMultiplier.textContent = '加载失败';
         salesEls.detailPartsPriceContent.innerHTML = `<div class="sales-detail-price-loading">${escapeSalesHtml(error.message)}</div>`;
     }
@@ -724,29 +901,45 @@ function openSalesProductDetail(index) {
     detailModal.classList.toggle('parts-detail', source === 'parts');
     const sourceBadgeWrap = document.getElementById('salesDetailSource');
     sourceBadgeWrap.innerHTML = `<span class="source-badge ${source}">${sourceLabel}</span>${isSubstitute ? '<span class="source-badge substitute">替代品</span>' : ''}`;
+    // 一键询价只对配件库来源有意义，且要等规格加载完、命中组合才放出来
+    activeSalesVariantQuotes = [];
+    activeSalesVariantPool = [];
+    activeSalesSpecMap = {};
+    activeSalesVariantGroupId = '';
+    activeSalesSpecState = 'incomplete';
+    activeSalesVariantLoaded = false;
+    syncSalesDetailInquiryButton();
     setSalesDetailText('salesDetailTitle', source === 'inquiry' ? '询价商品详情' : '配件商品详情');
     setSalesDetailText('salesDetailName', item.product_name);
     setSalesDetailText('salesDetailCrumbName', salesText(item.product_name));
-    setSalesDetailText('salesDetailModel', salesText(item.model));
-    setSalesDetailText('salesDetailBrand', salesText(item.product_brand));
-    setSalesDetailText('salesDetailCategory', salesText(item.product_type));
-    setSalesDetailText('salesDetailWarranty', salesText(item.warranty));
-    setSalesDetailText('salesDetailElevator', salesText(item.applicable_elevator_brand));
-    setSalesDetailText('salesDetailSubstitute', salesText(item.substitute_model));
-    setSalesDetailText('salesDetailOrigin', salesText(item.shipping_origin));
-    setSalesDetailPrices(item.display_price, item.special_price, item.general_price);
     const isInquiry = source === 'inquiry';
+    // 基础信息：值为空就隐藏整项，不要摆一排「—」
+    setSalesDetailMeta('salesDetailModelItem', 'salesDetailModel', item.model);
+    setSalesDetailMeta('salesDetailBrandItem', 'salesDetailBrand', item.product_brand);
+    setSalesDetailMeta('salesDetailCategoryItem', 'salesDetailCategory', item.product_type);
+    setSalesDetailMeta('salesDetailWarrantyItem', 'salesDetailWarranty', item.warranty);
+    setSalesDetailText('salesDetailSubstitute', detailValue(item.substitute_model));
+    // 配件库三种价格各取各的原始值：不含票用 no_tax_price，避免拿含票价兜底后标签对不上
+    const noTaxForDetail = isInquiry ? item.display_price
+        : (Object.prototype.hasOwnProperty.call(item, 'no_tax_price') ? item.no_tax_price : item.display_price);
+    setSalesDetailPrices(noTaxForDetail, item.special_price, item.general_price, !isInquiry);
+    renderSalesDetailServices(item, source);
     setSalesDetailText('salesDetailQuotationType', isInquiry ? quotationTypeText(item.quotation_type) : '');
     setSalesDetailText('salesDetailPostFeePurchase', isInquiry ? detailAmountText(item.post_fee_purchase) : '');
     setSalesDetailText(
         'salesDetailPostFeeHasTaxPurchase',
         isInquiry ? detailAmountText(item.post_fee_has_tax_purchase) : '',
     );
-    setSalesDetailText('salesDetailPriceLabel', isInquiry ? '销售参考价' : '不含票价');
-    ['salesDetailElevatorWrap', 'salesDetailSubstituteWrap', 'salesDetailOriginWrap'].forEach(id => {
-        const element = document.getElementById(id);
-        if (element) element.hidden = isInquiry;
-    });
+    // 配件库的价格标签由 setSalesDetailPrices 按实际兜底情况决定，这里只处理询价来源
+    if (isInquiry) setSalesDetailText('salesDetailPriceLabel', '销售参考价');
+    // 配件库的质保、发货地统一放在上面的「服务」行，这里不再重复
+    const warrantyItem = document.getElementById('salesDetailWarrantyItem');
+    if (warrantyItem && !isInquiry) warrantyItem.hidden = true;
+    const substituteWrap = document.getElementById('salesDetailSubstituteWrap');
+    if (substituteWrap) {
+        const text = detailValue(document.getElementById('salesDetailSubstitute')?.textContent);
+        substituteWrap.hidden = isInquiry || !text;
+    }
     document.getElementById('salesDetailQuotationWrap').hidden = !isInquiry;
     document.getElementById('salesDetailPostFeeWrap').hidden = !isInquiry;
     document.getElementById('salesDetailPostFeeTaxWrap').hidden = !isInquiry;
@@ -788,6 +981,11 @@ function closeSalesProductDetail() {
     activeSalesDetailPartId = null;
     activeSalesDetailItem = null;
     activeSalesVariantQuotes = [];
+    activeSalesVariantPool = [];
+    activeSalesSpecMap = {};
+    activeSalesVariantGroupId = '';
+    activeSalesSpecState = 'incomplete';
+    activeSalesVariantLoaded = false;
     document.getElementById('salesDetailImage').onclick = null;
     salesEls.detailOverlay.classList.remove('show');
     salesEls.detailOverlay.setAttribute('aria-hidden', 'true');
@@ -985,6 +1183,15 @@ function bindSalesEvents() {
         });
     });
     salesEls.feedbackForm.addEventListener('submit', submitSalesFeedback);
+    // 缺规格时走询价单：来源采购，规格组合当型号传过去，配件库图片一起带
+    document.getElementById('salesDetailSpecCreate')?.addEventListener('click', () => {
+        if (!activeSalesDetailItem) return;
+        openInquiry(activeSalesDetailItem, {
+            specText: selectedSpecValues().join('/'),
+            goodsSource: '采购',
+            missSpec: true,
+        });
+    });
     document.addEventListener('keydown', event => {
         if (salesEls.feedbackOverlay.classList.contains('show')) return;
         if (salesEls.imageOverlay.classList.contains('show')) {

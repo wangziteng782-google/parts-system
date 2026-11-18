@@ -9,5 +9,6 @@ deploy/artifacts/
 __pycache__/
 *.pyc
 *.iml
+logs/
 .playwright-cli/
 .trae-html-share-packages/

@@ -583,12 +583,17 @@ def ensure_inquiry_tables(conn):
 
 
 def ensure_part_inquiries_table(conn):
-    """确保询价与SPU/SKU的匹配表存在；只建表，不改动产品与询价数据。"""
+    """确保询价与SPU/SKU的匹配表存在；只建表，不改动产品与询价数据。
+
+    一键询价时 OA 还没生成询价任务，所以 inquiry_mission_id 允许为空，
+    先用 order_goods_id 占位，等 inquiry_sync 拉到任务再回填 mission_id。
+    """
     cursor = conn.cursor()
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS part_inquiries (
             id BIGINT NOT NULL AUTO_INCREMENT COMMENT '关联ID',
-            inquiry_mission_id INT NOT NULL COMMENT 'OA询价任务ID，对应yh_query_goods_mission.id',
+            order_goods_id INT UNSIGNED NULL COMMENT 'OA询价商品ID，一键询价时写入',
+            inquiry_mission_id INT NULL COMMENT 'OA询价任务ID，对应yh_query_goods_mission.id',
             part_id INT NULL COMMENT '关联SPU，对应parts.id；NULL表示未关联',
             variant_group_id VARCHAR(64) NULL COMMENT '关联SKU，对应product_variant_group_specs.variant_group_id',
             matched_by VARCHAR(100) NULL COMMENT '核对的员工',
@@ -597,9 +602,38 @@ def ensure_part_inquiries_table(conn):
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
             PRIMARY KEY (id),
             UNIQUE KEY uq_inquiry (inquiry_mission_id),
+            UNIQUE KEY uq_goods (order_goods_id),
             KEY idx_part_sku (part_id, variant_group_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='询价记录与SPU/SKU的匹配关系'"""
     )
+    conn.commit()
+
+    # 老表补字段：加 order_goods_id、加唯一索引、放开 mission_id 的 NOT NULL
+    _ensure_inquiry_column(
+        cursor, "part_inquiries", "order_goods_id",
+        "ADD COLUMN order_goods_id INT UNSIGNED NULL COMMENT 'OA询价商品ID，一键询价时写入' AFTER id",
+    )
+    cursor.execute("SHOW INDEX FROM part_inquiries WHERE Key_name='uq_goods'")
+    if not cursor.fetchone():
+        try:
+            cursor.execute("ALTER TABLE part_inquiries "
+                           "ADD UNIQUE KEY uq_goods (order_goods_id)")
+            logger.info("[数据库迁移] part_inquiries.uq_goods 已补唯一索引")
+        except Exception as exc:  # 有重复数据时建不了索引，不影响主流程
+            logger.warning("[数据库迁移] part_inquiries.uq_goods 建索引失败：%s", exc)
+    cursor.execute("SHOW COLUMNS FROM part_inquiries LIKE 'inquiry_mission_id'")
+    column = cursor.fetchone()
+    if column and str(column.get("Null", "")).upper() == "NO":
+        try:
+            cursor.execute(
+                "ALTER TABLE part_inquiries "
+                "MODIFY COLUMN inquiry_mission_id INT NULL "
+                "COMMENT 'OA询价任务ID，对应yh_query_goods_mission.id', "
+                "ALGORITHM=INPLACE, LOCK=NONE"
+            )
+            logger.info("[数据库迁移] part_inquiries.inquiry_mission_id 已允许为空")
+        except Exception as exc:
+            logger.warning("[数据库迁移] part_inquiries.inquiry_mission_id 放开可空失败：%s", exc)
     conn.commit()
 
 

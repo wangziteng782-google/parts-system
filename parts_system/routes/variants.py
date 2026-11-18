@@ -6,6 +6,7 @@
 """
 import datetime
 import uuid
+from itertools import product
 from typing import Optional, List
 
 from fastapi import BackgroundTasks, HTTPException
@@ -190,6 +191,24 @@ def _insert_variant_group(cur, product_id: int, spec_ids, group_id=None):
     return group_id
 
 
+def _ensure_variant_groups_not_empty(cur, product_id: int) -> int:
+    """组合被删空时按当前激活规格补回来，否则前端「暂无规格组合」，供应商没地方填。"""
+    cur.execute(
+        "SELECT COUNT(*) AS count FROM product_variant_group_specs WHERE part_id=%s",
+        (product_id,),
+    )
+    if cur.fetchone()['count']:
+        return 0
+    catalog = _variant_spec_catalog(cur, product_id)
+    if not catalog:
+        return 0
+    created = 0
+    for selection in product(*[catalog[name] for name in catalog.keys()]):
+        _insert_variant_group(cur, product_id, [item['id'] for item in selection])
+        created += 1
+    return created
+
+
 def _initialize_variant_groups(cur, product_id: int):
     """首次把当前笛卡尔积持久化；旧报价组合优先沿用原ID并绑定缺少规格的第一个值。"""
     cur.execute(
@@ -200,6 +219,8 @@ def _initialize_variant_groups(cur, product_id: int):
     if not part:
         raise HTTPException(status_code=404, detail="产品不存在")
     if part.get('variant_groups_initialized'):
+        # 初始化过但组合被删光（规格值还在），这里补回来，不然页面填不了供应商
+        _ensure_variant_groups_not_empty(cur, product_id)
         return
 
     catalog = _variant_spec_catalog(cur, product_id)

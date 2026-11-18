@@ -6,7 +6,7 @@
     <title>销售商品查询</title>
     <link rel="icon" href="/static/img/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="/static/img/site-logo.png">
-    <link rel="stylesheet" href="/static/css/sales.css?v=20261109-6">
+    <link rel="stylesheet" href="/static/css/sales.css?v=20261116-6">
     <link rel="preconnect" href="https://oa.yixiuti.com">
 </head>
 <body data-user-name="{{ sales_user_name }}">
@@ -116,8 +116,8 @@
         </div>
     </footer>
 
-    <div class="sales-image-overlay" id="salesImageOverlay" onclick="closeSalesImagePreview()">
-        <div class="sales-image-modal" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="商品图片大图预览">
+    <div class="sales-image-overlay" id="salesImageOverlay">
+        <div class="sales-image-modal" role="dialog" aria-modal="true" aria-label="商品图片大图预览">
             <button class="image-preview-close" type="button" onclick="closeSalesImagePreview()" aria-label="关闭">×</button>
             <button class="gallery-nav gallery-prev" id="salesGalleryPrev" type="button" onclick="salesImageGalleryPrev()" aria-label="上一张">‹</button>
             <img id="salesPreviewImage" src="" alt="商品图片大图" onerror="this.src='/static/img/site-logo.png';this.onerror=null">
@@ -152,10 +152,10 @@
                     <div class="sales-detail-summary">
                         <h1 class="sales-detail-name" id="salesDetailName"></h1>
                         <div class="sales-detail-meta">
-                            <span>规格型号 <b id="salesDetailModel"></b></span>
-                            <span>品牌 <b id="salesDetailBrand"></b></span>
-                            <span>分类 <b id="salesDetailCategory"></b></span>
-                            <span>质保 <b id="salesDetailWarranty"></b></span>
+                            <span id="salesDetailModelItem">规格型号 <b id="salesDetailModel"></b></span>
+                            <span id="salesDetailBrandItem">品牌 <b id="salesDetailBrand"></b></span>
+                            <span id="salesDetailCategoryItem">分类 <b id="salesDetailCategory"></b></span>
+                            <span id="salesDetailWarrantyItem">质保 <b id="salesDetailWarranty"></b></span>
                         </div>
                         <div class="sales-detail-price-box">
                             <div class="sales-detail-price-main">
@@ -163,24 +163,23 @@
                                 <strong class="sales-detail-price" id="salesDetailPrice"></strong>
                             </div>
                             <div class="sales-detail-price-extra">
-                                <span>含专票 <b id="salesDetailSpecialPrice"></b></span>
-                                <span>含普票 <b id="salesDetailGeneralPrice"></b></span>
+                                <span id="salesDetailSpecialWrap">含专票 <b id="salesDetailSpecialPrice"></b></span>
+                                <span id="salesDetailGeneralWrap">含普票 <b id="salesDetailGeneralPrice"></b></span>
                             </div>
                         </div>
-                        <div class="sales-detail-attrs">
-                            <div id="salesDetailElevatorWrap" hidden><label>适用电梯</label><span id="salesDetailElevator"></span></div>
-                            <div id="salesDetailSubstituteWrap" hidden><label>替代型号</label><span id="salesDetailSubstitute"></span></div>
-                            <div id="salesDetailOriginWrap" hidden><label>发货地</label><span id="salesDetailOrigin"></span></div>
-                            <div id="salesDetailQuotationWrap" hidden><label>报价类型</label><span id="salesDetailQuotationType"></span></div>
-                            <div id="salesDetailPostFeeWrap" hidden><label>无税运费</label><span id="salesDetailPostFeePurchase"></span></div>
-                            <div id="salesDetailPostFeeTaxWrap" hidden><label>含税运费</label><span id="salesDetailPostFeeHasTaxPurchase"></span></div>
-                        </div>
+                        <div class="sales-detail-services" id="salesDetailServices" hidden></div>
                         <div class="sales-detail-variant-picker" id="salesDetailPartsPrices" hidden>
                             <div class="sales-detail-variant-head">
-                                <span>商品规格</span>
+                                <span>选择规格</span>
                                 <em id="salesDetailPriceMultiplier"></em>
                             </div>
                             <div class="sales-detail-spec-groups" id="salesDetailPartsPriceContent"></div>
+                        </div>
+                        <div class="sales-detail-attrs">
+                            <div id="salesDetailSubstituteWrap" hidden><label>替代型号</label><span id="salesDetailSubstitute"></span></div>
+                            <div id="salesDetailQuotationWrap" hidden><label>报价类型</label><span id="salesDetailQuotationType"></span></div>
+                            <div id="salesDetailPostFeeWrap" hidden><label>无税运费</label><span id="salesDetailPostFeePurchase"></span></div>
+                            <div id="salesDetailPostFeeTaxWrap" hidden><label>含税运费</label><span id="salesDetailPostFeeHasTaxPurchase"></span></div>
                         </div>
                     </div>
                 </section>
@@ -239,17 +238,34 @@
                 </div>
             </div>
 
+            <div class="sales-detail-spec-notice" id="salesDetailSpecNotice" hidden>
+                <span class="sales-detail-spec-notice-icon">!</span>
+                <div class="sales-detail-spec-notice-body">
+                    <strong>未找到匹配的规格</strong>
+                    <span id="salesDetailSpecNoticeText"></span>
+                </div>
+                <button type="button" class="sales-detail-spec-create" id="salesDetailSpecCreate">创建询价单</button>
+            </div>
+
             <footer class="sales-detail-footer sales-feedback-entry">
                 <div>
                     <strong>发现商品信息有误？</strong>
                     <span>欢迎提交问题，帮助我们持续完善配件资料</span>
                 </div>
-                <button type="button" class="sales-feedback-open" id="salesFeedbackOpenButton">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M4 4h16v12H8l-4 4V4Zm4 5h8M8 12h5"/>
-                    </svg>
-                    我要反馈
-                </button>
+                <div class="sales-detail-actions">
+                    <button type="button" class="sales-detail-inquiry" id="salesDetailInquiryButton" hidden>
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.6 8.6 0 0 1-3.9-.9L3 21l1.9-5.4a8.4 8.4 0 0 1-.9-3.9A8.4 8.4 0 0 1 12.5 3a8.4 8.4 0 0 1 8.5 8.5Zm-12-1.5h7"/>
+                        </svg>
+                        一键询价
+                    </button>
+                    <button type="button" class="sales-feedback-open" id="salesFeedbackOpenButton">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M4 4h16v12H8l-4 4V4Zm4 5h8M8 12h5"/>
+                        </svg>
+                        我要反馈
+                    </button>
+                </div>
             </footer>
 
         </section>
@@ -424,7 +440,8 @@
     </div>
 
     <div class="sales-toast" id="salesToast"></div>
-    <script src="/static/js/sales.js?v=20261109-6"></script>
-    <script src="/static/js/sales-inquiry.js?v=20261103-2"></script>
+    <script>window.__OA_TEST_TOKEN__ = "{{ oa_test_token }}";</script>
+    <script src="/static/js/sales.js?v=20261116-6"></script>
+    <script src="/static/js/sales-inquiry.js?v=20261117-1"></script>
 </body>
 </html>

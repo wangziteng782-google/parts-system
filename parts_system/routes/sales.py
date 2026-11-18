@@ -44,6 +44,13 @@ class SalesFeedbackRequest(BaseModel):
     description: str
 
 
+class SalesInquiryLinkRequest(BaseModel):
+    """一键询价回写：把 OA 询价商品和当前 SPU/SKU 先绑上，mission 稍后回填。"""
+    order_goods_id: int
+    part_id: Optional[int] = None
+    variant_group_id: Optional[str] = None
+
+
 def _sales_price_multiplier(product_name, product_type) -> Decimal:
     """按产品名称、产品分类依次匹配销售价系数。"""
     normalized_name = str(product_name or "").strip()
@@ -311,6 +318,7 @@ def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dic
         display_price = None
         display_price_min = None
         display_price_max = None
+        no_tax_price = None
         special_price = None
         general_price = None
     elif variant_count == 1:
@@ -318,6 +326,8 @@ def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dic
         display_price = _display_price(prices.get('no_tax') or prices.get('special') or prices.get('general'), row.get("product_name"), row.get("product_type"))
         display_price_min = None
         display_price_max = None
+        # 详情页固定展示三种价格，主价要用不含票原值，不能用含票兜底后的 display_price
+        no_tax_price = _display_price(prices.get('no_tax'), row.get("product_name"), row.get("product_type"))
         special_price = _display_price(prices.get('special'), row.get("product_name"), row.get("product_type"))
         general_price = _display_price(prices.get('general'), row.get("product_name"), row.get("product_type"))
     else:
@@ -325,6 +335,7 @@ def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dic
         display_price = None
         display_price_min = _display_price(row.get("display_price_min"), row.get("product_name"), row.get("product_type"))
         display_price_max = _display_price(row.get("display_price_max"), row.get("product_name"), row.get("product_type"))
+        no_tax_price = None
         special_price = None
         general_price = None
     return {
@@ -342,6 +353,7 @@ def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dic
         "display_price": display_price,
         "display_price_min": display_price_min,
         "display_price_max": display_price_max,
+        "no_tax_price": no_tax_price,
         "special_price": special_price,
         "general_price": general_price,
         "modification_completed": bool(row.get("modification_completed")),
@@ -789,6 +801,57 @@ async def sales_parts_variant_quotes(part_id: int):
     if part_id <= 0:
         raise HTTPException(status_code=400, detail="无效的配件 ID")
     return _fetch_parts_variant_quotes(part_id)
+
+
+@app.post("/api/sales/inquiry-links")
+async def create_sales_inquiry_link(req: SalesInquiryLinkRequest):
+    """一键询价成功后立刻记下询价商品与 SPU/SKU 的关联。
+
+    OA 的询价任务此时还没生成，inquiry_mission_id 先留空，
+    等 inquiry_sync 拉到任务后按 order_goods_id 回填。
+    """
+    if req.order_goods_id <= 0:
+        raise HTTPException(status_code=400, detail="无效的询价商品 ID")
+    part_id = req.part_id if req.part_id and req.part_id > 0 else None
+    group_id = str(req.variant_group_id or "").strip() or None
+    if part_id is None and group_id is None:
+        raise HTTPException(status_code=400, detail="缺少关联的配件或规格")
+
+    user = get_current_user() or {}
+    matched_by = (
+        user.get("nickname") or user.get("username") or str(user.get("id") or "")
+    ) or None
+
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO part_inquiries
+                   (order_goods_id, part_id, variant_group_id, matched_by, matched_at)
+               VALUES (%s,%s,%s,%s,NOW())
+               ON DUPLICATE KEY UPDATE
+                   part_id=VALUES(part_id),
+                   variant_group_id=VALUES(variant_group_id),
+                   matched_by=VALUES(matched_by),
+                   matched_at=NOW()""",
+            (req.order_goods_id, part_id, group_id, matched_by),
+        )
+        conn.commit()
+        logger.info(
+            "[inquiry-link] 已关联 goods_id=%s part_id=%s sku=%s",
+            req.order_goods_id, part_id, group_id,
+        )
+    except Exception as exc:
+        conn.rollback()
+        logger.error(
+            "[inquiry-link] 回写失败 goods_id=%s part_id=%s sku=%s err=%s",
+            req.order_goods_id, part_id, group_id, exc,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="询价关联保存失败") from exc
+    finally:
+        conn.close()
+    return {"ok": True}
 
 
 @app.post("/api/sales/feedback")

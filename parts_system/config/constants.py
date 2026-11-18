@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -27,8 +28,32 @@ _console_handler.setFormatter(logging.Formatter(
 ))
 logger.addHandler(_console_handler)
 
+# 日志同时落盘，便于事后排查（如一键询价回写失败）
+_log_dir = PROJECT_ROOT / "logs"
+_file_ready = False
+try:
+    _log_dir.mkdir(exist_ok=True)
+    _file_handler = RotatingFileHandler(
+        _log_dir / "parts_system.log",
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    _file_handler.setLevel(logging.INFO)
+    _file_handler.setFormatter(logging.Formatter(
+        "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    logger.addHandler(_file_handler)
+    _file_ready = True
+except OSError as exc:  # 目录不可写时退回仅控制台，别让启动失败
+    logger.warning("日志文件初始化失败，改为仅控制台输出：%s", exc)
+
 logger.info("=" * 60)
-logger.info("电梯配件管理系统启动 | 日志输出方式=仅控制台 | 级别=DEBUG")
+logger.info(
+    "电梯配件管理系统启动 | 日志输出方式=%s | 级别=DEBUG",
+    str(_log_dir / "parts_system.log") if _file_ready else "仅控制台",
+)
 logger.info("=" * 60)
 
 # ========== 主数据库配置 ==========
@@ -38,7 +63,7 @@ DB_CONFIG = {
     "host": os.getenv("PARTS_DB_HOST", "localhost").strip(),
     "port": int(os.getenv("PARTS_DB_PORT", "3306")),
     "user": os.getenv("PARTS_DB_USER", "root").strip(),
-    "password": os.getenv("PARTS_DB_PASSWORD", "1234"),
+    "password": os.getenv("PARTS_DB_PASSWORD", "root"),
     "database": os.getenv("PARTS_DB_NAME", "parts_database").strip(),
     "charset": os.getenv("PARTS_DB_CHARSET", "utf8mb4").strip(),
     "cursorclass": pymysql.cursors.DictCursor,

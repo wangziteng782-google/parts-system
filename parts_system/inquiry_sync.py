@@ -13,6 +13,7 @@ from collections import defaultdict
 
 import pymysql
 
+from .model.migration import ensure_part_inquiries_table
 from .routes.inquiry_match import _pick_purchase_price
 
 BATCH = 500
@@ -35,7 +36,7 @@ TEST_DB = {
     "host": "localhost",
     "port": 3306,
     "user": "root",
-    "password": "1234",
+    "password": "root",
     "database": "parts_database",
     "charset": "utf8mb4",
     "connect_timeout": 10,
@@ -135,6 +136,15 @@ ON DUPLICATE KEY UPDATE order_goods_id=VALUES(order_goods_id), content=VALUES(co
 """
 
 log = logging.getLogger("inquiry_sync")
+
+# 一键询价时先写 order_goods_id，任务生成后在这里补上 mission_id。
+# 该 mission 已被人工匹配到别的 SKU 时唯一键会冲突，UPDATE IGNORE 保留人工结果。
+LINK_PART_INQUIRIES = """
+UPDATE IGNORE part_inquiries pi
+  JOIN inquiry_records r ON r.order_goods_id = pi.order_goods_id
+   SET pi.inquiry_mission_id = r.inquiry_mission_id
+ WHERE pi.inquiry_mission_id IS NULL
+"""
 
 
 def setup_logging():
@@ -244,6 +254,24 @@ def table_counts(conn):
     return counts
 
 
+def link_part_inquiries(conn, name):
+    """把一键询价的占位记录补上 mission_id；失败不影响本次同步。"""
+    try:
+        # 正式库可能还是老表结构，缺 order_goods_id 且 mission_id 非空，先补齐再回填
+        ensure_part_inquiries_table(conn)
+        cur = conn.cursor()
+        cur.execute(LINK_PART_INQUIRIES)
+        affected = cur.rowcount
+        conn.commit()
+        if affected:
+            log.info(f"[{name}] 一键询价关联回填 mission_id {affected} 条")
+        return affected
+    except Exception as exc:
+        log.warning(f"[{name}] 一键询价关联回填失败：{type(exc).__name__}: {exc}")
+        conn.rollback()
+        return 0
+
+
 def write_env(name, config, payload):
     """写一个环境，返回 True/False。失败只影响这个环境。"""
     try:
@@ -269,6 +297,7 @@ def write_env(name, config, payload):
                 f"[{name}]   {table:<24}库内 {before[table]:,} -> {after[table]:,}"
                 f"  本次新增 {added:+,}"
             )
+        link_part_inquiries(conn, name)
         return True
     except Exception as exc:
         log.error(f"[{name}] 写入失败：{type(exc).__name__}: {exc}")

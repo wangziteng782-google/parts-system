@@ -3,6 +3,8 @@
 负责所有前端页面的路由入口（首页、销售页、favicon 等），
 不处理数据逻辑，只渲染 templates 目录下的模板。
 """
+import os
+
 from fastapi import Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
@@ -33,5 +35,7 @@ async def sales_page(request: Request):
         name="sales.html",
         context={
             "sales_user_name": user.get("nickname") or user.get("username") or "内部同事",
+            # 仅测试环境用：没有从 OA 跳转进来时，用它顶着 OA 接口的 Admin-Token
+            "oa_test_token": (os.getenv("OA_TEST_TOKEN") or "").strip(),
         },
     )
