@@ -613,12 +613,19 @@
         // ========== 工具函数 ==========
         function parseImageUrls(value) {
             if (!value) return [];
-            let urls = [];
+            if (Array.isArray(value)) {
+                return value.map(u => String(u).trim()).filter(Boolean);
+            }
+            const text = String(value).trim();
             try {
-                const parsed = JSON.parse(value);
-                urls = Array.isArray(parsed) ? parsed : [String(value)];
-            } catch { urls = [String(value)]; }
-            return urls.filter(u => u && u.trim());
+                const parsed = JSON.parse(text);
+                if (Array.isArray(parsed)) {
+                    return parsed.map(u => String(u).trim()).filter(Boolean);
+                }
+                if (typeof parsed === 'string' && parsed.trim()) return [parsed.trim()];
+            } catch { /* 不是 JSON 数组，按分隔符拆分 */ }
+            // 兼容历史逗号/换行分隔格式，与后端 parse_image_urls 保持一致
+            return text.split(/[\r\n,]+/).map(u => u.trim()).filter(Boolean);
         }
 
         function isImageField(field) { return IMAGE_FIELDS.includes(field); }
