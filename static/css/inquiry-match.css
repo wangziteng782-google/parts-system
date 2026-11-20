@@ -1567,6 +1567,12 @@ img.im-record-thumb:hover {
     border-left-color: #e3e8f0;
 }
 
+/* 无需关联功能暂时不在页面展示：后端接口和数据字段保留，去掉这两行即恢复入口 */
+.im-tab[data-status="skipped"],
+.im-record-skip {
+    display: none;
+}
+
 @media (max-width: 1400px) {
     .im-workspace {
         grid-template-columns: minmax(252px, 1fr) minmax(240px, .95fr) minmax(340px, 1.3fr);
