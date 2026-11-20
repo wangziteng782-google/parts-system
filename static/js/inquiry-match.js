@@ -75,6 +75,7 @@ async function loadRecords() {
         document.getElementById('statAll').textContent = data.stats.all;
         document.getElementById('statPending').textContent = data.stats.pending;
         document.getElementById('statMatched').textContent = data.stats.matched;
+        document.getElementById('statSkipped').textContent = data.stats.skipped || 0;
         document.getElementById('recordCount').textContent = data.stats.all + ' 条';
         document.getElementById('recordPageInfo').textContent =
             `第 ${data.page} / ${data.pages} 页，共 ${data.total} 条`;
@@ -145,7 +146,7 @@ function renderRecords() {
         const checked = imState.batchIds.has(item.inquiry_mission_id);
         // 报价表只跟在当前选中的那条记录后面，没选中的保持紧凑
         const active = item.inquiry_mission_id === imState.selectedMissionId;
-        return `<div class="im-record ${active ? 'active' : ''} ${checked ? 'checked' : ''}"
+        return `<div class="im-record ${active ? 'active' : ''} ${checked ? 'checked' : ''} ${skipped ? 'is-skipped' : ''}"
                      data-id="${item.inquiry_mission_id}">
             ${imState.batchMode ? '<span class="im-check"></span>' : ''}
             <div class="n">${index + 1}</div>
@@ -1086,6 +1087,8 @@ function bindEvents() {
         });
         // 换筛选条件就退出批量，免得选中的记录已经不在结果里
         if (imState.batchMode) exitBatch();
+        // 无需关联的记录不参与批量关联
+        document.getElementById('batchToggle').disabled = imState.status === 'skipped';
         loadRecords();
     });
 

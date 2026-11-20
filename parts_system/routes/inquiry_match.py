@@ -328,6 +328,8 @@ async def list_match_records(
         items = pending
     elif status == "matched":
         items = matched
+    elif status == "skipped":
+        items = skipped
 
     # 同型号的询价排在一起，型号之间按各自最新一条的时间倒序。
     # items 进来时已按时间倒序，型号首次出现的位置就是它最新那条的位置。
