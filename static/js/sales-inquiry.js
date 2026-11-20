@@ -313,6 +313,11 @@ async function selectClient(client) {
     }
 }
 
+// 详情页一键询价默认走工具箱；缺规格、搜索无结果走采购
+function currentGoodsSource() {
+    return inquiryState.goodsSource || (inquiryState.sourceItem ? '工具箱' : '采购');
+}
+
 // 配件库商品 → OA 表单字段：只映射配件库确实有、表单也确实在填的
 function goodsPrefill(item) {
     if (!item) return {};
@@ -346,11 +351,13 @@ function goodsPrefill(item) {
     const groupId = typeof activeSalesVariantGroupId === 'string'
         ? activeSalesVariantGroupId.trim() : '';
     if (groupId) prefill.variantGroupId = groupId;
-    // 配件库商品图一起带过去，采购在 OA 里能直接看到原图
-    const images = Array.isArray(item.images) && item.images.length
-        ? item.images.filter(Boolean)
-        : (detailValue(item.image) ? [item.image] : []);
-    if (images.length) prefill.remoteImages = images;
+    // 工具箱来源的报价不需要配件库图片，只带型号和价格
+    if (currentGoodsSource() !== '工具箱') {
+        const images = Array.isArray(item.images) && item.images.length
+            ? item.images.filter(Boolean)
+            : (detailValue(item.image) ? [item.image] : []);
+        if (images.length) prefill.remoteImages = images;
+    }
     return prefill;
 }
 
@@ -370,7 +377,7 @@ function addGoodsRow(prefill = {}) {
         goods_spec: prefill.goods_spec || '',
         goods_type: 1,
         // 报价来源：缺规格走采购，配件库详情发起走工具箱，搜索无结果发起的也走采购
-        source: inquiryState.goodsSource || (inquiryState.sourceItem ? '工具箱' : '采购'),
+        source: currentGoodsSource(),
         inquiry_time: today(),
         factory: prefill.factory || '',
         ele_brand: prefill.ele_brand || '',

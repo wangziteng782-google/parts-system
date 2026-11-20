@@ -338,11 +338,14 @@ function renderVariantCombinations(combinations) {
     if (!combinations || !combinations.length) {
         return '<span class="list-spec-empty">—</span>';
     }
-    return combinations.map(combo => {
-        const name = escapeSalesHtml(combo.specification || '未命名组合');
-        const mark = combo.is_discontinued ? '<span class="list-discontinued-tag">已停产</span>' : '';
-        return `<div class="variant-combo-row">${name}${mark}</div>`;
-    }).join('');
+    // 列表只展示详情默认选中的那一条：每个规格维度取第一个值
+    const picked = [];
+    collectSpecDimensions(combinations).forEach((values, key) => {
+        picked.push(`${key}：${values[0]}`);
+    });
+    // 解析不出维度时退回第一条原文
+    const text = picked.length ? picked.join('；') : (combinations[0].specification || '未命名组合');
+    return `<div class="variant-combo-row">${escapeSalesHtml(text)}</div>`;
 }
 
 function detailPriceText(value) {
@@ -704,21 +707,6 @@ function syncSalesDetailInquiryButton() {
     // 提示条是表单的一部分，不跟着选规格才出现，销售扫一眼就能直接建单
     const showNotice = isParts && activeSalesVariantLoaded && hasSpec;
     notice.hidden = !showNotice;
-    if (showNotice) renderSalesSpecNoticeText();
-}
-
-function renderSalesSpecNoticeText() {
-    const target = document.getElementById('salesDetailSpecNoticeText');
-    if (!target) return;
-    const values = selectedSpecValues();
-    if (!values.length) {
-        target.innerHTML = '配件库没有的规格，可直接创建询价单，由采购确认货期与价格。';
-        return;
-    }
-    const text = escapeSalesHtml(values.join(' / '));
-    target.innerHTML = findSalesSpecEntry()
-        ? `当前选择 <b>${text}</b>，可直接创建询价单由采购确认货期与价格。`
-        : `当前选择 <b>${text}</b> 暂无对应配件，建议创建询价单由采购处理。`;
 }
 
 let activeSalesDetailImages = [];
@@ -865,15 +853,27 @@ async function loadSalesPartVariantQuotes(partId, item) {
         const items = data.items || [];
         activeSalesVariantQuotes = items;
         activeSalesVariantPool = buildSalesVariantPool(item, items);
-        // 不默认选中第一条，等用户自己点选，避免询价绑到错误的 SKU
-        activeSalesSpecMap = {};
-        activeSalesVariantGroupId = '';
-        activeSalesSpecState = 'incomplete';
         activeSalesVariantLoaded = true;
-        syncSalesDetailInquiryButton();
-        salesEls.detailPartsPriceContent.innerHTML = activeSalesVariantPool.length
-            ? renderSalesVariantPrices(activeSalesVariantPool)
-            : '<div class="sales-detail-price-empty">该产品暂无规格</div>';
+        if (!activeSalesVariantPool.length) {
+            activeSalesSpecMap = {};
+            activeSalesVariantGroupId = '';
+            activeSalesSpecState = 'incomplete';
+            syncSalesDetailInquiryButton();
+            salesEls.detailPartsPriceContent.innerHTML =
+                '<div class="sales-detail-price-empty">该产品暂无规格</div>';
+            return;
+        }
+        // 默认选中每个规格维度的第一个值，销售打开详情就能直接看到价格
+        const dimensions = collectSpecDimensions(activeSalesVariantPool);
+        if (dimensions.size) {
+            activeSalesSpecMap = Object.fromEntries(
+                [...dimensions.entries()].map(([key, values]) => [key, values[0]])
+            );
+            applySalesSpecSelection();
+        } else {
+            // 规格串解析不出维度时，直接选中第一条组合
+            selectSalesVariantQuote(0);
+        }
     } catch (error) {
         if (activeSalesDetailPartId !== partId) return;
         // 拉不到规格就清空选中，别把上一个商品的 SKU 带进询价
@@ -1192,6 +1192,13 @@ function bindSalesEvents() {
             missSpec: true,
         });
     });
+    // 询价流程的弹窗叠在详情页上层，ESC 一次只关最上面那层，不能连详情页一起关
+    const inquiryOverlaySelector = [
+        '#salesInquiryClientOverlay.show',
+        '#salesInquiryOverlay.show',
+        '.sales-inquiry-overlay.address.show',
+        '.inquiry-viewer.show',
+    ].join(',');
     document.addEventListener('keydown', event => {
         if (salesEls.feedbackOverlay.classList.contains('show')) return;
         if (salesEls.imageOverlay.classList.contains('show')) {
@@ -1200,7 +1207,9 @@ function bindSalesEvents() {
             else if (event.key === 'ArrowRight') salesImageGalleryNext();
             return;
         }
-        if (event.key === 'Escape' && salesEls.detailOverlay.classList.contains('show')) {
+        if (event.key !== 'Escape') return;
+        if (document.querySelector(inquiryOverlaySelector)) return;
+        if (salesEls.detailOverlay.classList.contains('show')) {
             closeSalesProductDetail();
         }
     });

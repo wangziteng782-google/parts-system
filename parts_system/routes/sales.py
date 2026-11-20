@@ -491,6 +491,11 @@ def _fetch_variant_combinations(part_ids: list[int]) -> dict[int, list[dict]]:
 
 
 def _fetch_inquiry_products(keyword: str, sort: str, limit: int):
+    """销售主查询的询价记录来源，读本地 inquiry_records（由 inquiry_sync 同步）。
+
+    2026-11-20：销售主查询已不展示询价记录，本函数暂未被调用，
+    恢复时把 sales_products 里注释掉的调用放开即可。
+    """
     where, params = [], []
     hidden_ids = _hidden_inquiry_mission_ids()
     if hidden_ids:
@@ -743,16 +748,19 @@ async def sales_products(
     parts_total, parts_items = _fetch_parts_products(
         keyword, sort, candidate_limit
     )
+    # 2026-11-20 销售主查询不再展示询价记录，OA 询价库查询暂停调用（需要恢复时取消下面注释）
+    # inquiry_total = 0
+    # inquiry_items = []
+    # try:
+    #     inquiry_total, inquiry_items = _fetch_inquiry_products(
+    #         keyword, sort, candidate_limit
+    #     )
+    # except Exception as exc:
+    #     oa_available = False
+    #     logger.warning("[销售查询] OA询价库暂不可用，仅展示配件库 | error=%s", exc)
     inquiry_total = 0
     inquiry_items = []
     oa_available = True
-    try:
-        inquiry_total, inquiry_items = _fetch_inquiry_products(
-            keyword, sort, candidate_limit
-        )
-    except Exception as exc:
-        oa_available = False
-        logger.warning("[销售查询] OA询价库暂不可用，仅展示配件库 | error=%s", exc)
 
     # 批量获取规格组合数据
     part_ids = [item['id'] for item in parts_items]
@@ -817,24 +825,18 @@ async def create_sales_inquiry_link(req: SalesInquiryLinkRequest):
     if part_id is None and group_id is None:
         raise HTTPException(status_code=400, detail="缺少关联的配件或规格")
 
-    user = get_current_user() or {}
-    matched_by = (
-        user.get("nickname") or user.get("username") or str(user.get("id") or "")
-    ) or None
-
     conn = get_db()
     try:
         cursor = conn.cursor()
+        # matched_by/matched_at 是采购核对时写的，一键询价只建关联，不能顶替核对人
         cursor.execute(
             """INSERT INTO part_inquiries
-                   (order_goods_id, part_id, variant_group_id, matched_by, matched_at)
-               VALUES (%s,%s,%s,%s,NOW())
+                   (order_goods_id, part_id, variant_group_id)
+               VALUES (%s,%s,%s)
                ON DUPLICATE KEY UPDATE
                    part_id=VALUES(part_id),
-                   variant_group_id=VALUES(variant_group_id),
-                   matched_by=VALUES(matched_by),
-                   matched_at=NOW()""",
-            (req.order_goods_id, part_id, group_id, matched_by),
+                   variant_group_id=VALUES(variant_group_id)""",
+            (req.order_goods_id, part_id, group_id),
         )
         conn.commit()
         logger.info(

@@ -174,6 +174,11 @@
                                 <em id="salesDetailPriceMultiplier"></em>
                             </div>
                             <div class="sales-detail-spec-groups" id="salesDetailPartsPriceContent"></div>
+                            <div class="sales-detail-spec-notice" id="salesDetailSpecNotice" hidden>
+                                <span class="sales-detail-spec-notice-icon">?</span>
+                                <span class="sales-detail-spec-notice-text">没有想要的规格？</span>
+                                <button type="button" class="sales-detail-spec-create" id="salesDetailSpecCreate">创建询价单</button>
+                            </div>
                         </div>
                         <div class="sales-detail-attrs">
                             <div id="salesDetailSubstituteWrap" hidden><label>替代型号</label><span id="salesDetailSubstitute"></span></div>
@@ -236,15 +241,6 @@
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div class="sales-detail-spec-notice" id="salesDetailSpecNotice" hidden>
-                <span class="sales-detail-spec-notice-icon">!</span>
-                <div class="sales-detail-spec-notice-body">
-                    <strong>未找到匹配的规格</strong>
-                    <span id="salesDetailSpecNoticeText"></span>
-                </div>
-                <button type="button" class="sales-detail-spec-create" id="salesDetailSpecCreate">创建询价单</button>
             </div>
 
             <footer class="sales-detail-footer sales-feedback-entry">
@@ -441,7 +437,7 @@
 
     <div class="sales-toast" id="salesToast"></div>
     <script>window.__OA_TEST_TOKEN__ = "{{ oa_test_token }}";</script>
-    <script src="/static/js/sales.js?v=20261116-6"></script>
-    <script src="/static/js/sales-inquiry.js?v=20261117-1"></script>
+    <script src="/static/js/sales.js?v=20261119-1"></script>
+    <script src="/static/js/sales-inquiry.js?v=20261119-2"></script>
 </body>
 </html>
