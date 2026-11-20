@@ -683,10 +683,8 @@ body {
 }
 
 .im-pill.skip {
-    padding: 1px 7px;
-    border: 1px dashed #cfd8e5;
-    background: #fff;
-    color: #7b8798;
+    background: #e9edf3;
+    color: #64748b;
 }
 
 .im-record-thumb {
@@ -1560,7 +1558,7 @@ img.im-record-thumb:hover {
 
 .im-record-skip.is-on {
     border-style: dashed;
-    color: #97a2b3;
+    color: #1f2937;
 }
 
 /* 已标记无需关联的记录整体压暗，避免和待关联混在一起看 */
