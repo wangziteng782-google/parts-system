@@ -1085,13 +1085,9 @@
             const container = document.getElementById('variantCombinationList');
             if (!container) return;
             const specNames = [...new Set([
-                ...specs.map(item => item.spec_name),
+                ...specs.filter(item => item.values && item.values.length).map(item => item.spec_name),
                 ...combinations.flatMap(combo => (combo.specs || []).map(item => item.name)),
             ])];
-            const pendingSpecNames = new Set(
-                specs.filter(item => item.is_required && (!item.values || !item.values.length))
-                    .map(item => item.spec_name)
-            );
             if (!combinations.length) {
                 container.innerHTML = '<div class="combination-empty">暂无规格组合</div>';
                 return;
@@ -1122,7 +1118,7 @@
                         : (configured ? 'combination-configured' : 'combination-pending'));
                 return `<tr class="${rowClass}">
                     ${specNames.map(name => `<td class="combination-spec-value">${escapeHtml(
-                        valueMap[name] || (pendingSpecNames.has(name) ? '待填写' : '-')
+                        valueMap[name] || '-'
                     )}</td>`).join('')}
                     <td><input class="combination-display-input" readonly
                         value="${escapeHtml(suppliers)}" placeholder="待配置：请输入供应商"
@@ -1395,7 +1391,7 @@
         function showAddValueInput(specName) {
             const wrap = document.getElementById('addValWrap_' + specName);
             if (!wrap) return;
-            wrap.innerHTML = `<input class="spec-inline-input" placeholder="输入规格值" onkeydown="if(event.key==='Enter')confirmAddValueInline(this,'${escapeHtml(specName)}');if(event.key==='Escape')cancelAddValueInline('${escapeHtml(specName)}');" onblur="if(!_specValueSaving&&!_specAddClicked)cancelAddValueInline('${escapeHtml(specName)}')"><button class="spec-save-btn" style="padding:4px 10px;font-size:12px" onmousedown="_specAddClicked=true;confirmAddValueInline(this.previousElementSibling,'${escapeHtml(specName)}');_specAddClicked=false">确定</button>`;
+            wrap.innerHTML = `<input class="spec-inline-input" placeholder="输入规格值" onkeydown="if(event.key==='Enter'||event.key==='Tab'){event.preventDefault();confirmAddValueInline(this,'${escapeHtml(specName)}');}else if(event.key==='Escape'){cancelAddValueInline('${escapeHtml(specName)}');}" onblur="if(!_specValueSaving&&!_specAddClicked)cancelAddValueInline('${escapeHtml(specName)}')"><button class="spec-save-btn" style="padding:4px 10px;font-size:12px" onmousedown="_specAddClicked=true;confirmAddValueInline(this.previousElementSibling,'${escapeHtml(specName)}');_specAddClicked=false">确定</button>`;
             wrap.querySelector('input').focus();
         }
         function cancelAddValueInline(specName) {
