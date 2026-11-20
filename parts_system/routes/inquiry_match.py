@@ -33,6 +33,11 @@ class BatchMatchSaveRequest(BaseModel):
     variant_group_id: Optional[str] = None
 
 
+class SkipLinkRequest(BaseModel):
+    inquiry_mission_id: int
+    skip: bool = True
+
+
 # 单次批量上限：一个型号组的量级通常几十条，500 足够，再多基本是选错了
 BATCH_LIMIT = 500
 
@@ -160,6 +165,19 @@ def _match_map() -> dict[int, dict]:
         conn.close()
 
 
+def _skip_link_ids() -> set:
+    """已标记“无需关联SKU”的询价任务 ID。标记存在本地 inquiry_records.skip_sku_link。"""
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT inquiry_mission_id FROM inquiry_records WHERE skip_sku_link=1"
+        )
+        return {int(row["inquiry_mission_id"]) for row in cursor.fetchall()}
+    finally:
+        conn.close()
+
+
 def _to_amount(value) -> float:
     """OA 里价格字段有 decimal 也有 varchar，统一转成数字，转不动当 0。"""
     try:
@@ -267,6 +285,7 @@ async def list_match_records(
     """询价列表。关键词在 OA 侧过滤，匹配状态在本地合并。"""
     rows = _fetch_inquiries(keyword, INQUIRY_SINCE)
     matches = _match_map()
+    skips = _skip_link_ids()
 
     items = []
     for row in rows:
@@ -293,11 +312,18 @@ async def list_match_records(
             "matched_part_brand": match.get("part_brand"),
             "matched_part_type": match.get("part_type"),
             "matched_part_sku_count": match.get("part_sku_count"),
+            "skip_sku_link": mission_id in skips,
         })
 
-    pending = [item for item in items if not item["part_id"]]
+    pending = [item for item in items if not item["part_id"] and not item["skip_sku_link"]]
     matched = [item for item in items if item["part_id"]]
-    stats = {"all": len(items), "pending": len(pending), "matched": len(matched)}
+    skipped = [item for item in items if item["skip_sku_link"]]
+    stats = {
+        "all": len(items),
+        "pending": len(pending),
+        "matched": len(matched),
+        "skipped": len(skipped),
+    }
     if status == "pending":
         items = pending
     elif status == "matched":
@@ -490,6 +516,11 @@ async def save_match(req: MatchSaveRequest):
                    matched_at=NOW()""",
             (req.inquiry_mission_id, req.part_id, group_id or None, matched_by),
         )
+        # 真正关联了就把“无需关联”标记清掉，避免两种状态打架
+        cursor.execute(
+            "UPDATE inquiry_records SET skip_sku_link=0 WHERE inquiry_mission_id=%s",
+            (req.inquiry_mission_id,),
+        )
         _log_match_change(
             cursor,
             user_id=user.get("id"),
@@ -508,6 +539,34 @@ async def save_match(req: MatchSaveRequest):
     return {"message": "已保存"}
 
 
+@app.post("/api/inquiry-match/skip")
+async def set_skip_link(req: SkipLinkRequest):
+    """标记/取消“这条询价不需要关联任何 SKU”。标记后不再计入待关联。"""
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT 1 FROM inquiry_records WHERE inquiry_mission_id=%s",
+            (req.inquiry_mission_id,),
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="询价记录不存在")
+        cursor.execute(
+            "UPDATE inquiry_records SET skip_sku_link=%s WHERE inquiry_mission_id=%s",
+            (1 if req.skip else 0, req.inquiry_mission_id),
+        )
+        conn.commit()
+    except HTTPException:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return {
+        "message": "已标记为无需关联" if req.skip else "已取消无需关联标记",
+        "skip_sku_link": req.skip,
+    }
+
+
 @app.get("/api/inquiry-match/batch/preview")
 async def batch_preview(keyword: str = "", status: str = "all"):
     """批量关联用：当前搜索下每条询价的 id、规格型号和已关联产品。
@@ -519,11 +578,20 @@ async def batch_preview(keyword: str = "", status: str = "all"):
     if not keyword:
         return {"items": [], "total": 0, "hint": "先搜索型号再按组批量选择"}
     matches = _match_map()
+    skips = _skip_link_ids()
     items = []
     for row in _fetch_inquiries(keyword, INQUIRY_SINCE):
         mission_id = int(row["inquiry_mission_id"])
         matched = matches.get(mission_id) or {}
-        row_status = "matched" if matched.get("part_id") else "pending"
+        if matched.get("part_id"):
+            row_status = "matched"
+        elif mission_id in skips:
+            row_status = "skipped"
+        else:
+            row_status = "pending"
+        # 已标记无需关联的记录不参与批量关联
+        if row_status == "skipped":
+            continue
         if status in ("pending", "matched") and row_status != status:
             continue
         items.append({
@@ -624,6 +692,11 @@ async def batch_save_match(req: BatchMatchSaveRequest):
                    matched_by=VALUES(matched_by),
                    matched_at=NOW()""",
             [(mid, req.part_id, group_id or None, matched_by) for mid in mission_ids],
+        )
+        cursor.execute(
+            f"UPDATE inquiry_records SET skip_sku_link=0 "
+            f"WHERE inquiry_mission_id IN ({placeholders})",
+            mission_ids,
         )
         detail = f"批量关联 {len(mission_ids)} 条询价（规格 {spec_text}）"
         if overwritten:

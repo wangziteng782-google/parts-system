@@ -682,6 +682,11 @@ body {
     color: #1e8e3e;
 }
 
+.im-pill.skip {
+    background: #eef1f5;
+    color: #5c6b7f;
+}
+
 .im-record-thumb {
     width: 62px;
     height: 62px;
@@ -1527,6 +1532,24 @@ img.im-record-thumb:hover {
 
 .im-record-detail:hover {
     text-decoration: underline;
+}
+
+.im-record-skip {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: #8a94a6;
+    font-size: 12.5px;
+    cursor: pointer;
+}
+
+.im-record-skip:hover {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+.im-record-skip.is-on {
+    color: var(--accent);
 }
 
 @media (max-width: 1400px) {

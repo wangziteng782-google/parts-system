@@ -130,6 +130,9 @@ function renderRecords() {
     }
     list.innerHTML = imState.records.map((item, index) => {
         const matched = !!item.part_id;
+        const skipped = !matched && !!item.skip_sku_link;
+        const pillClass = matched ? 'ok' : (skipped ? 'skip' : '');
+        const pillText = matched ? '已匹配' : (skipped ? '无需关联' : '待匹配');
         const rawPrice = Number(item.purchase_price);
         const priceLabel = item.price_label || '';
         const price = rawPrice > 0
@@ -149,7 +152,7 @@ function renderRecords() {
             <div class="rmain">
                 <div class="rname">
                     ${escapeHtml(item.product_name || '未命名')}
-                    <span class="im-pill ${matched ? 'ok' : ''}">${matched ? '已匹配' : '待匹配'}</span>
+                    <span class="im-pill ${pillClass}">${pillText}</span>
                 </div>
                 <div class="model">${escapeHtml(item.specification || '（无规格型号）')}</div>
                 <div class="rmeta">
@@ -169,6 +172,8 @@ function renderRecords() {
             <div class="rside">
                 ${thumb}
                 <button type="button" class="im-record-detail" data-detail="${item.inquiry_mission_id}">详情</button>
+                ${matched ? '' : `<button type="button" class="im-record-skip${skipped ? ' is-on' : ''}"
+                        data-skip="${item.inquiry_mission_id}">${skipped ? '取消标记' : '无需关联'}</button>`}
             </div>
             ${item.quotes && item.quotes.length ? renderQuoteTable(item.quotes) : ''}
         </div>`;
@@ -187,6 +192,12 @@ function renderRecords() {
             openDetail(Number(btn.dataset.detail));
         };
     });
+    list.querySelectorAll('[data-skip]').forEach(btn => {
+        btn.onclick = event => {
+            event.stopPropagation();
+            toggleSkipLink(Number(btn.dataset.skip));
+        };
+    });
     list.querySelectorAll('img[data-image]').forEach(img => {
         img.onclick = event => {
             event.stopPropagation();
@@ -194,6 +205,23 @@ function renderRecords() {
             openImagePreview(img.dataset.image, item.images);
         };
     });
+}
+
+// 标记这条询价不需要关联任何 SKU：标记后不再计入“待关联”
+async function toggleSkipLink(missionId) {
+    const item = imState.records.find(row => row.inquiry_mission_id === missionId);
+    const skip = !(item && item.skip_sku_link);
+    try {
+        await imFetch('/api/inquiry-match/skip', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({inquiry_mission_id: missionId, skip}),
+        });
+        showToast(skip ? '已标记为无需关联' : '已取消标记');
+        loadRecords();
+    } catch (error) {
+        showToast(error.message || '操作失败', 'error');
+    }
 }
 
 // 多条供应商报价直接摊在询价记录里，省得逐条点详情比对

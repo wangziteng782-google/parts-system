@@ -524,6 +524,7 @@ def ensure_inquiry_tables(conn):
             quote_updated_at DATETIME NULL COMMENT '报价更新时间',
             create_user VARCHAR(100) NULL COMMENT '创建人',
             create_time DATETIME NULL COMMENT '创建时间',
+            skip_sku_link TINYINT(1) NOT NULL DEFAULT 0 COMMENT '无需关联SKU：1是',
             PRIMARY KEY (inquiry_mission_id),
             KEY idx_order_goods (order_goods_id),
             KEY idx_specification (specification),
@@ -577,6 +578,9 @@ def ensure_inquiry_tables(conn):
         ("post_fee_has_tax_purchase",
          "ADD COLUMN post_fee_has_tax_purchase VARCHAR(64) NULL COMMENT '任务含税运费' "
          "AFTER post_fee_purchase"),
+        ("skip_sku_link",
+         "ADD COLUMN skip_sku_link TINYINT(1) NOT NULL DEFAULT 0 "
+         "COMMENT '无需关联SKU：1是' AFTER create_time"),
     ):
         _ensure_inquiry_column(cursor, "inquiry_records", column, ddl_suffix)
     conn.commit()
