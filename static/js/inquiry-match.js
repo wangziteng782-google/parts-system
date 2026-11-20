@@ -208,20 +208,67 @@ function renderRecords() {
     });
 }
 
-// 标记这条询价不需要关联任何 SKU：标记后不再计入“待关联”
+// 标记这条询价不需要关联任何 SKU：标记后不再计入“待关联”。
+// 这里只改当前这一行和计数，不整页重载，避免列表跳动和滚动位置丢失。
 async function toggleSkipLink(missionId) {
     const item = imState.records.find(row => row.inquiry_mission_id === missionId);
     const skip = !(item && item.skip_sku_link);
+    const button = document.querySelector(`#recordList .im-record-skip[data-skip="${missionId}"]`);
+    if (button) button.disabled = true;
     try {
-        await imFetch('/api/inquiry-match/skip', {
+        const data = await imFetch('/api/inquiry-match/skip', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({inquiry_mission_id: missionId, skip}),
         });
-        showToast(skip ? '已标记为无需关联' : '已取消标记');
-        loadRecords();
+        const skippedNow = data && typeof data.skip_sku_link === 'boolean' ? data.skip_sku_link : skip;
+        if (item) item.skip_sku_link = skippedNow;
+        updateSkipCounters(skippedNow);
+        applyRecordSkipState(item);
+        showToast(skippedNow ? '已标记为无需关联' : '已取消标记');
     } catch (error) {
         showToast(error.message || '操作失败', 'error');
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+// 待关联 ↔ 无需关联 两个数字就地加减，不重新请求
+function updateSkipCounters(skippedNow) {
+    const pendingEl = document.getElementById('statPending');
+    const skippedEl = document.getElementById('statSkipped');
+    if (pendingEl) {
+        pendingEl.textContent = Math.max(0, Number(pendingEl.textContent || 0) + (skippedNow ? -1 : 1));
+    }
+    if (skippedEl) {
+        skippedEl.textContent = Math.max(0, Number(skippedEl.textContent || 0) + (skippedNow ? 1 : -1));
+    }
+}
+
+// 重绘单条记录的标签/按钮；在“无需关联”页取消标记时直接把该行移走
+function applyRecordSkipState(item) {
+    if (!item) return;
+    const el = document.querySelector(`#recordList .im-record[data-id="${item.inquiry_mission_id}"]`);
+    if (!el) return;
+    const skipped = !!item.skip_sku_link;
+    if (imState.status === 'skipped' && !skipped) {
+        el.remove();
+        if (!document.querySelector('#recordList .im-record')) {
+            document.getElementById('recordList').innerHTML =
+                '<div class="im-empty">没有符合条件的询价记录</div>';
+        }
+        return;
+    }
+    el.classList.toggle('is-skipped', skipped);
+    const pill = el.querySelector('.im-pill');
+    if (pill) {
+        pill.classList.toggle('skip', skipped);
+        pill.textContent = skipped ? '无需关联' : '待匹配';
+    }
+    const btn = el.querySelector('.im-record-skip');
+    if (btn) {
+        btn.classList.toggle('is-on', skipped);
+        btn.textContent = skipped ? '取消标记' : '无需关联';
     }
 }
 
