@@ -525,11 +525,11 @@ body.sales-list-view .goods-list-wrap { display: block; }
 /* 商品头部：图库 + 摘要 + 价格盒 */
 .sales-detail-head { display: flex; gap: 24px; padding: 20px; background: #fff; border-bottom: 8px solid #f5f7fa; }
 .sales-detail-gallery { flex: 0 0 auto; display: flex; gap: 10px; }
-.sales-detail-image-wrap { position: relative; flex: 0 0 228px; width: 228px; height: 228px; }
-.sales-detail-image { width: 228px; height: 228px; flex: 0 0 228px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #e8ecf0; border-radius: 8px; background: #f7fafc; }
-.sales-detail-image img { width: 224px; height: 224px; object-fit: contain; }
-/* 图片多的时候竖向排列，超出高度在列内滚动 */
-.sales-detail-thumbs { order: -1; flex: 0 0 66px; width: 66px; max-height: 228px; display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-gutter: stable; }
+.sales-detail-image-wrap { position: relative; flex: 0 0 276px; width: 276px; height: 276px; }
+.sales-detail-image { width: 276px; height: 276px; flex: 0 0 276px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #e8ecf0; border-radius: 8px; background: #f7fafc; }
+.sales-detail-image img { width: 100%; height: 100%; object-fit: contain; }
+/* 图片多的时候竖向排列，超出高度在列内滚动；高度跟主图对齐 */
+.sales-detail-thumbs { order: -1; flex: 0 0 66px; width: 66px; max-height: 276px; display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-gutter: stable; }
 .sales-detail-thumbs::-webkit-scrollbar { width: 4px; }
 .sales-detail-thumbs::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 2px; }
 /* 宽度跟随列宽（滚动条出现时自动收窄），保证单张图片不被裁切；52px 高可让 4 张完整排下 */
@@ -547,14 +547,16 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-meta { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0 0; color: #718096; font-size: 12.5px; }
 .sales-detail-meta b { color: #4a5568; font-weight: 500; }
 
-.sales-detail-price-box { display: flex; align-items: flex-end; gap: 30px; margin-top: 12px; padding: 12px 16px; border: 1px solid #fde2e2; border-radius: 8px; background: #fef7f7; }
-.sales-detail-price-main { display: flex; align-items: baseline; gap: 8px; }
-.sales-detail-price-label { color: #9b6a6a; font-size: 12px; }
-.sales-detail-price { color: #dc2626; font-size: 28px; font-weight: 700; letter-spacing: -.5px; }
+/* 价格条：浅粉底色，三段价格用竖线分隔 */
+.sales-detail-price-box { display: flex; align-items: center; margin-top: 14px; padding: 9px 20px; border: 0; border-radius: 8px; background: #fdf3f3; }
+.sales-detail-price-main { display: flex; align-items: baseline; gap: 8px; padding-right: 24px; }
+.sales-detail-price-label { color: #8d6b6b; font-size: 13px; }
+.sales-detail-price { color: #e8412f; font-size: 27px; font-weight: 700; letter-spacing: -.5px; line-height: 1.25; }
 /* 没有价格的档位留占位，不撑大红字 */
 .sales-detail-price.is-empty { color: #c3ccd9; font-size: 20px; font-weight: 500; }
-.sales-detail-price-extra { display: flex; flex-wrap: wrap; gap: 4px 22px; padding-bottom: 5px; color: #9b6a6a; font-size: 14px; }
-.sales-detail-price-extra b { color: #a84545; font-size: 15px; font-weight: 600; }
+.sales-detail-price-extra { display: flex; align-items: center; color: #8d6b6b; font-size: 13px; }
+.sales-detail-price-extra > span { display: inline-flex; align-items: baseline; gap: 6px; padding: 0 24px; border-left: 1px solid #f0d9d9; line-height: 1.3; }
+.sales-detail-price-extra b { color: #e8412f; font-size: 17px; font-weight: 700; }
 
 .sales-detail-attrs { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 12px; color: #4a5568; font-size: 12.5px; }
 .sales-detail-attrs > div { display: flex; gap: 5px; min-width: 0; }
@@ -611,18 +613,19 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-crumb-sep { color: #c3ccd9; font-size: 13px; }
 .sales-detail-crumb-current { max-width: 340px; overflow: hidden; color: #4a5568; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 规格选择 */
-.sales-detail-variant-picker { margin-top: 16px; }
+/* 规格选择：属性名在左，值按钮白底描边，选中蓝框浅蓝底 */
+.sales-detail-variant-picker { margin-top: 18px; }
 .sales-detail-variant-picker[hidden] { display: none; }
-.sales-detail-variant-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; color: #718096; font-size: 12.5px; }
+.sales-detail-variant-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; color: #8a94a6; font-size: 12px; }
 .sales-detail-variant-head em { color: #4285f4; font-size: 12px; font-style: normal; font-weight: 600; }
-.sales-detail-spec-groups { display: flex; flex-direction: column; gap: 10px; }
-.sales-detail-spec-group { display: flex; align-items: flex-start; gap: 14px; }
-.sales-detail-spec-group-label { flex: 0 0 76px; padding-top: 6px; color: #718096; font-size: 12.5px; line-height: 1.4; }
-.sales-detail-spec-values { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.sales-detail-spec-option { padding: 5px 14px; border: 1px solid transparent; border-radius: 4px; background: #f5f7fa; color: #4a5568; font-size: 12.5px; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
-.sales-detail-spec-option:hover { color: #4285f4; background: #eef4ff; }
-.sales-detail-spec-option.active { border-color: #4285f4; background: #fff; color: #4285f4; font-weight: 500; }
+.sales-detail-spec-groups { display: flex; flex-direction: column; gap: 12px; }
+.sales-detail-spec-group { display: flex; align-items: center; gap: 0; }
+/* “适用电梯品牌”这类长属性名不换行，统一左列宽度保证值按钮上下对齐 */
+.sales-detail-spec-group-label { flex: 0 0 96px; padding-top: 0; color: #8a94a6; font-size: 13px; line-height: 1.5; white-space: nowrap; }
+.sales-detail-spec-values { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+.sales-detail-spec-option { min-width: 62px; padding: 6px 16px; border: 1px solid #e6e9ef; border-radius: 6px; background: #fff; color: #4c5566; font-size: 13px; line-height: 1.5; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
+.sales-detail-spec-option:hover { border-color: #b9d3fb; background: #f7faff; color: #3478f6; }
+.sales-detail-spec-option.active { border-color: #4a86f7; background: #f2f7ff; color: #3478f6; font-weight: 600; }
 
 /* 规格按钮下方的一行式询价引导：规格选不到就直接转询价单 */
 .sales-detail-spec-notice { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; padding: 6px 10px; border: 1px solid #ffe1a8; border-radius: 6px; background: #fffbf0; }
