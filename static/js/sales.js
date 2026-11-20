@@ -625,11 +625,38 @@ function renderSalesVariantPrices(pool) {
         </div>`).join('');
 }
 
-// 只改当前维度，不替用户决定别的维度，这样才可能选出库里没有的组合
+// 点某个规格值：优先在当前其它维度下找组合，凑不出就只按这一维找，
+// 命中后整组规格一起联动，其他维度自动切到该组合里存在的值
 function selectSalesSpecValue(button) {
     const key = button.dataset.specKey;
     const value = button.dataset.specValue;
     if (!key || !value) return;
+    const specsOf = entry => parseSalesSpecs(entry.specification);
+    const has = (specs, k, v) => specs.some(spec => spec.key === k && spec.value === v);
+    const probe = Object.entries({...activeSalesSpecMap, [key]: value})
+        .filter(([, v]) => detailValue(v));
+    const matches = (entry, checks) => {
+        const specs = specsOf(entry);
+        return checks.every(([k, v]) => has(specs, k, v));
+    };
+    // 有报价的组合优先，避免同样匹配时停在没价的那条
+    const pick = candidates => {
+        const list = candidates.filter(index => index >= 0);
+        return list.find(index => hasUsableVariantPrice(activeSalesVariantPool[index].quote))
+            ?? list[0] ?? -1;
+    };
+    const strict = activeSalesVariantPool.map((entry, index) => matches(entry, probe) ? index : -1);
+    let index = pick(strict);
+    if (index < 0) {
+        // 该值在当前其它维度下没有组合（常见于「110V 只有二手」这种），只按这一维找
+        const relaxed = activeSalesVariantPool.map((entry, i) =>
+            has(specsOf(entry), key, value) ? i : -1);
+        index = pick(relaxed);
+    }
+    if (index >= 0) {
+        selectSalesVariantQuote(index);
+        return;
+    }
     activeSalesSpecMap = {...activeSalesSpecMap, [key]: value};
     applySalesSpecSelection();
 }
