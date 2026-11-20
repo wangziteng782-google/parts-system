@@ -12,3 +12,7 @@ __pycache__/
 logs/
 .playwright-cli/
 .trae-html-share-packages/
+.idea/
+uvicorn.err
+uvicorn.out
+tmp/
