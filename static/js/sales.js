@@ -879,17 +879,11 @@ async function loadSalesPartVariantQuotes(partId, item) {
                 '<div class="sales-detail-price-empty">该产品暂无规格</div>';
             return;
         }
-        // 打开详情不预选任何规格，由销售自己点
-        activeSalesSpecMap = {};
-        activeSalesVariantGroupId = '';
-        activeSalesSpecState = 'incomplete';
-        if (collectSpecDimensions(activeSalesVariantPool).size) {
-            applySalesSpecSelection();
-        } else {
-            // 规格串解析不出维度时，直接渲染一行一条组合，等用户自己点
-            salesEls.detailPartsPriceContent.innerHTML = renderSalesVariantPrices(activeSalesVariantPool);
-            syncSalesDetailInquiryButton();
-        }
+        // 打开详情默认选中一条组合：优先有报价的那条，保证一进来就能看到价格
+        const defaultIndex = activeSalesVariantPool.findIndex(
+            entry => hasUsableVariantPrice(entry.quote)
+        );
+        selectSalesVariantQuote(defaultIndex >= 0 ? defaultIndex : 0);
     } catch (error) {
         if (activeSalesDetailPartId !== partId) return;
         // 拉不到规格就清空选中，别把上一个商品的 SKU 带进询价
