@@ -296,17 +296,6 @@ function renderPartsInvoiceInfo(item) {
         .join('');
 }
 
-function renderInquiryQuoteInfo(item) {
-    if (item.record_source !== 'inquiry') return '';
-    return [
-        ['报价类型', quotationTypeText(item.quotation_type)],
-        ['无税运费报价', detailAmountText(item.post_fee_purchase)],
-        ['含税运费报价', detailAmountText(item.post_fee_has_tax_purchase)],
-    ].filter(([, value]) => detailValue(value))
-        .map(([label, value]) => `<div><label>${label}</label><span>${escapeSalesHtml(value)}</span></div>`)
-        .join('');
-}
-
 function renderSalesListRow(item, index) {
     const image = escapeSalesHtml(safeSalesImage(item.image));
     const isSubstitute = item.record_source_label === '替代品';
@@ -327,7 +316,6 @@ function renderSalesListRow(item, index) {
         <td class="list-specification">${source === 'inquiry' ? escapeSalesHtml(salesText(item.specification)) : renderVariantCombinations(item.variant_combinations)}</td>
         <td>${priceHtml}${formatExpiryDeadline(item.expire_date, item.quote_updated_at)}</td>
         <td><div class="sales-list-extra">${renderPartsInvoiceInfo(item)}</div></td>
-        <td><div class="sales-list-extra">${renderInquiryQuoteInfo(item)}</div></td>
         <td>${escapeSalesHtml(formatSalesDate(item.quote_updated_at))}</td>
         <td>${item.modification_completed ? '<span class="sales-completed-badge">已完成</span>' : ''}</td>
         <td><button class="sales-detail-button" type="button" data-sales-detail-index="${index}">详情</button></td>

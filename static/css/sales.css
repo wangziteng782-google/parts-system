@@ -126,7 +126,7 @@ button { cursor: pointer; }
 .sales-card-detail-button { width: 100%; height: 35px; margin-top: 13px; color: var(--sales-blue); border: 1px solid #cfe0ff; border-radius: 7px; background: var(--sales-blue-soft); font-weight: 700; }
 .sales-card-detail-button:hover { color: #fff; border-color: var(--sales-blue); background: var(--sales-blue); }
 
-.goods-list-wrap { display: none; padding-top: 16px; overflow-x: auto; }
+.goods-list-wrap { display: none; padding-top: 16px; overflow-x: hidden; }
 body.sales-list-view .goods-grid { display: none; }
 body.sales-list-view .goods-list-wrap { display: block; }
 .goods-grid[hidden], .goods-list-wrap[hidden] { display: none !important; }
@@ -135,7 +135,7 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .goods-list td { padding: 12px; color: #5e6b80; border-bottom: 1px solid #edf1f6; vertical-align: middle; }
 .goods-list tbody tr:last-child td { border-bottom: 0; }
 .goods-list tbody tr:hover td { background: #fbfdff; }
-.list-product { display: flex; width: 240px; align-items: center; gap: 11px; }
+.list-product { display: flex; max-width: 240px; align-items: center; gap: 11px; }
 .list-image-button { width: 64px; height: 64px; flex: 0 0 64px; overflow: hidden; padding: 0; border: 1px solid #edf1f6; border-radius: 7px; background: #fafcff; cursor: zoom-in; }
 .list-image-button:hover { border-color: var(--sales-blue); box-shadow: 0 0 0 3px rgba(57,120,246,.1); }
 .list-image-button img { width: 62px; height: 62px; display: block; object-fit: contain; }
