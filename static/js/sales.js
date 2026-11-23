@@ -606,47 +606,48 @@ function renderSalesVariantPrices(pool) {
         <div class="sales-detail-spec-group">
             <span class="sales-detail-spec-group-label">${escapeSalesHtml(key)}</span>
             <div class="sales-detail-spec-values">
-                ${values.map(value => `<button type="button" class="sales-detail-spec-option${activeSalesSpecMap[key] === value ? ' active' : ''}"
+                ${values.map(value => {
+                    const selected = activeSalesSpecMap[key] === value;
+                    // 凑不出组合的值置灰不可点，和产品关联页的 SKU 选择保持一致
+                    const disabled = !selected && !salesValueAvailable(key, value);
+                    return `<button type="button" class="sales-detail-spec-option${selected ? ' active' : ''}${disabled ? ' is-disabled' : ''}"
                                 data-spec-key="${escapeSalesHtml(key)}" data-spec-value="${escapeSalesHtml(value)}"
-                                onclick="selectSalesSpecValue(this)">${escapeSalesHtml(value)}</button>`).join('')}
+                                ${disabled ? 'disabled aria-disabled="true"' : ''}
+                                onclick="selectSalesSpecValue(this)">${escapeSalesHtml(value)}</button>`;
+                }).join('')}
             </div>
         </div>`).join('');
 }
 
-// 点某个规格值：优先在当前其它维度下找组合，凑不出就只按这一维找，
-// 命中后整组规格一起联动，其他维度自动切到该组合里存在的值
+// 当前已选条件下还能凑出真实组合的规格值才可点
+function salesValueAvailable(key, value) {
+    const pool = activeSalesVariantPool;
+    if (!pool.length) return true;
+    const specsOf = entry => parseSalesSpecs(entry.specification);
+    // 该规格名没进任何组合（刚加还没配组合）时不做限制
+    if (!pool.some(entry => specsOf(entry).some(spec => spec.key === key))) return true;
+    return pool.some(entry => {
+        const map = specsToMap(specsOf(entry));
+        if (map[key] !== value) return false;
+        return Object.entries(activeSalesSpecMap).every(([k, v]) =>
+            !detailValue(v) || k === key || map[k] === v);
+    });
+}
+
+// 点规格值只切换这一维：再点一次取消选中，不联动、不预选其它维度
 function selectSalesSpecValue(button) {
     const key = button.dataset.specKey;
     const value = button.dataset.specValue;
     if (!key || !value) return;
-    const specsOf = entry => parseSalesSpecs(entry.specification);
-    const has = (specs, k, v) => specs.some(spec => spec.key === k && spec.value === v);
-    const probe = Object.entries({...activeSalesSpecMap, [key]: value})
-        .filter(([, v]) => detailValue(v));
-    const matches = (entry, checks) => {
-        const specs = specsOf(entry);
-        return checks.every(([k, v]) => has(specs, k, v));
-    };
-    // 有报价的组合优先，避免同样匹配时停在没价的那条
-    const pick = candidates => {
-        const list = candidates.filter(index => index >= 0);
-        return list.find(index => hasUsableVariantPrice(activeSalesVariantPool[index].quote))
-            ?? list[0] ?? -1;
-    };
-    const strict = activeSalesVariantPool.map((entry, index) => matches(entry, probe) ? index : -1);
-    let index = pick(strict);
-    if (index < 0) {
-        // 该值在当前其它维度下没有组合（常见于「110V 只有二手」这种），只按这一维找
-        const relaxed = activeSalesVariantPool.map((entry, i) =>
-            has(specsOf(entry), key, value) ? i : -1);
-        index = pick(relaxed);
-    }
-    if (index >= 0) {
-        selectSalesVariantQuote(index);
-        return;
-    }
-    activeSalesSpecMap = {...activeSalesSpecMap, [key]: value};
+    const next = {...activeSalesSpecMap};
+    if (next[key] === value) delete next[key];
+    else next[key] = value;
+    activeSalesSpecMap = next;
     applySalesSpecSelection();
+    // 没选满就没有组合价，清掉上一个组合留下的数字
+    if (activeSalesSpecState === 'incomplete') {
+        setSalesDetailPrices('', '', '', true);
+    }
 }
 
 // 当前已选的值，按维度顺序返回
@@ -878,16 +879,16 @@ async function loadSalesPartVariantQuotes(partId, item) {
                 '<div class="sales-detail-price-empty">该产品暂无规格</div>';
             return;
         }
-        // 默认选中每个规格维度的第一个值，销售打开详情就能直接看到价格
-        const dimensions = collectSpecDimensions(activeSalesVariantPool);
-        if (dimensions.size) {
-            activeSalesSpecMap = Object.fromEntries(
-                [...dimensions.entries()].map(([key, values]) => [key, values[0]])
-            );
+        // 打开详情不预选任何规格，由销售自己点
+        activeSalesSpecMap = {};
+        activeSalesVariantGroupId = '';
+        activeSalesSpecState = 'incomplete';
+        if (collectSpecDimensions(activeSalesVariantPool).size) {
             applySalesSpecSelection();
         } else {
-            // 规格串解析不出维度时，直接选中第一条组合
-            selectSalesVariantQuote(0);
+            // 规格串解析不出维度时，直接渲染一行一条组合，等用户自己点
+            salesEls.detailPartsPriceContent.innerHTML = renderSalesVariantPrices(activeSalesVariantPool);
+            syncSalesDetailInquiryButton();
         }
     } catch (error) {
         if (activeSalesDetailPartId !== partId) return;

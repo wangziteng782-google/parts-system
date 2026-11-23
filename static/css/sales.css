@@ -626,6 +626,9 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-spec-option { min-width: 62px; padding: 6px 16px; border: 1px solid #e6e9ef; border-radius: 6px; background: #fff; color: #4c5566; font-size: 13px; line-height: 1.5; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
 .sales-detail-spec-option:hover { border-color: #b9d3fb; background: #f7faff; color: #3478f6; }
 .sales-detail-spec-option.active { border-color: #4a86f7; background: #f2f7ff; color: #3478f6; font-weight: 600; }
+/* 当前已选条件下凑不出组合的值：置灰 + 禁止光标 */
+.sales-detail-spec-option.is-disabled { border-style: dashed; border-color: #e6e9ef; background: #fafafa; color: #c0c4cc; cursor: not-allowed; }
+.sales-detail-spec-option.is-disabled:hover { border-color: #e6e9ef; background: #fafafa; color: #c0c4cc; }
 
 /* 规格按钮下方的一行式询价引导：规格选不到就直接转询价单 */
 .sales-detail-spec-notice { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; padding: 6px 10px; border: 1px solid #ffe1a8; border-radius: 6px; background: #fffbf0; }
