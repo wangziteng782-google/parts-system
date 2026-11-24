@@ -490,23 +490,7 @@ function renderGoodsRows() {
                 </span>
             </div>`).join('');
         const files = good.files || [];
-        const thumbs = files.map((item, fileIndex) => {
-            const isVideo = (item.file?.type || '').startsWith('video/');
-            const media = isVideo
-                ? `<video src="${item.url}" muted preload="metadata"></video>`
-                : `<img src="${item.url}" alt="">`;
-            const zoom = isVideo
-                ? ''
-                : `<button type="button" data-preview-image="${fileIndex}" title="预览">${ICON_ZOOM_IN}</button>`;
-            return `
-            <div class="inquiry-upload-item"${isVideo ? '' : ` data-preview-image="${fileIndex}"`}>
-                ${media}
-                <span class="inquiry-upload-actions">
-                    ${zoom}
-                    <button type="button" data-remove-image="${fileIndex}" title="删除">${ICON_DELETE}</button>
-                </span>
-            </div>`;
-        }).join('');
+        const thumbs = files.map(item => imageThumbHtml(good, item)).join('');
         return `
         <article class="inquiry-goods-card" data-goods-index="${index}">
             <header class="inquiry-goods-head">
@@ -586,15 +570,117 @@ function imagesFromTransfer(transfer) {
         .filter(Boolean);
 }
 
+let uploadItemSeq = 0;
+
+const ICON_CHECK = '<svg viewBox="0 0 1024 1024" width="12" height="12" fill="currentColor"><path d="M912 190h-69.9c-9.8 0-19.1 4.5-25.1 12.2L404.7 724.5 207 474a32 32 0 0 0-25.6-12.1H111.4c-7.7 0-12.2 8.9-7.8 15.1l267.8 353.2c12.2 16.1 36 16.1 48.2 0L914 205.1c4.4-6.2-.1-15.1-7.8-15.1z"/></svg>';
+
 function appendImageFiles(good, files) {
     if (!good) return;
     good.files = good.files || [];
-    let added = 0;
-    for (const file of files) {
-        good.files.push({file, url: URL.createObjectURL(file)});
-        added += 1;
+    const list = Array.from(files || []).filter(Boolean);
+    if (!list.length) return;
+    for (const file of list) {
+        const item = {
+            key: ++uploadItemSeq,
+            file,
+            originalName: file.name || '图片',
+            url: URL.createObjectURL(file),
+            stage: 'pending',
+            remoteUrl: '',
+            error: '',
+        };
+        good.files.push(item);
+        // 选完就压、压完直传，提交时只拼已上传的 URL
+        processGoodImage(good, item);
     }
-    if (added) renderGoodsRows();
+    renderGoodsRows();
+}
+
+function showUploadSuccessToast(fileName) {
+    let el = document.getElementById('salesUploadToast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'salesUploadToast';
+        el.className = 'sales-upload-toast';
+        document.body.appendChild(el);
+    }
+    el.innerHTML = `<span class="sales-upload-toast-icon">${ICON_CHECK}</span>
+        <span class="sales-upload-toast-name">${escapeSalesHtml(fileName)}上传成功</span>`;
+    el.classList.add('show');
+    clearTimeout(showUploadSuccessToast.timer);
+    showUploadSuccessToast.timer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+async function processGoodImage(good, item) {
+    try {
+        item.stage = 'compressing';
+        item.error = '';
+        updateImageThumb(good, item);
+        const compressed = await compressImageForOa(item.file);
+        if (compressed !== item.file) {
+            URL.revokeObjectURL(item.url);
+            item.file = compressed;
+            item.url = URL.createObjectURL(compressed);
+        }
+        item.stage = 'uploading';
+        updateImageThumb(good, item);
+        item.remoteUrl = await uploadOaImage(item.file);
+        item.stage = 'done';
+        updateImageThumb(good, item);
+        showUploadSuccessToast(item.originalName);
+    } catch (error) {
+        item.stage = 'failed';
+        item.error = error?.message || '图片上传失败';
+        updateImageThumb(good, item);
+        showSalesToast(item.error, 'error');
+    }
+}
+
+function imageThumbHtml(good, item) {
+    const index = (good.files || []).indexOf(item);
+    const keyAttr = `data-upload-key="${item.key}"`;
+    if (item.stage === 'compressing' || item.stage === 'uploading') {
+        const label = item.stage === 'compressing' ? '压缩中' : '上传中';
+        return `<div class="inquiry-upload-item is-pending" ${keyAttr}>
+            <span class="inquiry-upload-pending"><span class="inquiry-upload-spinner"></span>${label}</span>
+        </div>`;
+    }
+    if (item.stage === 'failed') {
+        return `<div class="inquiry-upload-item is-failed" ${keyAttr} data-retry-key="${item.key}" title="${escapeSalesHtml(item.error || '上传失败，点击重试')}">
+            <span class="inquiry-upload-pending">
+                <strong>上传失败</strong>
+                <em>点击重试</em>
+            </span>
+            <span class="inquiry-upload-actions">
+                <button type="button" data-remove-image="${index}" title="删除">${ICON_DELETE}</button>
+            </span>
+        </div>`;
+    }
+    const isVideo = (item.file?.type || '').startsWith('video/');
+    const media = isVideo
+        ? `<video src="${item.url}" muted preload="metadata"></video>`
+        : `<img src="${item.url}" alt="">`;
+    const zoom = isVideo
+        ? ''
+        : `<button type="button" data-preview-image="${index}" title="预览">${ICON_ZOOM_IN}</button>`;
+    return `<div class="inquiry-upload-item" ${keyAttr}${isVideo ? '' : ` data-preview-image="${index}"`}>
+        ${media}
+        <span class="inquiry-upload-badge">${ICON_CHECK}</span>
+        <span class="inquiry-upload-actions">
+            ${zoom}
+            <button type="button" data-remove-image="${index}" title="删除">${ICON_DELETE}</button>
+        </span>
+    </div>`;
+}
+
+function updateImageThumb(good, item) {
+    const node = document.querySelector(`.inquiry-upload-item[data-upload-key="${item.key}"]`);
+    if (!node) {
+        renderGoodsRows();
+        return;
+    }
+    // 只替换这一张缩略图，避免重绘整卡打断正在填写的字段
+    node.outerHTML = imageThumbHtml(good, item);
 }
 
 /* ---------------- 图片预览 ---------------- */
@@ -930,7 +1016,45 @@ inquiryEls.goodsRows?.addEventListener('click', event => {
 
 /* ---------------- 提交 ---------------- */
 
-// ponytail: 图片随提交一起上传，失败时该商品还没创建，不会留下半条数据
+// OA 附件接口限制 10MB（10240KB），所有图片先压缩再上传
+const OA_UPLOAD_MAX_BYTES = 10240 * 1024;
+const OA_IMAGE_MAX_EDGE = 2000;
+
+async function compressImageForOa(file, maxBytes = OA_UPLOAD_MAX_BYTES) {
+    if (!file.type.startsWith('image/')) return file;
+    const bitmap = await createImageBitmap(file).catch(() => null);
+    if (!bitmap) return file;
+
+    // 长边限制 + 体积限制，取更小的缩放比
+    let scale = Math.min(1, OA_IMAGE_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    if (file.size > maxBytes) {
+        scale = Math.min(scale, Math.sqrt(maxBytes / file.size));
+    }
+    let quality = 0.85;
+    let blob = null;
+    for (let round = 0; round < 6; round += 1) {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        const ctx = canvas.getContext('2d');
+        // 统一转 JPEG，透明区域铺白底，避免出现黑块
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+        if (blob && blob.size <= maxBytes * 0.95) break;
+        quality = Math.max(0.5, quality - 0.1);
+        if (round >= 2) scale *= 0.8;
+    }
+    bitmap.close?.();
+    if (!blob) return file;
+    // 压缩后反而更大（原图本来就小）就保留原图
+    if (blob.size >= file.size && file.size <= maxBytes) return file;
+    const name = `${(file.name || 'image').replace(/\.[^.]+$/, '')}.jpg`;
+    return new File([blob], name, {type: 'image/jpeg'});
+}
+
+// 压缩完直接调用 OA 上传接口，返回可对外访问的地址
 async function uploadOaImage(file) {
     const form = new FormData();
     form.append('file', file);
@@ -1068,6 +1192,10 @@ async function submitInquiry() {
         inquiryEls.error.textContent = '商品数量必须大于 0';
         return;
     }
+    if (goods.some(good => (good.files || []).some(item => item.stage !== 'done'))) {
+        inquiryEls.error.textContent = '图片还在压缩或上传，请等完成后再提交';
+        return;
+    }
 
     const chat = collectChat();
     if (!chat.content) {
@@ -1079,12 +1207,11 @@ async function submitInquiry() {
     inquiryEls.submit.querySelector('span').textContent = '提交中…';
     const createdIds = [];
     try {
-        // 图片先传完，附件失败时还没有写任何 OA 数据
+        // 图片在选图时已经压缩并上传完，这里只拼地址
         for (const good of goods) {
-            const images = [];
-            for (const item of good.files) images.push(await uploadOaImage(item.file));
+            const uploaded = (good.files || []).map(item => item.remoteUrl).filter(Boolean);
             // 配件库商品图是公网 URL，直接拼进 OA 的 images，采购能直接看到原图
-            good.images = [...(good.remoteImages || []), ...images].join(',');
+            good.images = [...(good.remoteImages || []), ...uploaded].join(',');
         }
         // OA 只能靠沟通记录建询价单，先建单拿到单号，再把商品挂进去
         const chatRes = await createOaChat(chat);
@@ -1439,6 +1566,15 @@ inquiryEls.goodsRows?.addEventListener('click', event => {
         const images = good.files.filter(item => (item.file?.type || '').startsWith('image/'));
         if (!clicked || !images.includes(clicked)) return;
         openViewer(images.map(item => item.url), images.indexOf(clicked));
+        return;
+    }
+    const retry = event.target.closest('[data-retry-key]');
+    if (retry) {
+        const card = retry.closest('[data-goods-index]');
+        const good = inquiryState.goods[Number(card?.dataset.goodsIndex)];
+        const item = (good?.files || []).find(entry => String(entry.key) === retry.dataset.retryKey);
+        if (!good || !item) return;
+        processGoodImage(good, item);
         return;
     }
     const button = event.target.closest('[data-remove]');

@@ -342,6 +342,13 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-toast.success::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E"); }
 .sales-toast.error::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E"); }
 
+/* 图片上传成功：顶部居中白底提示 */
+.sales-upload-toast { position: fixed; z-index: 7100; top: 84px; left: 50%; display: flex; align-items: center; gap: 8px; max-width: 420px; padding: 10px 16px; color: #303133; border: 1px solid #e4e7ed; border-radius: 8px; background: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.12); font-size: 14px; line-height: 1.4; opacity: 0; pointer-events: none; transform: translate(-50%, -10px); transition: all .2s ease; }
+.sales-upload-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.sales-upload-toast-icon { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: 0 0 auto; border-radius: 50%; background: #67c23a; color: #fff; }
+.sales-upload-toast-icon svg { display: block; }
+.sales-upload-toast-name { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 @media (max-width: 1180px) {
     .goods-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
     .head-feature { display: none; }
@@ -452,6 +459,17 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .inquiry-upload-actions { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: #fff; background: rgba(0,0,0,.5); opacity: 0; transition: opacity .3s; }
 .inquiry-upload-actions button { display: inline-flex; padding: 0; color: #fff; border: 0; background: none; line-height: 1; cursor: pointer; }
 .inquiry-upload-item:hover .inquiry-upload-actions { opacity: 1; }
+/* 图片先压缩再上传：压缩中 / 上传中 / 失败重试 / 成功角标 */
+.inquiry-upload-item.is-pending,
+.inquiry-upload-item.is-failed { display: flex; align-items: center; justify-content: center; background: #f5f7fa; border-color: #e4e7ed; }
+.inquiry-upload-item.is-failed { background: #fef0f0; border-color: #fbc4c4; cursor: pointer; }
+.inquiry-upload-pending { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #409eff; font-size: 12px; }
+.inquiry-upload-item.is-failed .inquiry-upload-pending { color: #f56c6c; }
+.inquiry-upload-pending strong { font-size: 12px; font-weight: 600; }
+.inquiry-upload-pending em { font-style: normal; font-size: 11px; }
+.inquiry-upload-spinner { width: 16px; height: 16px; border: 2px solid #d9ecff; border-top-color: #409eff; border-radius: 50%; animation: inquiry-upload-spin .8s linear infinite; }
+@keyframes inquiry-upload-spin { to { transform: rotate(360deg); } }
+.inquiry-upload-badge { position: absolute; right: 2px; bottom: 2px; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #67c23a; color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
 .inquiry-upload-plus { flex: 0 0 auto; width: 68px; height: 68px; display: flex; align-items: center; justify-content: center; color: #8c939d; border: 1px dashed #cdd0d6; border-radius: 6px; background: #fff; font-size: 26px; line-height: 1; cursor: pointer; transition: .18s; }
 .inquiry-upload-plus:hover, .inquiry-upload-plus.is-drag { color: var(--sales-blue); border-color: var(--sales-blue); }
 .inquiry-paste-menu { position: fixed; z-index: 6700; min-width: 80px; padding: 6px 12px; color: #606266; border: 1px solid #ddd; border-radius: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.15); font-size: 13px; cursor: pointer; }
