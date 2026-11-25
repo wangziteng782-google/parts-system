@@ -207,6 +207,8 @@ function renderSalesProducts() {
     salesEls.resultRange.textContent = `显示 ${start}-${end} / 共 ${salesState.total.toLocaleString('zh-CN')} 条`;
 
     const isEmpty = !salesState.items.length;
+    // 空状态里的询价入口也要跟着草稿状态变文案
+    window.syncInquiryEntryLabel?.();
     salesEls.empty.hidden = !isEmpty;
     salesEls.grid.hidden = isEmpty;
     salesEls.listWrap.hidden = isEmpty;
@@ -719,6 +721,8 @@ function syncSalesDetailInquiryButton() {
     // 询价来源不显示；配件库来源常驻，规格没选好就置灰
     button.hidden = !isParts;
     button.disabled = !ready;
+    // 已有询价草稿时按钮改成「加入询价单」，点一下是追加而不是新建
+    window.syncInquiryEntryLabel?.();
     if (!notice) return;
     // 提示条是表单的一部分，不跟着选规格才出现，销售扫一眼就能直接建单
     const showNotice = isParts && activeSalesVariantLoaded && hasSpec;

@@ -42,6 +42,10 @@ const inquiryState = {
     chatType: '主',
     config: null,
     activeIndex: 0,
+    // 草稿：选过客户就一直留着，只要没提交，再进表单都不重新选客户
+    drafting: false,
+    // 从表单点「增加商品」出来搜索中，回表单时要多带一行
+    pickingGoods: false,
 };
 
 const inquiryEls = {
@@ -180,6 +184,11 @@ function closePicker() {
 }
 
 async function openInquiry(sourceItem = null, options = {}) {
+    // 已有草稿：客户和已填内容原样保留，这次选的商品追加进去就行
+    if (inquiryState.drafting && inquiryState.client) {
+        await resumeInquiry(sourceItem, options);
+        return;
+    }
     inquiryState.sourceItem = sourceItem;
     // 缺规格的入口把选中的规格组合和来源一起带进来
     inquiryState.specText = String(options.specText || '').trim();
@@ -189,6 +198,8 @@ async function openInquiry(sourceItem = null, options = {}) {
     inquiryState.goods = [];
     inquiryState.chatType = '主';
     inquiryState.activeIndex = 0;
+    inquiryState.pickingGoods = false;
+    hideDraftBar();
     inquiryEls.clientKeyword.value = '';
     inquiryEls.clientBody.innerHTML = '';
     inquiryEls.clientCount.textContent = '共 0 条';
@@ -211,9 +222,118 @@ async function openInquiry(sourceItem = null, options = {}) {
     await ensureOaConfig();
 }
 
-// 关掉询价表单时回到「选择客户」这一步，别把整个流程关掉
+// 展示询价表单本体（客户已定，不再走选择客户）
+function openInquiryForm() {
+    inquiryEls.overlay.classList.add('show');
+    inquiryEls.overlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+}
+
+function salesSearchKeyword() {
+    return document.getElementById('salesSearchInput')?.value?.trim() || salesState.keyword || '';
+}
+
+// 同一个配件库商品 + 同一规格组合重复加入没有意义
+function isGoodsDuplicate(prefill) {
+    const partId = Number(prefill?.partId) || 0;
+    if (!partId) return false;
+    const groupId = String(prefill?.variantGroupId || '');
+    const exists = inquiryState.goods.some(good =>
+        Number(good.partId) === partId && String(good.variantGroupId || '') === groupId);
+    if (exists) showSalesToast('该商品已在询价单中', 'error');
+    return exists;
+}
+
+// 回到已有草稿：不重选客户、不重置已填内容，只把这次选的商品追加一行
+async function resumeInquiry(sourceItem = null, options = {}) {
+    inquiryState.sourceItem = sourceItem;
+    inquiryState.specText = String(options.specText || '').trim();
+    inquiryState.goodsSource = String(options.goodsSource || '').trim();
+    inquiryState.missSpec = Boolean(options.missSpec);
+    // 只有从表单点「增加商品」出来的，回程才补一行；单纯再点开表单不加空行
+    const picking = inquiryState.pickingGoods;
+    inquiryState.pickingGoods = false;
+    await ensureOaConfig();
+    hideDraftBar();
+    openInquiryForm();
+    syncInquiryEntryLabel();
+    if (sourceItem) {
+        const prefill = goodsPrefill(sourceItem);
+        if (isGoodsDuplicate(prefill)) return;
+        addGoodsRow(prefill);
+        return;
+    }
+    if (!picking) return;
+    const keyword = salesSearchKeyword();
+    addGoodsRow(keyword ? {goods_spec: keyword} : {});
+}
+
+// 点「增加商品」：收起表单回列表搜索，草稿和客户都不动
+function pickMoreGoods() {
+    if (inquiryState.submitting) return;
+    inquiryState.pickingGoods = true;
+    inquiryEls.overlay.classList.remove('show');
+    inquiryEls.overlay.setAttribute('aria-hidden', 'true');
+    // 从详情页发起的询价，点增加商品时先退出详情，回到搜索结果
+    if (document.getElementById('salesDetailOverlay')?.classList.contains('show')) {
+        closeSalesProductDetail();
+    }
+    releaseBodyScroll();
+    showDraftBar();
+    const input = document.getElementById('salesSearchInput');
+    if (input) {
+        input.value = '';
+        input.focus();
+        input.scrollIntoView({block: 'center', behavior: 'smooth'});
+    }
+}
+
+// 搜索期间顶部常驻的返回入口，避免用户搜完发现不对就没路回表单
+function showDraftBar() {
+    let el = document.getElementById('salesInquiryDraftBar');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'salesInquiryDraftBar';
+        el.className = 'inquiry-draft-bar';
+        el.innerHTML = `<span class="inquiry-draft-text"></span>
+            <button type="button" class="inquiry-draft-back">返回询价单</button>`;
+        el.querySelector('.inquiry-draft-back').addEventListener('click', () => {
+            inquiryState.pickingGoods = false;
+            hideDraftBar();
+            openInquiryForm();
+        });
+        document.body.appendChild(el);
+    }
+    el.querySelector('.inquiry-draft-text').textContent =
+        `正在向询价单添加商品（已含 ${inquiryState.goods.length} 个）`;
+    el.classList.add('show');
+}
+
+function hideDraftBar() {
+    document.getElementById('salesInquiryDraftBar')?.classList.remove('show');
+}
+
+// 有草稿时两个询价入口都改成「加入询价单」，别让人以为是新建一单
+function syncInquiryEntryLabel() {
+    const drafting = inquiryState.drafting && inquiryState.client;
+    const detailText = document.getElementById('salesDetailInquiryButtonText');
+    if (detailText) detailText.textContent = drafting ? '加入询价单' : '一键询价';
+    const entryText = document.getElementById('salesInquiryEntryText');
+    if (entryText) {
+        entryText.textContent = drafting
+            ? `>>加入询价单（已含 ${inquiryState.goods.length} 个）`
+            : '>>一键询价';
+    }
+}
+window.syncInquiryEntryLabel = syncInquiryEntryLabel;
+
+// 关掉询价表单：草稿已定客户就整段收起（草稿留着），没选客户才回到选择客户
 function backToClientPicker() {
     if (inquiryState.submitting) return;
+    if (inquiryState.drafting && inquiryState.client) {
+        closeInquiry();
+        return;
+    }
     inquiryEls.overlay.classList.remove('show');
     inquiryEls.overlay.setAttribute('aria-hidden', 'true');
     openPicker();
@@ -288,6 +408,8 @@ function renderClients(items) {
 async function selectClient(client) {
     if (!client) return;
     inquiryState.client = client;
+    // 客户选定即进入草稿态，后续再打开表单都沿用它
+    inquiryState.drafting = true;
     inquiryEls.clientSelected.hidden = false;
     inquiryEls.clientSelected.innerHTML = `
         <strong>${escapeSalesHtml(client.name || '未命名客户')}</strong>
@@ -301,10 +423,9 @@ async function selectClient(client) {
     inquiryEls.gaizao.checked = String(client.is_gai_zao_ke_hu || '0') === '1';
     document.getElementById('salesInquiryClientChange').addEventListener('click', openPicker);
     closePicker();
-    inquiryEls.overlay.classList.add('show');
-    inquiryEls.overlay.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-    const keyword = document.getElementById('salesSearchInput')?.value?.trim() || salesState.keyword || '';
+    openInquiryForm();
+    syncInquiryEntryLabel();
+    const keyword = salesSearchKeyword();
     // 品牌下拉存的是 OA 的 id，得先有配置才能按名字对上
     await ensureOaConfig();
     // 从详情页发起的询价，把该商品已有的字段带进来；没带商品就用搜索关键词垫规格型号
@@ -419,6 +540,8 @@ function addGoodsRow(prefill = {}) {
         // 带上搜索词时把光标放到末尾，接着打字就行
         nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length);
     }
+    // 入口文案里的「已含 N 个」跟着商品数走
+    syncInquiryEntryLabel();
 }
 
 function fieldBox(label, control, span = 1) {
@@ -596,19 +719,9 @@ function appendImageFiles(good, files) {
     renderGoodsRows();
 }
 
+// 上传成功沿用全站同一条提示，不再单独维护一套
 function showUploadSuccessToast(fileName) {
-    let el = document.getElementById('salesUploadToast');
-    if (!el) {
-        el = document.createElement('div');
-        el.id = 'salesUploadToast';
-        el.className = 'sales-upload-toast';
-        document.body.appendChild(el);
-    }
-    el.innerHTML = `<span class="sales-upload-toast-icon">${ICON_CHECK}</span>
-        <span class="sales-upload-toast-name">${escapeSalesHtml(fileName)}上传成功</span>`;
-    el.classList.add('show');
-    clearTimeout(showUploadSuccessToast.timer);
-    showUploadSuccessToast.timer = setTimeout(() => el.classList.remove('show'), 2600);
+    showSalesToast(`${fileName}上传成功`, 'success');
 }
 
 async function processGoodImage(good, item) {
@@ -1225,6 +1338,11 @@ async function submitInquiry() {
             await reportInquiryLink(goodsId, good);
         }
         showSalesToast(`询价单已生成，含 ${goods.length} 个商品`, 'success');
+        // 提交成功才算这单结束，草稿清掉，下次重新选客户
+        inquiryState.drafting = false;
+        inquiryState.pickingGoods = false;
+        hideDraftBar();
+        syncInquiryEntryLabel();
         closeInquiry(true);
         loadSalesProducts();
     } catch (error) {
@@ -1267,7 +1385,8 @@ inquiryEls.clientBody?.addEventListener('click', event => {
     if (!row) return;
     selectClient(inquiryState.clients.find(item => String(item.id) === row.dataset.clientId));
 });
-inquiryEls.addGoods?.addEventListener('click', () => addGoodsRow());
+// 增加商品要回列表搜索，草稿不动
+inquiryEls.addGoods?.addEventListener('click', pickMoreGoods);
 inquiryEls.submit?.addEventListener('click', submitInquiry);
 
 inquiryEls.chatTypes?.addEventListener('click', event => {
@@ -1583,6 +1702,7 @@ inquiryEls.goodsRows?.addEventListener('click', event => {
     if (!card || inquiryState.goods.length === 1) return;
     inquiryState.goods.splice(Number(card.dataset.goodsIndex), 1);
     renderGoodsRows();
+    syncInquiryEntryLabel();
 });
 
 document.addEventListener('keydown', event => {

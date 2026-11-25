@@ -334,20 +334,12 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-feedback-submit:hover:not(:disabled) { background: linear-gradient(135deg, #1768dc, #3788fa); transform: translateY(-1px); }
 .sales-feedback-submit:disabled { cursor: wait; opacity: .65; }
 
-.sales-toast { position: fixed; z-index: 7000; right: 24px; bottom: 24px; min-width: 180px; max-width: 360px; padding: 12px 20px; color: #fff; border-radius: 10px; background: #344258; box-shadow: 0 12px 32px rgba(24,39,61,.25); opacity: 0; pointer-events: none; transform: translateY(12px) scale(.96); transition: all .25s cubic-bezier(.4,0,.2,1); font-size: 14px; line-height: 1.5; display: flex; align-items: center; gap: 10px; }
-.sales-toast.show { opacity: 1; transform: translateY(0) scale(1); }
-.sales-toast.error { background: linear-gradient(135deg, #e74c3c, #c0392b); }
-.sales-toast.success { background: linear-gradient(135deg, #2ecc71, #27ae60); }
-.sales-toast::before { content: ''; width: 18px; height: 18px; flex: 0 0 auto; display: inline-block; background: center/contain no-repeat; }
-.sales-toast.success::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E"); }
-.sales-toast.error::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E"); }
-
-/* 图片上传成功：顶部居中白底提示 */
-.sales-upload-toast { position: fixed; z-index: 7100; top: 84px; left: 50%; display: flex; align-items: center; gap: 8px; max-width: 420px; padding: 10px 16px; color: #303133; border: 1px solid #e4e7ed; border-radius: 8px; background: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.12); font-size: 14px; line-height: 1.4; opacity: 0; pointer-events: none; transform: translate(-50%, -10px); transition: all .2s ease; }
-.sales-upload-toast.show { opacity: 1; transform: translate(-50%, 0); }
-.sales-upload-toast-icon { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: 0 0 auto; border-radius: 50%; background: #67c23a; color: #fff; }
-.sales-upload-toast-icon svg { display: block; }
-.sales-upload-toast-name { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 全局提示：白底卡片、顶部居中，和图片上传提示统一成一款 */
+.sales-toast { position: fixed; z-index: 7000; top: 84px; left: 50%; display: flex; align-items: center; gap: 8px; max-width: 420px; padding: 10px 16px; color: #303133; border: 1px solid #e4e7ed; border-radius: 8px; background: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.12); opacity: 0; pointer-events: none; transform: translate(-50%, -10px); transition: opacity .2s ease, transform .2s ease; font-size: 14px; line-height: 1.4; }
+.sales-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.sales-toast::before { content: ''; width: 18px; height: 18px; flex: 0 0 auto; border-radius: 50%; background-color: #909399; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='12' y1='8' x2='12' y2='13'/%3E%3Cline x1='12' y1='17' x2='12' y2='17.01'/%3E%3C/svg%3E"); background-position: center; background-repeat: no-repeat; background-size: 11px 11px; }
+.sales-toast.success::before { background-color: #67c23a; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E"); }
+.sales-toast.error::before { background-color: #f56c6c; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E"); }
 
 @media (max-width: 1180px) {
     .goods-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
@@ -474,6 +466,12 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .inquiry-upload-plus:hover, .inquiry-upload-plus.is-drag { color: var(--sales-blue); border-color: var(--sales-blue); }
 .inquiry-paste-menu { position: fixed; z-index: 6700; min-width: 80px; padding: 6px 12px; color: #606266; border: 1px solid #ddd; border-radius: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.15); font-size: 13px; cursor: pointer; }
 .inquiry-paste-menu:hover { background: #f5f5f5; }
+
+/* 加商品时回到列表搜索，顶部常驻返回入口 */
+.inquiry-draft-bar { position: fixed; z-index: 5500; top: 14px; left: 50%; display: none; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border: 1px solid #bfdbfe; border-radius: 999px; background: #fff; box-shadow: 0 6px 20px rgba(15,23,42,.14); transform: translateX(-50%); color: #303133; font-size: 13px; line-height: 1.4; }
+.inquiry-draft-bar.show { display: flex; }
+.inquiry-draft-back { padding: 4px 14px; border: 0; border-radius: 999px; background: var(--sales-blue); color: #fff; font-size: 12px; cursor: pointer; }
+.inquiry-draft-back:hover { filter: brightness(1.08); }
 
 /* 收货地址：标签可点，弹窗列出客户历史地址 */
 .inquiry-address-link { display: inline-flex; align-items: center; gap: 3px; color: var(--sales-blue); text-decoration: underline; cursor: pointer; }
