@@ -105,9 +105,13 @@ async function init() {
                 pendingCreateLibraryUrls['actual_photos'] = inquiryImages.slice();
                 renderCreateImageSection();
             }
-            showToast(guess
-                ? '已带入询价记录信息，请核对分类和价格'
-                : '已带入询价记录信息，产品分类未识别，请手动选择');
+            // 带入成功就是成功提示，分类猜不中只是后续手动选，不是警告
+            showToast(
+                guess
+                    ? '已带入询价记录信息，请核对分类和价格'
+                    : '已带入询价记录信息，产品分类未识别，请手动选择',
+                'success'
+            );
         }
 
         // 询价名称套三级分类名，和匹配页同一个思路；猜不中返回空，让用户手选
