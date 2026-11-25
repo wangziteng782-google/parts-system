@@ -164,8 +164,14 @@ def ensure_parts_indexes(conn):
         conn.commit()
 
 
+# 每个进程只做一次结构检查，避免每个列表/详情请求都执行 CREATE TABLE IF NOT EXISTS
+_ENSURED_ONCE: set[str] = set()
+
+
 def ensure_duplicate_marks_table(conn):
     """确保员工重复标记表存在；只创建表，不修改现有产品数据。"""
+    if "duplicate_marks" in _ENSURED_ONCE:
+        return
     cursor = conn.cursor()
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS duplicate_product_marks (
@@ -179,6 +185,7 @@ def ensure_duplicate_marks_table(conn):
             KEY idx_duplicate_marked_at (marked_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"""
     )
+    _ENSURED_ONCE.add("duplicate_marks")
 
 
 def ensure_product_spec_required_rules(conn):

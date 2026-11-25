@@ -138,15 +138,9 @@ def list_products(
 
         # 查分页数据
         offset = (page - 1) * page_size
-        duplicate_flag_sql = "1" if duplicates_only else \
-            "CASE WHEN COALESCE(TRIM(parts.model), '') <> '' " \
-            "AND EXISTS (SELECT 1 FROM parts p2 WHERE p2.model = parts.model " \
-            "AND p2.id <> parts.id) THEN 1 ELSE 0 END"
+        # 反馈数、重复型号改成查完这一页再批量补，避免每行一次相关子查询
         sql = "SELECT parts.id, parts.sku_code, parts.product_name, parts.model, parts.product_brand, parts.category, parts.product_type, parts.update_time_2, " \
-              "parts.status, parts.pricing_mode, " \
-              "(SELECT COUNT(*) FROM sales_product_feedback feedback WHERE feedback.parts_id=parts.id AND feedback.status='pending') AS pending_feedback_count, " \
-              "parts.modification_completed, " \
-              + duplicate_flag_sql + " AS is_duplicate, " \
+              "parts.status, parts.pricing_mode, parts.modification_completed, " \
               "CASE WHEN dpm.id IS NULL THEN 0 ELSE 1 END AS duplicate_marked " \
               "FROM parts" + duplicate_group_join + \
               " LEFT JOIN duplicate_product_marks dpm ON dpm.product_id = parts.id" + where
@@ -159,6 +153,33 @@ def list_products(
         logger.debug(f"[SQL] {sql} | params={params}")
         cursor.execute(sql, params)
         items = cursor.fetchall()
+
+        # 批量补两个派生字段：待处理反馈数、是否重复型号
+        if items:
+            ids = [item["id"] for item in items]
+            id_marks = ", ".join(["%s"] * len(ids))
+            cursor.execute(
+                f"SELECT parts_id, COUNT(*) AS cnt FROM sales_product_feedback"
+                f" WHERE status='pending' AND parts_id IN ({id_marks}) GROUP BY parts_id",
+                ids,
+            )
+            feedback_counts = {row["parts_id"]: row["cnt"] for row in cursor.fetchall()}
+
+            duplicate_models = set()
+            if not duplicates_only:
+                models = [item["model"] for item in items if item["model"] and str(item["model"]).strip()]
+                if models:
+                    model_marks = ", ".join(["%s"] * len(models))
+                    cursor.execute(
+                        f"SELECT model FROM parts WHERE model IN ({model_marks})"
+                        f" GROUP BY model HAVING COUNT(*) > 1",
+                        models,
+                    )
+                    duplicate_models = {row["model"] for row in cursor.fetchall()}
+
+            for item in items:
+                item["pending_feedback_count"] = feedback_counts.get(item["id"], 0)
+                item["is_duplicate"] = 1 if (duplicates_only or item["model"] in duplicate_models) else 0
 
         cursor.execute("SELECT COUNT(*) AS total_all FROM parts")
         total_all = cursor.fetchone()['total_all']

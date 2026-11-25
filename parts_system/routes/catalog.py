@@ -59,24 +59,22 @@ async def list_product_classifications():
         #     count for value, count in raw_counts.items()
         #     if not value or value not in PRODUCT_TYPE_VALUES
         # )
-        # 与列表口径一致：不区分上下架
+        # 四处计数一次查回来，减少与数据库的往返次数
         cursor.execute(
-            "SELECT COUNT(*) AS count FROM parts"
-            " WHERE COALESCE(modification_completed, 0) = 0"
+            """SELECT
+                   (SELECT COUNT(*) FROM parts WHERE COALESCE(modification_completed, 0) = 0) AS incomplete_count,
+                   (SELECT COUNT(DISTINCT feedback.parts_id)
+                      FROM sales_product_feedback feedback
+                      JOIN parts ON parts.id=feedback.parts_id AND parts.status=1
+                     WHERE feedback.status='pending') AS correction_count,
+                   (SELECT COUNT(*) FROM parts WHERE status=0) AS delisted_count,
+                   (SELECT COUNT(*) FROM parts WHERE sku_code LIKE 'EXT-%%') AS external_count"""
         )
-        incomplete_count = cursor.fetchone()["count"]
-        cursor.execute(
-            """SELECT COUNT(DISTINCT feedback.parts_id) AS count
-               FROM sales_product_feedback feedback
-               JOIN parts ON parts.id=feedback.parts_id AND parts.status=1
-               WHERE feedback.status='pending'"""
-        )
-        correction_count = cursor.fetchone()["count"]
-        cursor.execute("SELECT COUNT(*) AS count FROM parts WHERE status=0")
-        delisted_count = cursor.fetchone()["count"]
-        # 外部商品库导入的商品：sku_code 统一带 EXT- 前缀
-        cursor.execute("SELECT COUNT(*) AS count FROM parts WHERE sku_code LIKE 'EXT-%'")
-        external_count = cursor.fetchone()["count"]
+        stats = cursor.fetchone()
+        incomplete_count = stats["incomplete_count"]
+        correction_count = stats["correction_count"]
+        delisted_count = stats["delisted_count"]
+        external_count = stats["external_count"]
         return {
             "tree": PRODUCT_CLASSIFICATION_TREE,
             "values": PRODUCT_TYPE_VALUES,

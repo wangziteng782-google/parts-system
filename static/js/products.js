@@ -1,12 +1,11 @@
 async function init() {
-            const [labelsRes, imgLibLabelsRes, classificationRes, uploadConfigRes] = await Promise.all([
-                fetch('/api/field-labels'),
+            const [labelsRes, classificationRes, uploadConfigRes] = await Promise.all([
                 fetch('/api/field-labels'),
                 fetch('/api/product-classifications'),
                 fetch('/api/image-upload/config')
             ]);
             fieldLabels = await labelsRes.json();
-            imgLibFieldLabels = await imgLibLabelsRes.json(); // 图片库专用字段标签
+            imgLibFieldLabels = fieldLabels; // 图片库与商品库共用同一份字段标签
             const classificationData = await classificationRes.json();
             if (uploadConfigRes.ok) imageUploadConfig = await uploadConfigRes.json();
             applyClassificationData(classificationData);

@@ -158,8 +158,10 @@ def invoice_field(item) -> str:
 NAME_SPEC = "名称"
 BRAND_SPEC = "品牌"
 TIER_SPEC = "阶梯价"
+WAREHOUSE_SPEC = "发货仓"
 UNKNOWN_BRAND = "未标注"
 UNKNOWN_TIER = "未标注"
+UNKNOWN_WAREHOUSE = "未标注"
 
 
 def _clean(value) -> str:
@@ -213,13 +215,15 @@ def _build_technical_params(item) -> str:
     return fitting_size if "尺寸" in fitting_size else f"安装尺寸：{fitting_size}"
 
 
-def import_spu(cur, rows: list) -> str:
-    """同一型号聚合成一个 SPU，组内按名称/品牌/阶梯价拆成多个 SKU。
+def import_spu(cur, rows: list, part_id: int = None) -> str:
+    """同一型号聚合成一个 SPU，组内按名称/品牌/阶梯价/发货仓拆成多个 SKU。
 
-    - 型号相同、名称相同、品牌相同：一个 SKU，多条价格按供应商合并（同供应商取最新一条）
+    - 型号相同、名称相同、品牌相同、仓库相同：一个 SKU，多条价格按供应商合并（同供应商取最新一条）
     - 型号相同、名称不同：名称作为规格，每个名称一个 SKU
     - 型号相同、品牌不同：品牌作为规格，每个品牌一个 SKU
     - 组内阶梯价（OA tiered_pricing）有多个不同值：阶梯价作为规格，每个阶梯一个 SKU
+    - 组内发货仓（OA warehouse）有多个不同值：发货仓作为规格，每个仓库一个 SKU
+      （同品牌同供应商在不同仓库价格不同，不拆会出现同一供应商多条报价）
     - 型号为空：同名同品牌聚合成一个 SPU，规格值用阶梯价，没有阶梯价则用「默认」
     """
     if not rows:
@@ -238,17 +242,25 @@ def import_spu(cur, rows: list) -> str:
         if brand and brand not in brands:
             brands.append(brand)
 
-    # 幂等：同型号（取组内最小外部 id）已导入则跳过
+    # 幂等：同型号（取组内最小外部 id）已导入则跳过；传入 part_id 表示原地重建
     sku_code = f"EXT-{min(int(row.get('id') or 0) for row in rows)}"
-    cur.execute("SELECT id FROM parts WHERE sku_code=%s LIMIT 1", (sku_code,))
-    if cur.fetchone():
-        return "skip"
+    if part_id is None:
+        cur.execute("SELECT id FROM parts WHERE sku_code=%s LIMIT 1", (sku_code,))
+        if cur.fetchone():
+            return "skip"
 
     tiers = []
     for row in rows:
         tier = _clean(row.get("tiered_pricing"))
         if tier and tier not in tiers:
             tiers.append(tier)
+
+    # 同型号同品牌同供应商在不同仓库有不同价格，仓库必须参与拆分，否则同供应商会出多条报价
+    warehouses = []
+    for row in rows:
+        warehouse = _clean(row.get("warehouse"))
+        if warehouse and warehouse not in warehouses:
+            warehouses.append(warehouse)
 
     dims = []
     if len(names) > 1:
@@ -257,16 +269,20 @@ def import_spu(cur, rows: list) -> str:
         dims.append(BRAND_SPEC)
     if len(tiers) > 1:
         dims.append(TIER_SPEC)
+    if len(warehouses) > 1:
+        dims.append(WAREHOUSE_SPEC)
 
     skus: dict[tuple, list] = {}
     for row in rows:
         name = _clean(row.get("goods_name"))
         brand = _clean(row.get("factory")) or UNKNOWN_BRAND
         tier = _clean(row.get("tiered_pricing")) or UNKNOWN_TIER
+        warehouse = _clean(row.get("warehouse")) or UNKNOWN_WAREHOUSE
         key = (
             name if NAME_SPEC in dims else "",
             brand if BRAND_SPEC in dims else "",
             tier if TIER_SPEC in dims else "",
+            warehouse if WAREHOUSE_SPEC in dims else "",
         )
         skus.setdefault(key, []).append(row)
 
@@ -278,28 +294,29 @@ def import_spu(cur, rows: list) -> str:
     if not product_type and str(first.get("names") or "").strip():
         print(f"  ! 型号 {goods_spec or '空'} 的分类「{first.get('names')}」没匹配到三级分类，已留空，需在 /goods 手动补")
 
-    cur.execute(
-        """INSERT INTO parts
-               (sku_code, product_name, product_brand, model, product_type, warranty,
-                shipping_origin, remark, technical_params, status, pricing_mode, variant_groups_initialized,
-                modification_completed, key_part_images, filler, update_time_2)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,2,1,1,%s,'外部导入',NOW())""",
-        (
-            sku_code,
-            _most_common([_clean(row.get("goods_name")) for row in rows]) or goods_spec,
-            brands[0] if len(brands) == 1 else None,
-            goods_spec or None,
-            product_type or None,
-            _warranty_text(first.get("warranty_month")) or None,
-            _clean(first.get("warehouse")) or None,
-            _build_remark(first) or None,
-            _build_technical_params(first) or None,
-            # 组内有任一在售即上架，全部下架才下架
-            1 if any(str(row.get("is_on_sale", 1)) == "1" for row in rows) else 0,
-            image_json(first.get("goods_images")),
-        ),
-    )
-    part_id = cur.lastrowid
+    if part_id is None:
+        cur.execute(
+            """INSERT INTO parts
+                   (sku_code, product_name, product_brand, model, product_type, warranty,
+                    shipping_origin, remark, technical_params, status, pricing_mode, variant_groups_initialized,
+                    modification_completed, key_part_images, filler, update_time_2)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,2,1,1,%s,'外部导入',NOW())""",
+            (
+                sku_code,
+                _most_common([_clean(row.get("goods_name")) for row in rows]) or goods_spec,
+                brands[0] if len(brands) == 1 else None,
+                goods_spec or None,
+                product_type or None,
+                _warranty_text(first.get("warranty_month")) or None,
+                _clean(first.get("warehouse")) or None,
+                _build_remark(first) or None,
+                _build_technical_params(first) or None,
+                # 组内有任一在售即上架，全部下架才下架
+                1 if any(str(row.get("is_on_sale", 1)) == "1" for row in rows) else 0,
+                image_json(first.get("goods_images")),
+            ),
+        )
+        part_id = cur.lastrowid
 
     spec_cache: dict[tuple, int] = {}
 
@@ -316,7 +333,7 @@ def import_spu(cur, rows: list) -> str:
         return spec_cache[key]
 
     sale_prices = []
-    for (sku_name, sku_brand, sku_tier), sku_rows in skus.items():
+    for (sku_name, sku_brand, sku_tier, sku_warehouse), sku_rows in skus.items():
         if dims:
             values = []
             if NAME_SPEC in dims:
@@ -325,6 +342,8 @@ def import_spu(cur, rows: list) -> str:
                 values.append((BRAND_SPEC, sku_brand or UNKNOWN_BRAND))
             if TIER_SPEC in dims:
                 values.append((TIER_SPEC, sku_tier or UNKNOWN_TIER))
+            if WAREHOUSE_SPEC in dims:
+                values.append((WAREHOUSE_SPEC, sku_warehouse or UNKNOWN_WAREHOUSE))
         else:
             # 无型号且名称未参与拆分时，规格值会是空串，兜底成「规格 / 默认」
             spec_value = (goods_spec or sku_name).strip()
@@ -353,8 +372,9 @@ def import_spu(cur, rows: list) -> str:
             cur.execute(
                 f"""INSERT INTO product_variant_prices
                        (part_id, variant_group_id, supplier, no_tax_price,
-                        {invoice_col}, purchase_shipping, external_price_fields, is_default, warranty_time)
-                   VALUES (%s,%s,%s,%s,%s,%s,NULL,1,%s)""",
+                        {invoice_col}, purchase_shipping, external_price_fields, is_default, warranty_time,
+                        shipping_origin)
+                   VALUES (%s,%s,%s,%s,%s,%s,NULL,1,%s,%s)""",
                 (
                     part_id,
                     variant_group_id,
@@ -363,6 +383,7 @@ def import_spu(cur, rows: list) -> str:
                     dec(row.get("purchase_price_has_tax")),
                     dec(row.get("post_fee_purchase")),
                     _warranty_text(first.get("warranty_month")) or None,
+                    _clean(row.get("warehouse")) or None,
                 ),
             )
 
