@@ -271,6 +271,8 @@ FIELD_LABELS = {
     "filler_2": "填报人(2)",
     "update_time_2": "更新时间(2)",
     "filler_ip": "填报IP",
+    "pricing_mode": "定价模式",
+    "status": "上架状态",
 }
 
 IMAGE_FIELDS = [
@@ -287,6 +289,7 @@ CREATE_PRODUCT_FIELDS = [
     "technical_params", "remark", "remark_2",
     "purchase_cost", "purchase_special_invoice",
     "purchase_general_invoice", "purchase_shipping",
+    "pricing_mode",
 ] + IMAGE_FIELDS
 
 MAIN_FIELDS = [
@@ -298,4 +301,5 @@ MAIN_FIELDS = [
     "retail_tax", "retail_shipping", "remark", "daily_cutoff_time",
     "quote_validity", "shipping_origin", "shipping_time", "remark_2",
     "updater", "filler", "update_time", "filler_2", "update_time_2", "filler_ip",
+    "pricing_mode",
 ]

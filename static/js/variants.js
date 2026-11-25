@@ -40,7 +40,7 @@
                         );
                         if (!combination) return;
                         const prices = combination.prices || [];
-                        html += renderSpecItem(spec.spec_name, v.value, specs, prices, combination.is_discontinued);
+                        html += renderSpecItem(spec.spec_name, v.value, specs, prices, combination.is_discontinued, combination.variant_group_id);
                     } else {
                         // 中间层：显示分组标题，递归下一层
                         html += `<div class="vs-level vs-level-${level + 1}">`;
@@ -86,14 +86,20 @@
             return `<span class="vs-price-amount">¥${escapeHtml(String(value))}</span>`;
         }
 
-        function renderSpecItem(specName, specValue, specs, prices, isDiscontinued) {
-            const hasSupplier = prices.length > 0;
+        function renderSpecItem(specName, specValue, specs, prices, isDiscontinued, variantGroupId) {
+            const isManualPricing = Number(currentData?.pricing_mode) === 2;
+            // 空供应商行存的是人工销售价，不能被当成供应商卡片渲染
+            const saleRow = prices.find(p => !String(p.supplier || '').trim());
+            const supplierPrices = prices.filter(p => String(p.supplier || '').trim());
+            const groupId = variantGroupId || (saleRow && saleRow.variant_group_id) || '';
+            const specsJson = JSON.stringify(specs).replace(/"/g, '&quot;');
+            const hasSupplier = supplierPrices.length > 0;
             let supplierPricesHtml = '';
             if (hasSupplier) {
-                supplierPricesHtml = prices.map(p => {
+                supplierPricesHtml = supplierPrices.map(p => {
                     const name = escapeHtml(p.supplier || '未命名');
                     const cap = p.oa_supplier_id ? _oaSupplierCapability[p.oa_supplier_id] : null;
-                    return `<div class="vs-supplier-price-card">
+                    return `<div class="vs-supplier-price-card" onclick="event.stopPropagation(); selectSpecPriceCard(this, '${specsJson}')">
                         <div class="vs-supplier-price-name">${name}</div>
                         <div class="vs-supplier-price-list">
                             <div class="vs-supplier-price-row">
@@ -114,14 +120,38 @@
             } else {
                 supplierPricesHtml = '<span class="no-supplier-text">未配置供应商</span>';
             }
-            const specsJson = JSON.stringify(specs).replace(/"/g, '&quot;');
             const classes = ['vs-spec-item'];
             if (!hasSupplier) classes.push('no-supplier');
             const discontinuedMark = isDiscontinued ? '<span class="vs-discontinued-tag">已停产</span>' : '';
+            // 定价模式 2：销售价人工维护，单独一张卡片，不跟供应商成本混在一起
+            let salePriceHtml = '';
+            if (isManualPricing) {
+                const saleValue = saleRow ? saleRow.retail_price : null;
+                salePriceHtml = `<div class="vs-supplier-price-card vs-sale-price-card" onclick="event.stopPropagation(); selectSpecPriceCard(this, '${specsJson}', true)">
+                    <div class="vs-supplier-price-name">销售价</div>
+                    <div class="vs-supplier-price-list">
+                        <div class="vs-supplier-price-row">
+                            <span class="vs-price-label">零售价</span>
+                            ${formatSpecSupplierPrice(saleValue)}
+                        </div>
+                    </div>
+                </div>`;
+            }
             return `<div class="${classes.join(' ')}" onclick="openSupplierPanel('${specsJson}')">
                 <div class="vs-spec-title"><span class="vs-spec-key">${escapeHtml(specName)}：</span><span class="vs-spec-value">${escapeHtml(specValue)}</span>${discontinuedMark}</div>
-                <div class="vs-supplier-prices">${supplierPricesHtml}</div>
+                <div class="vs-supplier-prices">${salePriceHtml}${supplierPricesHtml}</div>
             </div>`;
+        }
+
+        // 点击规格里的价格卡片：只高亮被点的卡片，不选中整张规格卡片
+        function selectSpecPriceCard(card, specsJson, saleMode = false) {
+            const specItem = card.closest('.vs-spec-item');
+            if (specItem) {
+                specItem.classList.remove('selected');
+                specItem.querySelectorAll('.vs-supplier-price-card').forEach(el => el.classList.remove('active'));
+            }
+            card.classList.add('active');
+            if (specsJson) openSupplierPanel(specsJson, saleMode);
         }
 
         function selectVariantSpecs(el, specsJson) {
@@ -139,6 +169,8 @@
         let currentPanelSpecs = null;
         let currentPanelPriceId = null;
         let isNewSupplierMode = false; // 标记是否处于新增模式
+        let currentPanelSaleMode = false; // 面板是否在维护销售价
+        let currentPanelSaleGroupId = ''; // 销售价表单对应的规格组合
 
         // 询价页专用：当前选中询价记录的供应商报价，独立成左侧面板，和供应商管理并排。
         // 一次询价里常有几个不同型号，按型号分组展示，不能全挂在主规格下面。
@@ -184,10 +216,11 @@
             </aside>`;
         }
 
-        async function openSupplierPanel(specsJson) {
+        async function openSupplierPanel(specsJson, saleMode = false) {
             currentPanelSpecs = JSON.parse(specsJson.replace(/&quot;/g, '"'));
             currentPanelPriceId = null;
             isNewSupplierMode = false;
+            currentPanelSaleMode = !!saleMode;
 
             let panel = document.getElementById('supplierPanel');
             if (!panel) {
@@ -203,7 +236,7 @@
             panel.innerHTML = `<div class="sp-stack">${refPanel}<div class="sp-container">
                 <div class="sp-header">
                     <div class="sp-header-left">
-                        <span class="sp-header-title">供应商管理</span>
+                        <span class="sp-header-title">${saleMode ? '销售价维护' : '供应商管理'}</span>
                         <span class="sp-header-spec">${escapeHtml(specTitle)}</span>
                     </div>
                     <div class="sp-header-right">
@@ -213,8 +246,8 @@
                 <div class="sp-body">
                     <div class="sp-left">
                         <div class="sp-list-title">
-                            <span>供应商列表 (<span id="spSupplierCount">0</span>)</span>
-                            <button class="sp-add-btn-small" onclick="addPanelSupplier()">+ 新增</button>
+                            <span>${saleMode ? '销售价' : '供应商列表 (<span id="spSupplierCount">0</span>)'}</span>
+                            ${saleMode ? '' : '<button class="sp-add-btn-small" onclick="addPanelSupplier()">+ 新增</button>'}
                         </div>
                         <div class="sp-list" id="spSupplierList"></div>
                     </div>
@@ -232,7 +265,15 @@
         async function renderPanelContent() {
             if (!currentPanelSpecs) return;
 
-            const matchingPrices = currentVariantPrices.filter(p => matchSpecs(p.specs, currentPanelSpecs));
+            if (currentPanelSaleMode) {
+                renderPanelSalePrice();
+                return;
+            }
+
+            // 空供应商行是人工销售价，不属于供应商，不能出现在供应商管理面板里
+            const matchingPrices = currentVariantPrices.filter(p =>
+                matchSpecs(p.specs, currentPanelSpecs) && String(p.supplier || '').trim()
+            );
 
             // 预加载所有供应商的开票能力，用于判断是否显示价格
             const oaIds = [...new Set(matchingPrices.map(p => p.oa_supplier_id).filter(Boolean))];
@@ -501,10 +542,13 @@
             const hasNormal = !isNew && p.purchase_general_invoice !== null && p.purchase_general_invoice !== undefined && p.purchase_general_invoice !== '';
             const freightChoice = p.freight_remark === '不含运费' ? 'exclude' : (p.freight_remark ? 'include' : '');
             // external_price_fields → 三个 SET 开关
+            // 商品库商品（定价模式2）对外只展示销售价，采购报价的展示开关一律关闭且不可开启
+            const isManualPricing = Number(currentData?.pricing_mode) === 2
+                || String(currentData?.sku_code || '').startsWith('EXT-');
             const extFields = (p.external_price_fields || '').split(',').filter(Boolean);
-            const extNoTax = extFields.includes('no_tax');
-            const extSpecial = extFields.includes('special');
-            const extNormal = extFields.includes('general');
+            const extNoTax = !isManualPricing && extFields.includes('no_tax');
+            const extSpecial = !isManualPricing && extFields.includes('special');
+            const extNormal = !isManualPricing && extFields.includes('general');
             return `<div class="sp-detail-form">
                 <!-- 基础信息 -->
                 <div class="sp-card">
@@ -540,7 +584,7 @@
                                 <label>不含票单价<span class="sp-required-mark">*</span></label>
                                 <label class="sp-ext-mini">
                                     <span class="sp-toggle">
-                                        <input id="spExtNoTax" type="checkbox" ${extNoTax ? 'checked' : ''} data-was-checked="${extNoTax ? '1' : ''}" data-oa-disabled="" onchange="_limitExtFields()">
+                                        <input id="spExtNoTax" type="checkbox" ${extNoTax ? 'checked' : ''} data-was-checked="${extNoTax ? '1' : ''}" data-oa-disabled="" ${isManualPricing ? 'disabled' : ''} onchange="_limitExtFields()">
                                         <span class="sp-toggle-track"></span>
                                     </span>
                                     <small>展示</small>
@@ -555,7 +599,7 @@
                                 <label>含专票<span class="sp-required-mark">*</span></label>
                                 <label class="sp-ext-mini">
                                     <span class="sp-toggle">
-                                        <input id="spExtSpecial" type="checkbox" ${extSpecial ? 'checked' : ''} data-was-checked="${extSpecial ? '1' : ''}" data-oa-disabled="" onchange="_limitExtFields()">
+                                        <input id="spExtSpecial" type="checkbox" ${extSpecial ? 'checked' : ''} data-was-checked="${extSpecial ? '1' : ''}" data-oa-disabled="" ${isManualPricing ? 'disabled' : ''} onchange="_limitExtFields()">
                                         <span class="sp-toggle-track"></span>
                                     </span>
                                     <small>展示</small>
@@ -570,7 +614,7 @@
                                 <label>含普票<span class="sp-required-mark">*</span></label>
                                 <label class="sp-ext-mini">
                                     <span class="sp-toggle">
-                                        <input id="spExtNormal" type="checkbox" ${extNormal ? 'checked' : ''} data-was-checked="${extNormal ? '1' : ''}" data-oa-disabled="" onchange="_limitExtFields()">
+                                        <input id="spExtNormal" type="checkbox" ${extNormal ? 'checked' : ''} data-was-checked="${extNormal ? '1' : ''}" data-oa-disabled="" ${isManualPricing ? 'disabled' : ''} onchange="_limitExtFields()">
                                         <span class="sp-toggle-track"></span>
                                     </span>
                                     <small>展示</small>
@@ -674,6 +718,76 @@
             </div>`;
         }
 
+        function renderPanelSalePrice() {
+            const hit = currentVariantPrices.find(p => matchSpecs(p.specs, currentPanelSpecs));
+            currentPanelSaleGroupId = hit ? hit.variant_group_id : '';
+            const saleRow = currentVariantPrices.find(p =>
+                matchSpecs(p.specs, currentPanelSpecs) && !String(p.supplier || '').trim()
+            );
+            const saleValue = saleRow ? saleRow.retail_price : null;
+            const saleText = saleValue !== null && saleValue !== undefined && saleValue !== ''
+                ? `¥${escapeHtml(String(saleValue))}`
+                : '未配置';
+
+            const listEl = document.getElementById('spSupplierList');
+            if (listEl) {
+                listEl.innerHTML = `<div class="sp-supplier-card active">
+                    <div class="sp-card-header"><span class="sp-card-name">销售价</span></div>
+                    <div class="sp-card-info">
+                        <div class="sp-info-row"><span class="sp-label">零售价</span><span class="sp-val">${saleText}</span></div>
+                    </div>
+                </div>`;
+            }
+
+            const detailEl = document.getElementById('spDetailArea');
+            if (detailEl) {
+                detailEl.innerHTML = `<div class="sp-detail-form">
+                    <div class="sp-card">
+                        <h3>销售价</h3>
+                        <div class="sp-col-item" style="margin-top:12px;">
+                            <label>零售价（元）</label>
+                            <input id="spSalePriceInput" class="sp-input-money" type="text" value="${saleValue ?? ''}" placeholder="0.00"
+                                   onkeydown="if(event.key==='Enter'){event.preventDefault();savePanelSalePrice();}">
+                            <div class="sp-field-hint" style="color:#64748b;margin-left:0;">销售端直接展示该价格，不乘销售系数</div>
+                        </div>
+                    </div>
+                    <div class="sp-form-actions">
+                        <button class="sp-save-btn" onclick="savePanelSalePrice()">保存销售价</button>
+                    </div>
+                </div>`;
+            }
+        }
+
+        async function savePanelSalePrice() {
+            const input = document.getElementById('spSalePriceInput');
+            const raw = (input?.value || '').trim();
+            if (raw && !/^\d+(\.\d{1,2})?$/.test(raw)) {
+                showToast('请输入有效金额，最多两位小数', 'error');
+                return;
+            }
+            if (!currentPanelSaleGroupId) {
+                showToast('规格组合尚未初始化，请先保存规格', 'error');
+                return;
+            }
+            try {
+                const res = await fetch(`/api/products/${currentData.id}/sale-price`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        variant_group_id: currentPanelSaleGroupId,
+                        sale_price: raw ? Number(raw) : null,
+                    }),
+                });
+                const result = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(result.detail || '保存失败');
+                showToast('销售价已保存', 'success');
+                closeSupplierPanel();
+                await loadVariantManager(currentData.id);
+            } catch (error) {
+                showToast(error.message || '保存失败', 'error');
+            }
+        }
+
         function selectPanelSupplier(priceId) {
             currentPanelPriceId = priceId;
             isNewSupplierMode = false; // 退出新增模式
@@ -693,6 +807,19 @@
         function _limitExtFields() {
             const ids = ['spExtNoTax', 'spExtSpecial', 'spExtNormal'];
             const fieldMap = { spExtNoTax: 'no_tax', spExtSpecial: 'special', spExtNormal: 'general' };
+            // 商品库商品（定价模式2）采购报价一律不对外展示，开关保持关闭
+            if (Number(currentData?.pricing_mode) === 2
+                || String(currentData?.sku_code || '').startsWith('EXT-')) {
+                ids.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.checked = false;
+                        el.disabled = true;
+                        el.dataset.wasChecked = '';
+                    }
+                });
+                return;
+            }
             // 统计同规格组合下其他供应商已对外展示的价格
             const matchingPrices = JSON.parse(document.getElementById('spDetailArea')?.dataset.matchingPrices || '[]');
             const currentPriceId = document.getElementById('spDetailArea')?.dataset.currentPriceId || null;

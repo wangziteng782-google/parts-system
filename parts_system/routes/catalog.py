@@ -74,6 +74,9 @@ async def list_product_classifications():
         correction_count = cursor.fetchone()["count"]
         cursor.execute("SELECT COUNT(*) AS count FROM parts WHERE status=0")
         delisted_count = cursor.fetchone()["count"]
+        # 外部商品库导入的商品：sku_code 统一带 EXT- 前缀
+        cursor.execute("SELECT COUNT(*) AS count FROM parts WHERE sku_code LIKE 'EXT-%'")
+        external_count = cursor.fetchone()["count"]
         return {
             "tree": PRODUCT_CLASSIFICATION_TREE,
             "values": PRODUCT_TYPE_VALUES,
@@ -82,6 +85,7 @@ async def list_product_classifications():
             "incomplete_count": incomplete_count,
             "correction_count": correction_count,
             "delisted_count": delisted_count,
+            "external_count": external_count,
         }
     except Exception as e:
         logger.error(f"[查询] 产品分类树失败 | error={e}")

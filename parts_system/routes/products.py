@@ -40,6 +40,7 @@ def list_products(
     completion_status: Optional[str] = None,
     feedback_status: Optional[str] = None,
     status: Optional[str] = None,
+    source: Optional[str] = None,
     duplicates_only: bool = False,
     page: int = 1,
     page_size: int = 30,
@@ -91,6 +92,12 @@ def list_products(
             where += " AND parts.category = %s"
             params.append(category)
 
+        # 来源筛选：商品库导入的商品统一用 EXT- 前缀的 sku_code 标记
+        # 注意：LIKE 的 % 必须走参数绑定，直接写进 SQL 会被 pymysql 当作格式化占位符
+        if source == "external":
+            where += " AND parts.sku_code LIKE %s"
+            params.append("EXT-%")
+
         if product_type:
             if product_type not in PRODUCT_TYPE_VALUES:
                 raise HTTPException(status_code=400, detail="无效的三级产品分类")
@@ -136,7 +143,7 @@ def list_products(
             "AND EXISTS (SELECT 1 FROM parts p2 WHERE p2.model = parts.model " \
             "AND p2.id <> parts.id) THEN 1 ELSE 0 END"
         sql = "SELECT parts.id, parts.sku_code, parts.product_name, parts.model, parts.product_brand, parts.category, parts.product_type, parts.update_time_2, " \
-              "parts.status, " \
+              "parts.status, parts.pricing_mode, " \
               "(SELECT COUNT(*) FROM sales_product_feedback feedback WHERE feedback.parts_id=parts.id AND feedback.status='pending') AS pending_feedback_count, " \
               "parts.modification_completed, " \
               + duplicate_flag_sql + " AS is_duplicate, " \
@@ -523,6 +530,10 @@ async def update_product(product_id: int, req: UpdateFieldRequest):
                     f"{display_change_value(old_value)} → {display_change_value(value_to_save)}"
                 ),
             )
+        # 切换定价模式后展示价来源变了，必须重算区间，否则列表页价格和排序会对不上
+        if req.field == "pricing_mode" and str(value_to_save) in ("1", "2"):
+            from .variants import _recalculate_part_display_price
+            _recalculate_part_display_price(product_id, cursor)
         conn.commit()
 
         logger.info(f"[修改] 完成 | product_id={product_id}, field={field_label}, "

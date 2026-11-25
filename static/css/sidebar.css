@@ -34,6 +34,7 @@
         .tree-incomplete,
         .tree-correction,
         .tree-delisted,
+        .tree-external,
         .tree-leaf {
             display: flex;
             align-items: center;
@@ -44,12 +45,13 @@
             transition: background 0.12s;
         }
 
-        .tree-all, .tree-incomplete, .tree-correction, .tree-delisted { padding: 8px 10px; margin-bottom: 4px; font-size: 13px; font-weight: 500; }
+        .tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-external { padding: 8px 10px; margin-bottom: 4px; font-size: 13px; font-weight: 500; }
         .tree-incomplete { color: #b45309; background: #fffbeb; }
         .tree-correction { color:#b91c1c; background:#fff1f2; }
         .tree-delisted { color:#475569; background:#f1f5f9; }
-        .tree-all:hover, .tree-incomplete:hover, .tree-correction:hover, .tree-delisted:hover, .tree-leaf:hover { background: var(--sidebar-hover); }
-        .tree-all.active, .tree-incomplete.active, .tree-correction.active, .tree-delisted.active, .tree-leaf.active {
+        .tree-external { color:#0e7490; background:#ecfeff; }
+        .tree-all:hover, .tree-incomplete:hover, .tree-correction:hover, .tree-delisted:hover, .tree-external:hover, .tree-leaf:hover { background: var(--sidebar-hover); }
+        .tree-all.active, .tree-incomplete.active, .tree-correction.active, .tree-delisted.active, .tree-external.active, .tree-leaf.active {
             color: var(--accent);
             background: var(--sidebar-active);
         }

@@ -17,10 +17,12 @@ let currentProductId = null;
         let incompleteProductCount = 0;
         let correctionProductCount = 0;
         let delistedProductCount = 0;
+        let externalProductCount = 0;
         let selectedProductType = '';
         let showIncomplete = false;
         let showCorrection = false;
         let showDelisted = false;
+        let showExternal = false;
         let showDuplicatesOnly = false;
         let currentProductFeedback = [];
         let currentProductFeedbackHistory = [];
@@ -64,8 +66,9 @@ let currentProductId = null;
                 ],
             },
             {
-                title: '主表价格信息',
+                title: '定价与价格',
                 fields: [
+                    ['pricing_mode', '定价模式', 'pricing_mode'],
                     ['purchase_cost', '采购成本价', 'text'],
                     ['purchase_special_invoice', '进项专票', 'text'],
                     ['purchase_general_invoice', '进项普票', 'text'],

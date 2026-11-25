@@ -6,15 +6,18 @@
 OA 只读一遍，再依次写测试库、正式库。三张表全部 ON DUPLICATE KEY UPDATE，可重复执行。
 连接信息写死在文件顶部，不读 .env。某个环境连不上不影响另一个，最后按失败数返回退出码。
 """
+import json
 import logging
 import sys
 import time
 from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
 
 import pymysql
 
 from .model.migration import ensure_part_inquiries_table
-from .routes.inquiry_match import _pick_purchase_price
+from .routes.inquiry_match import INQUIRY_SINCE, _pick_purchase_price
 
 BATCH = 500
 RETRIES = 3
@@ -73,6 +76,15 @@ SELECT m.id AS inquiry_mission_id, m.order_goods_id, m.mission_sn, m.mission_typ
   LEFT JOIN yh_factory f ON f.id=g.factory AND f.delete_time IS NULL
   LEFT JOIN yh_supplier s ON s.id=g.supplier AND s.delete_time IS NULL
  WHERE m.mission_type IN (1,3) AND m.mission_status=4 AND m.delete_time IS NULL
+   AND (
+        COALESCE(m.update_time, m.create_time) >= %s
+     OR m.id IN (
+          SELECT d.mission_id
+            FROM yh_query_goods_mission_detail d
+           WHERE d.delete_time IS NULL
+             AND COALESCE(d.update_time, d.create_time) >= %s
+        )
+   )
 """
 
 QUOTE_SQL = """
@@ -145,6 +157,33 @@ UPDATE IGNORE part_inquiries pi
    SET pi.inquiry_mission_id = r.inquiry_mission_id
  WHERE pi.inquiry_mission_id IS NULL
 """
+
+
+STATE_FILE = Path(__file__).resolve().parents[1] / "logs" / "inquiry_sync_state.json"
+
+
+def load_watermark() -> str:
+    """上次同步的起始时间。没有状态文件说明是首次运行，用 INQUIRY_SINCE 兜底。"""
+    try:
+        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        since = str(data.get("since") or "").strip()
+        if since:
+            return since
+    except (OSError, ValueError):
+        pass
+    return INQUIRY_SINCE
+
+
+def save_watermark(since: str):
+    """同步全部成功后推进水位线；任一环境失败就不推进，下次重拉同一区间。"""
+    try:
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        STATE_FILE.write_text(
+            json.dumps({"since": since}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        log.warning(f"水位线保存失败：{type(exc).__name__}: {exc}")
 
 
 def setup_logging():
@@ -308,15 +347,18 @@ def write_env(name, config, payload):
 
 def main():
     setup_logging()
+    since = load_watermark()
+    run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log.info("=" * 66)
     log.info("询价同步开始")
     log.info(f"[OA]   {describe(OA_DB)}")
+    log.info(f"[起始] 从 {since} 开始拉取")
     for name, config in ENVS:
         log.info(f"[{name}] {describe(config) if configured(config) else '未配置，跳过'}")
     log.info("=" * 66)
     started = time.perf_counter()
 
-    missions = oa_query("询价任务", MISSION_SQL)
+    missions = oa_query("询价任务", MISSION_SQL, (since, since))
     mission_ids = {int(m["inquiry_mission_id"]) for m in missions}
     goods_ids = {int(m["order_goods_id"]) for m in missions if m.get("order_goods_id")}
 
@@ -362,6 +404,11 @@ def main():
     if failed:
         log.error(f"失败 {len(failed)} 个：{'、'.join(failed)}")
     log.info(f"总用时 {total:.1f}s")
+    if failed:
+        log.warning(f"[起始] 有环境失败，水位线不推进，下次仍从 {since} 开始")
+    else:
+        save_watermark(run_at)
+        log.info(f"[起始] 下次从 {run_at} 开始拉取")
     return 1 if failed else 0
 
 

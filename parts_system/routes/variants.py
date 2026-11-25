@@ -226,6 +226,17 @@ def _initialize_variant_groups(cur, product_id: int):
         _ensure_variant_groups_not_empty(cur, product_id)
         return
 
+    cur.execute(
+        "SELECT variant_groups_initialized FROM parts WHERE id=%s FOR UPDATE",
+        (product_id,),
+    )
+    part = cur.fetchone()
+    if not part:
+        raise HTTPException(status_code=404, detail="产品不存在")
+    if part.get('variant_groups_initialized'):
+        _ensure_variant_groups_not_empty(cur, product_id)
+        return
+
     catalog = _variant_spec_catalog(cur, product_id)
     if not catalog:
         cur.execute(
@@ -322,6 +333,22 @@ def _expand_groups_for_new_spec_value(
 
 def _recalculate_part_display_price(product_id, cur):
     """把所有对外展示价的 min/max 写回 parts，单规格/无价格时写 NULL。单次聚合 SQL 代替原 3 次查询。"""
+    # 定价模式 2 的展示价来自人工销售价（空供应商行），采购成本不参与
+    cur.execute("SELECT pricing_mode FROM parts WHERE id=%s", (product_id,))
+    mode_row = cur.fetchone() or {}
+    if int(mode_row.get("pricing_mode") or 1) == 2:
+        cur.execute(
+            """SELECT MIN(retail_price) AS min_price, MAX(retail_price) AS max_price
+                 FROM product_variant_prices
+                WHERE part_id=%s AND supplier=''""",
+            (product_id,),
+        )
+        retail = cur.fetchone() or {}
+        cur.execute(
+            "UPDATE parts SET display_price_min=%s, display_price_max=%s WHERE id=%s",
+            (retail.get("min_price"), retail.get("max_price"), product_id),
+        )
+        return
     cur.execute(
         """SELECT COUNT(DISTINCT variant_group_id) AS group_count,
                   MIN(CASE WHEN FIND_IN_SET('no_tax', external_price_fields) THEN no_tax_price END) AS min_no_tax,
@@ -878,6 +905,53 @@ async def delete_variant_group(product_id: int, group_id: str):
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
+
+
+class SalePriceRequest(BaseModel):
+    """定价模式 2 的人工销售价：按规格组合维护，与供应商无关。"""
+    variant_group_id: str
+    sale_price: Optional[float] = None
+
+
+@app.post("/api/products/{product_id}/sale-price")
+async def save_sale_price(product_id: int, req: SalePriceRequest, background_tasks: BackgroundTasks):
+    """把人工销售价写到空供应商专用行，不触碰任何供应商的成本价。"""
+    if not req.variant_group_id.strip():
+        raise HTTPException(status_code=400, detail="规格组合不能为空")
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, product_name, model, pricing_mode FROM parts WHERE id=%s",
+            (product_id,),
+        )
+        product = cur.fetchone()
+        if not product:
+            raise HTTPException(status_code=404, detail="产品不存在")
+        if int(product.get("pricing_mode") or 1) != 2:
+            raise HTTPException(status_code=400, detail="该产品按采购成本推算销售价，请在供应商价格里维护")
+        cur.execute(
+            "SELECT 1 FROM product_variant_group_specs WHERE part_id=%s AND variant_group_id=%s LIMIT 1",
+            (product_id, req.variant_group_id),
+        )
+        if not cur.fetchone():
+            raise HTTPException(status_code=400, detail="规格组合不存在")
+        cur.execute(
+            """INSERT INTO product_variant_prices
+                   (part_id, variant_group_id, supplier, retail_price)
+               VALUES (%s,%s,'',%s)
+               ON DUPLICATE KEY UPDATE retail_price=VALUES(retail_price)""",
+            (product_id, req.variant_group_id, req.sale_price),
+        )
+        cur.execute("UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s", (product_id,))
+        conn.commit()
+        background_tasks.add_task(_bg_recalculate_display_price, product_id)
+        return {
+            "message": "销售价已保存",
+            "sale_price": None if req.sale_price is None else f"{req.sale_price:.2f}",
+        }
     finally:
         conn.close()
 

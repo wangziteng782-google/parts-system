@@ -41,8 +41,9 @@ class SkipLinkRequest(BaseModel):
 # 单次批量上限：一个型号组的量级通常几十条，500 足够，再多基本是选错了
 BATCH_LIMIT = 500
 
-# 左侧询价记录只列该日期之后创建的，再往前的历史数据不再参与匹配
-INQUIRY_SINCE = "2026-04-01"
+# 左侧询价记录只列该时间之后创建的，再往前的历史数据不再参与匹配
+# 2026-11-24 09:13 重新起算：历史询价全部退出匹配页，只处理之后新产生的询价
+INQUIRY_SINCE = "2026-11-24 09:13:00"
 
 
 def _load_inquiry_brief(inquiry_mission_id: int):

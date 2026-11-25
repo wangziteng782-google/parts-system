@@ -79,6 +79,19 @@ def _display_price(cost, product_name=None, product_type=None) -> Optional[str]:
     )
 
 
+def _plain_price(value) -> Optional[str]:
+    """原样输出两位小数，不乘销售系数。用于定价模式 2 的人工销售价。"""
+    if value is None or str(value).strip() == "":
+        return None
+    try:
+        amount = Decimal(str(value).strip())
+    except InvalidOperation:
+        return None
+    if amount < 0:
+        return None
+    return str(amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
 def _scaled_positive_price(value, product_name, product_type) -> Optional[str]:
     """正数报价乘销售系数；空值、0和非数字不作为具体价格。"""
     if value is None or str(value).strip() == "":
@@ -233,14 +246,21 @@ def _collect_single_prices(cursor, ids: list[int]) -> dict[int, dict[str, float]
         return prices
     placeholders = ",".join(["%s"] * len(ids))
     cursor.execute(
-        f"""SELECT part_id, no_tax_price, purchase_special_invoice,
-                   purchase_general_invoice, external_price_fields
-            FROM product_variant_prices
-            WHERE part_id IN ({placeholders})
-            ORDER BY part_id, id""",
+        f"""SELECT pvp.part_id, pvp.no_tax_price, pvp.purchase_special_invoice,
+                   pvp.purchase_general_invoice, pvp.external_price_fields,
+                   pvp.supplier, pvp.retail_price, p.pricing_mode
+            FROM product_variant_prices pvp
+            JOIN parts p ON p.id=pvp.part_id
+            WHERE pvp.part_id IN ({placeholders})
+            ORDER BY pvp.part_id, pvp.id""",
         ids,
     )
     for row in cursor.fetchall():
+        # 定价模式 2（商品库导入商品）：对外只展示人工维护的销售价，采购供应商报价一律不外露
+        if int(row.get('pricing_mode') or 1) == 2:
+            if row.get('retail_price') is not None:
+                prices.setdefault(row["part_id"], {})['retail'] = float(row['retail_price'])
+            continue
         fields = (row.get('external_price_fields') or '').split(',')
         p = prices.setdefault(row["part_id"], {})
         if 'no_tax' in fields and row.get('no_tax_price') is not None:
@@ -249,6 +269,9 @@ def _collect_single_prices(cursor, ids: list[int]) -> dict[int, dict[str, float]
             p['special'] = float(row['purchase_special_invoice'])
         if 'general' in fields and row.get('purchase_general_invoice') is not None:
             p['general'] = float(row['purchase_general_invoice'])
+        # 空供应商行存的是人工维护的销售价，不受 external_price_fields 控制
+        if not str(row.get('supplier') or '').strip() and row.get('retail_price') is not None:
+            p['retail'] = float(row['retail_price'])
     return prices
 
 
@@ -258,7 +281,7 @@ def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: li
     limit_params = [] if limit is None else [limit]
     cursor.execute(
         f"""SELECT p.id, p.product_name, p.model, p.product_brand, p.product_type,
-                   p.nature, p.update_time, p.update_time_2,
+                   p.nature, p.update_time, p.update_time_2, p.pricing_mode,
                    {select_columns},
                    p.display_price_min, p.display_price_max,
                    COALESCE(vc.variant_count, 0) AS variant_count,
@@ -286,13 +309,15 @@ def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: li
                    ) AS specification,
                    COALESCE(MAX(v.update_time), p.update_time_2, p.update_time)
                        AS quote_updated_at,
-                   MAX(CASE WHEN v.no_tax_price IS NOT NULL
-                             OR v.purchase_special_invoice IS NOT NULL
-                             OR v.purchase_general_invoice IS NOT NULL
+                   MAX(CASE WHEN p.pricing_mode=2 THEN (v.retail_price IS NOT NULL)
+                             WHEN v.no_tax_price IS NOT NULL
+                               OR v.purchase_special_invoice IS NOT NULL
+                               OR v.purchase_general_invoice IS NOT NULL
                         THEN 1 ELSE 0 END) AS has_any_price,
-                   MAX(CASE WHEN (v.no_tax_price IS NOT NULL AND v.no_tax_price != 0)
-                             OR (v.purchase_special_invoice IS NOT NULL AND v.purchase_special_invoice != 0)
-                             OR (v.purchase_general_invoice IS NOT NULL AND v.purchase_general_invoice != 0)
+                   MAX(CASE WHEN p.pricing_mode=2 THEN (v.retail_price IS NOT NULL AND v.retail_price != 0)
+                             WHEN (v.no_tax_price IS NOT NULL AND v.no_tax_price != 0)
+                               OR (v.purchase_special_invoice IS NOT NULL AND v.purchase_special_invoice != 0)
+                               OR (v.purchase_general_invoice IS NOT NULL AND v.purchase_general_invoice != 0)
                         THEN 1 ELSE 0 END) AS has_nonzero_price,
                    MIN(v.expire_date) AS expire_date
             FROM parts p
@@ -312,6 +337,9 @@ def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: li
 
 def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dict:
     variant_count = row["variant_count"]
+    # 定价模式 2：销售价由人工维护，直接取零售价原值，不乘销售系数
+    pricing_mode = int(row.get("pricing_mode") or 1)
+    retail = prices.get("retail") if pricing_mode == 2 else None
     if variant_count == 0:
         display_type = "no_variant"
         # 无任何报价记录：不对销售兜底采购成本价，前端展示“价格待完善”
@@ -323,18 +351,29 @@ def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dic
         general_price = None
     elif variant_count == 1:
         display_type = "single_variant"
-        display_price = _display_price(prices.get('no_tax') or prices.get('special') or prices.get('general'), row.get("product_name"), row.get("product_type"))
         display_price_min = None
         display_price_max = None
-        # 详情页固定展示三种价格，主价要用不含票原值，不能用含票兜底后的 display_price
-        no_tax_price = _display_price(prices.get('no_tax'), row.get("product_name"), row.get("product_type"))
-        special_price = _display_price(prices.get('special'), row.get("product_name"), row.get("product_type"))
-        general_price = _display_price(prices.get('general'), row.get("product_name"), row.get("product_type"))
+        if pricing_mode == 2:
+            # 模式2 只对外展示人工销售价；没有售价就是价格待完善，不回落采购报价
+            display_price = _plain_price(retail)
+            no_tax_price = None
+            special_price = None
+            general_price = None
+        else:
+            display_price = _display_price(prices.get('no_tax') or prices.get('special') or prices.get('general'), row.get("product_name"), row.get("product_type"))
+            # 详情页固定展示三种价格，主价要用不含票原值，不能用含票兜底后的 display_price
+            no_tax_price = _display_price(prices.get('no_tax'), row.get("product_name"), row.get("product_type"))
+            special_price = _display_price(prices.get('special'), row.get("product_name"), row.get("product_type"))
+            general_price = _display_price(prices.get('general'), row.get("product_name"), row.get("product_type"))
     else:
         display_type = "multi_variant"
         display_price = None
-        display_price_min = _display_price(row.get("display_price_min"), row.get("product_name"), row.get("product_type"))
-        display_price_max = _display_price(row.get("display_price_max"), row.get("product_name"), row.get("product_type"))
+        if pricing_mode == 2:
+            display_price_min = _plain_price(row.get("display_price_min"))
+            display_price_max = _plain_price(row.get("display_price_max"))
+        else:
+            display_price_min = _display_price(row.get("display_price_min"), row.get("product_name"), row.get("product_type"))
+            display_price_max = _display_price(row.get("display_price_max"), row.get("product_name"), row.get("product_type"))
         no_tax_price = None
         special_price = None
         general_price = None
@@ -612,16 +651,19 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, product_name, product_type FROM parts WHERE id=%s",
+            "SELECT id, product_name, product_type, pricing_mode FROM parts WHERE id=%s",
             [part_id],
         )
         part = cursor.fetchone()
         if not part:
             raise HTTPException(status_code=404, detail="配件不存在")
+        pricing_mode = int(part.get("pricing_mode") or 1)
+        # 模式2 的销售价专用行（supplier 为空）也要进来，否则只有售价的商品选不到规格
+        supplier_filter = "" if pricing_mode == 2 else " AND price.supplier <> ''"
 
         # 取出该 part 下所有有效规格组合的完整记录（含 external_price_fields）
         cursor.execute(
-            """SELECT price.id, price.variant_group_id, price.supplier,
+            f"""SELECT price.id, price.variant_group_id, price.supplier,
                       price.is_external_visible,
                       price.no_tax_price,
                       price.purchase_special_invoice,
@@ -644,7 +686,7 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
                   AND link.variant_group_id=price.variant_group_id
                  JOIN product_variant_specs spec
                    ON spec.id=link.spec_id
-                WHERE price.part_id=%s
+                WHERE price.part_id=%s{supplier_filter}
                 GROUP BY price.id
                HAVING MIN(spec.is_active)=1
                 ORDER BY price.variant_group_id, price.id""",
@@ -672,7 +714,24 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
             part.get("product_name"),
             part.get("product_type"),
         )
-        return {"multiplier": str(multiplier), "items": items}
+        result = {"multiplier": str(multiplier), "items": items}
+        if pricing_mode == 2:
+            # 模式2：对外价就是人工维护的销售价，不乘系数
+            cursor.execute(
+                """SELECT variant_group_id, retail_price FROM product_variant_prices
+                    WHERE part_id=%s AND supplier=''""",
+                [part_id],
+            )
+            retail_map = {r["variant_group_id"]: r["retail_price"] for r in cursor.fetchall()}
+            for item in items:
+                sale = retail_map.get(item["variant_group_id"])
+                item["no_tax_price"] = _plain_price(sale)
+                item["special_invoice_price"] = None
+                item["general_invoice_price"] = None
+                item["special_invoice_available"] = False
+                item["general_invoice_available"] = False
+            result["multiplier"] = "1.00"
+        return result
     finally:
         conn.close()
 

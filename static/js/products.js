@@ -130,6 +130,11 @@ async function init() {
                     <input id="create-${field}" data-create-field="${field}" type="hidden" value="${escapeHtml(selectedProductType || '')}">
                     <div class="create-product-type-dropdown" id="createProductTypeDropdown"></div>
                 </div>`;
+            } else if (type === 'pricing_mode') {
+                control = `<select id="create-${field}" data-create-field="${field}">
+                    <option value="1" selected>采购成本推算销售价</option>
+                    <option value="2">独立维护销售价</option>
+                </select>`;
             } else if (type === 'textarea') {
                 const placeholder = field === 'technical_params' ? '每行填写一项技术参数' : `请输入${label}`;
                 control = `<textarea id="create-${field}" data-create-field="${field}" placeholder="${escapeHtml(placeholder)}"></textarea>`;
@@ -428,6 +433,7 @@ async function init() {
             incompleteProductCount = data.incomplete_count || 0;
             correctionProductCount = data.correction_count || 0;
             delistedProductCount = data.delisted_count || 0;
+            externalProductCount = data.external_count || 0;
             renderClassificationTree();
         }
 
@@ -439,7 +445,7 @@ async function init() {
 
         function renderClassificationTree() {
             const treeEl = document.getElementById('classificationTree');
-            let html = `<div class="tree-all ${!selectedProductType && !showIncomplete && !showCorrection && !showDelisted ? 'active' : ''}" onclick="clearProductTypeFilter()">
+            let html = `<div class="tree-all ${!selectedProductType && !showIncomplete && !showCorrection && !showDelisted && !showExternal ? 'active' : ''}" onclick="clearProductTypeFilter()">
                 <span>全部产品</span>
             </div>`;
             html += `<div class="tree-incomplete ${showIncomplete ? 'active' : ''}" onclick="selectIncomplete()">
@@ -450,6 +456,9 @@ async function init() {
             </div>`;
             html += `<div class="tree-delisted ${showDelisted ? 'active' : ''}" onclick="selectDelisted()">
                 <span>已下架</span><span class="tree-count">${delistedProductCount}</span>
+            </div>`;
+            html += `<div class="tree-external ${showExternal ? 'active' : ''}" onclick="selectExternal()">
+                <span>商品库</span><span class="tree-count">${externalProductCount}</span>
             </div>`;
             classificationTree.forEach(first => {
                 const firstEncoded = encodeURIComponent(first.name);
@@ -560,6 +569,7 @@ async function init() {
             showIncomplete = false;
             showCorrection = false;
             showDelisted = false;
+            showExternal = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
             renderClassificationTree();
@@ -571,9 +581,10 @@ async function init() {
             showIncomplete = true;
             showCorrection = false;
             showDelisted = false;
+            showExternal = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-external, .tree-leaf').forEach(el => el.classList.remove('active'));
             document.querySelector('.tree-incomplete')?.classList.add('active');
             loadProducts();
         }
@@ -583,9 +594,10 @@ async function init() {
             showIncomplete = false;
             showCorrection = true;
             showDelisted = false;
+            showExternal = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-external, .tree-leaf').forEach(el => el.classList.remove('active'));
             document.querySelector('.tree-correction')?.classList.add('active');
             loadProducts();
         }
@@ -595,10 +607,24 @@ async function init() {
             showIncomplete = false;
             showCorrection = false;
             showDelisted = true;
+            showExternal = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-external, .tree-leaf').forEach(el => el.classList.remove('active'));
             document.querySelector('.tree-delisted')?.classList.add('active');
+            loadProducts();
+        }
+
+        function selectExternal() {
+            selectedProductType = '';
+            showIncomplete = false;
+            showCorrection = false;
+            showDelisted = false;
+            showExternal = true;
+            updateDuplicateFilterState(false);
+            currentPage = 1;
+            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-external, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelector('.tree-external')?.classList.add('active');
             loadProducts();
         }
 
@@ -607,9 +633,10 @@ async function init() {
             showIncomplete = false;
             showCorrection = false;
             showDelisted = false;
+            showExternal = false;
             updateDuplicateFilterState(false);
             currentPage = 1;
-            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-leaf').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-external, .tree-leaf').forEach(el => el.classList.remove('active'));
             document.querySelector('.tree-all')?.classList.add('active');
             loadProducts();
         }
@@ -625,6 +652,8 @@ async function init() {
             if (showIncomplete) url += '&completion_status=incomplete&status=all';
             if (showCorrection) url += `&feedback_status=pending`;
             if (showDelisted) url += `&status=delisted`;
+            // 商品库不区分上下架，与左侧计数保持一致
+            if (showExternal) url += '&source=external&status=all';
             const res = await fetch(url);
             const data = await res.json();
             totalRecords = data.total;
@@ -636,8 +665,8 @@ async function init() {
             countEl.textContent = `显示 ${start}-${end} / 共 ${totalRecords} 条`;
             const classificationLabel = showDuplicatesOnly
                 ? '全部重复产品'
-                : (showDelisted ? '已下架' : (showCorrection ? '待改正' : (showIncomplete ? '未标记完成' : (selectedProductType || '全部产品'))));
-            const isMainTab = !showDuplicatesOnly && !showDelisted && !showCorrection && !showIncomplete && !selectedProductType;
+                : (showExternal ? '商品库' : (showDelisted ? '已下架' : (showCorrection ? '待改正' : (showIncomplete ? '未标记完成' : (selectedProductType || '全部产品')))));
+            const isMainTab = !showDuplicatesOnly && !showExternal && !showDelisted && !showCorrection && !showIncomplete && !selectedProductType;
             const displayTotal = isMainTab ? (data.total_all ?? totalRecords) : totalRecords;
             document.getElementById('headerSubtitle').textContent = `${classificationLabel} · 共 ${displayTotal} 条 / 每页 ${PAGE_SIZE} 条`;
             const listEl = document.getElementById('productList');
@@ -745,11 +774,12 @@ async function init() {
             showIncomplete = false;
             showCorrection = false;
             showDelisted = false;
+            showExternal = false;
             const searchInput = document.getElementById('searchInput');
             if (enableDuplicates && searchInput) {
                 searchInput.value = '';
             }
-            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-leaf')
+            document.querySelectorAll('.tree-all, .tree-incomplete, .tree-correction, .tree-delisted, .tree-external, .tree-leaf')
                 .forEach(el => el.classList.remove('active'));
             if (!enableDuplicates) document.querySelector('.tree-all')?.classList.add('active');
             loadProducts();
@@ -787,6 +817,29 @@ async function init() {
                 loadRelations(currentData.id);
             } catch (e) {
                 main.innerHTML = `<div class="empty-state"><p>加载失败: ${e.message}</p></div>`;
+            }
+        }
+
+        async function togglePricingMode() {
+            if (!currentData) return;
+            const next = Number(currentData.pricing_mode) === 2 ? 1 : 2;
+            const label = next === 2 ? '独立维护销售价' : '采购成本推算销售价';
+            const tip = next === 2
+                ? '模式2：销售价由人工维护，采购成本不再参与售价计算。'
+                : '模式1：销售价 = 采购成本 × 系数，自动计算。';
+            if (!confirm(`切换为「${label}」？\n\n${tip}`)) return;
+            try {
+                const res = await fetch(`/api/products/${currentData.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ field: 'pricing_mode', value: String(next) }),
+                });
+                const result = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(result.detail || '切换失败');
+                showToast(`已切换为「${label}」`, 'success');
+                await selectProduct(currentData.id);
+            } catch (error) {
+                showToast(error.message || '切换失败', 'error');
             }
         }
 
@@ -1066,6 +1119,7 @@ async function init() {
                 <div class="product-tags">
                     <span class="tag tag-primary"><span style="opacity:0.7">产品分类：</span><span class="field-value" id="fv-product_type" onclick="editField('product_type')">${escapeHtml(data.product_type || '点击设置三级分类')}</span></span>
                     <span class="tag tag-primary" style="display:none"><span style="opacity:0.7">品类归属：</span><span class="field-value" id="fv-category" onclick="editField('category')">${escapeHtml(data.category || '未分类')}</span></span>
+                    <span class="tag tag-primary" style="cursor:pointer" title="点击切换定价模式" onclick="togglePricingMode()"><span style="opacity:0.7">定价模式：</span>${Number(data.pricing_mode) === 2 ? '独立维护销售价' : '采购成本推算'}</span>
                 </div>
                 <div class="main-price-meta">
                     <div class="main-price-item purchase-cost-highlight">
@@ -1290,6 +1344,7 @@ async function init() {
                     </div>
                 `).join('');
             } catch (e) {
+                if (e.name === 'AbortError') return;
                 listEl.innerHTML = '<div class="relation-list-empty relation-error">加载失败</div>';
             }
         }
@@ -1424,6 +1479,8 @@ async function init() {
                     <button class="relation-page-btn" ${relationCurrentPage >= totalPages ? 'disabled' : ''} onclick="relationGoPage(${relationCurrentPage + 1})">下一页</button>
                 ` : '';
             } catch (e) {
+                // 主动取消的请求不提示失败
+                if (e.name === 'AbortError') return;
                 resultEl.innerHTML = '<div class="relation-empty relation-error">搜索失败</div>';
             }
         }

@@ -942,25 +942,51 @@ img.im-record-thumb:hover {
     font-weight: 600;
 }
 
+/* 和销售页一致：白底卡片、顶部居中、圆形状态图标 */
 .im-toast {
     position: fixed;
+    top: 84px;
     left: 50%;
-    bottom: 26px;
-    transform: translate(-50%, 14px);
-    opacity: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: min(420px, calc(100vw - 40px));
     padding: 10px 16px;
-    border-radius: 7px;
-    background: #2c3b52;
-    color: #fff;
-    font-size: 13px;
+    border: 1px solid #e4e7ed;
+    border-radius: 8px;
+    background: #fff;
+    color: #303133;
+    font-size: 14px;
+    line-height: 1.4;
+    box-shadow: 0 6px 20px rgba(0,0,0,.12);
+    opacity: 0;
     pointer-events: none;
-    transition: .2s;
-    z-index: 60;
+    transition: opacity .2s ease, transform .2s ease;
+    transform: translate(-50%, -10px);
+    z-index: 5000;
 }
 
 .im-toast.show {
     opacity: 1;
     transform: translate(-50%, 0);
+}
+
+.im-toast::before {
+    content: '';
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background-color: #909399;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='12' y1='8' x2='12' y2='13'/%3E%3Cline x1='12' y1='17' x2='12' y2='17.01'/%3E%3C/svg%3E");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 11px 11px;
+}
+
+.im-toast.is-error::before {
+    background-color: #f56c6c;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E");
 }
 
 /* ========== 图片预览 ========== */

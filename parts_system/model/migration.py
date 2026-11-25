@@ -485,6 +485,16 @@ def ensure_product_variant_tables(conn):
         logger.info("[数据库迁移] parts.status -> TINYINT(1) DEFAULT 1")
         conn.commit()
 
+    # 定价模式：1 采购成本推算销售价（默认，存量商品不变），2 人工独立维护销售价
+    cursor.execute("SHOW COLUMNS FROM parts LIKE 'pricing_mode'")
+    if not cursor.fetchone():
+        cursor.execute(
+            "ALTER TABLE parts ADD COLUMN pricing_mode TINYINT NOT NULL DEFAULT 1 "
+            "COMMENT '定价模式：1采购成本推算销售价，2独立维护销售价' AFTER status"
+        )
+        logger.info("[数据库迁移] parts.pricing_mode -> TINYINT DEFAULT 1")
+        conn.commit()
+
 
 def _ensure_inquiry_column(cursor, table, column, ddl_suffix):
     cursor.execute(f"SHOW COLUMNS FROM {table} LIKE '{column}'")
