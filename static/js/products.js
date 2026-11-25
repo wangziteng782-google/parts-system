@@ -14,6 +14,14 @@ async function init() {
             const urlParams = new URLSearchParams(window.location.search);
             const targetProductId = urlParams.get('product_id');
             const targetModel = urlParams.get('model');
+
+            // 新增商品：弹窗先出来，列表和询价回填在后台跑，不要等列表加载完才弹
+            if (urlParams.get('create') === '1') {
+                openProductCreate();
+                const fromInquiry = urlParams.get('from_inquiry');
+                if (fromInquiry) prefillCreateFromInquiry(fromInquiry);
+            }
+
             if (targetProductId && Number.isFinite(Number(targetProductId))) {
                 currentProductId = Number(targetProductId);
                 await loadProducts();
@@ -29,12 +37,7 @@ async function init() {
                     openSpecManager();
                 }
             } else {
-                await loadProducts();
-            }
-            if (urlParams.get('create') === '1') {
-                openProductCreate();
-                const fromInquiry = urlParams.get('from_inquiry');
-                if (fromInquiry) await prefillCreateFromInquiry(fromInquiry);
+                loadProducts();
             }
         }
 
