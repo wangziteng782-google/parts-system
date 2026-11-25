@@ -211,8 +211,11 @@ def _ensure_variant_groups_not_empty(cur, product_id: int) -> int:
 
 def _initialize_variant_groups(cur, product_id: int):
     """首次把当前笛卡尔积持久化；旧报价组合优先沿用原ID并绑定缺少规格的第一个值。"""
+    # 绝大多数商品早就初始化过，先用普通读走快速路径：
+    # 原来一上来就 SELECT ... FOR UPDATE，打开详情要抢 parts 行锁，
+    # 并发打开同一商品或有长事务时会卡住甚至超时。
     cur.execute(
-        "SELECT variant_groups_initialized FROM parts WHERE id=%s FOR UPDATE",
+        "SELECT variant_groups_initialized FROM parts WHERE id=%s",
         (product_id,),
     )
     part = cur.fetchone()
@@ -390,7 +393,7 @@ def _bg_write_operation_log(*, part_id, operation_type, module_code, detail, use
 
 
 @app.get("/api/products/{product_id}/variant-specs")
-async def get_variant_specs(product_id: int):
+def get_variant_specs(product_id: int):
     conn = get_db()
     try:
         cur = conn.cursor()
@@ -691,7 +694,7 @@ async def update_variant_spec_name(product_id: int, req: VariantSpecNameUpdateRe
 
 
 @app.get("/api/products/{product_id}/variant-prices")
-async def get_variant_prices(product_id: int):
+def get_variant_prices(product_id: int):
     conn = get_db()
     try:
         cur = conn.cursor()
@@ -715,7 +718,7 @@ async def get_variant_prices(product_id: int):
 
 
 @app.get("/api/products/{product_id}/variant-combinations")
-async def get_variant_combinations(product_id: int):
+def get_variant_combinations(product_id: int):
     """返回已持久化组合；首次调用补齐当前笛卡尔积，之后只做增量维护。"""
     conn = get_db()
     try:
@@ -1308,7 +1311,7 @@ async def list_oa_suppliers(keyword: str = ""):
 
 
 @app.get("/api/oa/suppliers/{supplier_id}")
-async def get_oa_supplier(supplier_id: int):
+def get_oa_supplier(supplier_id: int):
     """返回供应商开票能力和税点，读本地快照表。"""
     conn = get_db()
     try:

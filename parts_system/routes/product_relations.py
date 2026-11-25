@@ -12,7 +12,7 @@ from ..model import get_db
 
 
 @app.get("/api/products/{product_id}/relations")
-async def get_product_relations(product_id: int):
+def get_product_relations(product_id: int):
     """获取产品的关联产品列表。"""
     conn = get_db()
     try:

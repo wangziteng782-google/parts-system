@@ -32,7 +32,7 @@ async def index(request: Request):
 
 
 @app.get("/api/products")
-async def list_products(
+def list_products(
     keyword: Optional[str] = None,
     category: Optional[str] = None,
     product_type: Optional[str] = None,
@@ -166,8 +166,12 @@ async def list_products(
 
 
 @app.get("/api/products/{product_id}")
-async def get_product(product_id: int):
-    """获取单个产品完整详情（产品数据 + 修改完成状态 + 操作人信息，单次查询）"""
+def get_product(product_id: int):
+    """获取单个产品完整详情（产品数据 + 修改完成状态 + 操作人信息，单次查询）
+
+    用同步 DB 的路由写成 def 而不是 async def，FastAPI 会丢到线程池执行，
+    否则同步查询会阻塞事件循环，打开商品时的多个请求会排队。
+    """
     logger.info(f"[查询] 产品详情 | product_id={product_id}")
     conn = get_db()
     try:

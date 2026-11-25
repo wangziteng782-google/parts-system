@@ -1268,11 +1268,16 @@ async function init() {
 
         // ========== 关联产品 ==========
 
+        let relationsAbort = null;
+
         async function loadRelations(productId) {
             const listEl = document.getElementById('relationList');
             if (!listEl) return;
+            // 快速切换商品时取消上一次，避免上一个商品的关联结果覆盖当前商品
+            relationsAbort?.abort();
+            relationsAbort = new AbortController();
             try {
-                const res = await fetch(`/api/products/${productId}/relations`);
+                const res = await fetch(`/api/products/${productId}/relations`, {signal: relationsAbort.signal});
                 const data = await res.json();
                 if (!data.relations?.length) {
                     listEl.innerHTML = '<div class="relation-list-empty">暂无关联产品</div>';
@@ -1367,6 +1372,7 @@ async function init() {
         }
 
         let relationSearchTimer;
+        let relationSearchAbort = null;
         let relationCurrentPage = 1;
         const relationPageSize = 20;
 
@@ -1381,9 +1387,13 @@ async function init() {
         async function doSearchRelation(keywordOverride) {
             const keyword = keywordOverride !== undefined ? keywordOverride : document.getElementById('relationSearch').value.trim();
             const resultEl = document.getElementById('relationSearchResults');
+            // 连续输入时取消上一次请求，避免请求堆积和旧结果覆盖新结果
+            relationSearchAbort?.abort();
+            relationSearchAbort = new AbortController();
+            const signal = relationSearchAbort.signal;
             try {
                 // status=all：关联弹窗搜全库，不受上下架和分类筛选影响
-                const res = await fetch(`/api/products?keyword=${encodeURIComponent(keyword)}&status=all&page=${relationCurrentPage}&page_size=${relationPageSize}`);
+                const res = await fetch(`/api/products?keyword=${encodeURIComponent(keyword)}&status=all&page=${relationCurrentPage}&page_size=${relationPageSize}`, {signal});
                 const data = await res.json();
                 const products = (data.items || []).filter(p => p.id !== currentRelationProductId);
                 if (!products.length) {

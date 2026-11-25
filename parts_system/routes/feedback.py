@@ -50,7 +50,7 @@ async def pending_feedback_count():
 
 
 @app.get("/api/products/{product_id}/feedback")
-async def list_product_feedback(product_id: int, status: Optional[str] = None):
+def list_product_feedback(product_id: int, status: Optional[str] = None):
     """按产品读取反馈，默认返回全部状态。"""
     if product_id <= 0:
         raise HTTPException(status_code=400, detail="无效的产品ID")
