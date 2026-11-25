@@ -94,10 +94,10 @@ def _feedback_map() -> dict[int, dict]:
     return grouped
 
 
-def _fetch_inquiries(keyword: str = "", since: str = "") -> list[dict]:
+def _fetch_inquiries(keyword: str = "") -> list[dict]:
     """从本地落地表读询价记录，不设条数上限：上架状态和反馈在本地表，只能全量取回再过滤分页。
 
-    字段名保持和原来查 OA 时一致，调用方不用跟着改。since 为创建时间下限，格式 YYYY-MM-DD。
+    字段名保持和原来查 OA 时一致，调用方不用跟着改。历史询价已按起算时间清理，这里不再按时间过滤。
     """
     where, params = [], []
     if keyword:
@@ -107,9 +107,6 @@ def _fetch_inquiries(keyword: str = "", since: str = "") -> list[dict]:
             "OR specification LIKE %s OR product_brand LIKE %s)"
         )
         params.extend([like_keyword] * 4)
-    if since:
-        where.append("create_time >= %s")
-        params.append(since)
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
     conn = get_db()
     try:

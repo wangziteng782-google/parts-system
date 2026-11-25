@@ -41,9 +41,6 @@ class SkipLinkRequest(BaseModel):
 # 单次批量上限：一个型号组的量级通常几十条，500 足够，再多基本是选错了
 BATCH_LIMIT = 500
 
-# 左侧询价记录只列该时间之后创建的，再往前的历史数据不再参与匹配
-INQUIRY_SINCE = "2026-04-01"
-
 
 def _load_inquiry_brief(inquiry_mission_id: int):
     """从本地落地表读询价商品名和型号；记录不存在返回 None。"""
@@ -283,7 +280,7 @@ async def list_match_records(
     page_size: int = 30,
 ):
     """询价列表。关键词在 OA 侧过滤，匹配状态在本地合并。"""
-    rows = _fetch_inquiries(keyword, INQUIRY_SINCE)
+    rows = _fetch_inquiries(keyword)
     matches = _match_map()
     skips = _skip_link_ids()
 
@@ -582,7 +579,7 @@ async def batch_preview(keyword: str = "", status: str = "all"):
     matches = _match_map()
     skips = _skip_link_ids()
     items = []
-    for row in _fetch_inquiries(keyword, INQUIRY_SINCE):
+    for row in _fetch_inquiries(keyword):
         mission_id = int(row["inquiry_mission_id"])
         matched = matches.get(mission_id) or {}
         if matched.get("part_id"):

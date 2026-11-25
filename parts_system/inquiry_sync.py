@@ -17,11 +17,14 @@ from pathlib import Path
 import pymysql
 
 from .model.migration import ensure_part_inquiries_table
-from .routes.inquiry_match import INQUIRY_SINCE, _pick_purchase_price
+from .routes.inquiry_match import _pick_purchase_price
 
 BATCH = 500
 RETRIES = 3
 TABLES = ("inquiry_quotes", "inquiry_records", "inquiry_communications")
+
+# 同步首次运行时的水位线兜底：只同步该时间之后产生的询价，更早的历史数据不再回流。
+INQUIRY_SINCE = "2026-11-25"
 
 # ============ 连接信息（写死，改这里就行） ============
 OA_DB = {
