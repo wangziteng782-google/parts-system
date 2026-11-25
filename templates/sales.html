@@ -6,7 +6,7 @@
     <title>销售商品查询</title>
     <link rel="icon" href="/static/img/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="/static/img/site-logo.png">
-    <link rel="stylesheet" href="/static/css/sales.css?v=20261125-2">
+    <link rel="stylesheet" href="/static/css/sales.css?v=20261125-4">
     <link rel="preconnect" href="https://oa.yixiuti.com">
 </head>
 <body data-user-name="{{ sales_user_name }}">
@@ -123,6 +123,11 @@
             <img id="salesPreviewImage" src="" alt="商品图片大图" onerror="this.src='/static/img/site-logo.png';this.onerror=null">
             <button class="gallery-nav gallery-next" id="salesGalleryNext" type="button" onclick="salesImageGalleryNext()" aria-label="下一张">›</button>
             <span class="gallery-counter" id="salesImageCounter"></span>
+            <div class="sales-image-zoom-bar">
+                <button type="button" onclick="zoomSalesImage(-1)" aria-label="缩小">−</button>
+                <span class="sales-image-zoom-value" id="salesImageZoomValue">100%</span>
+                <button type="button" onclick="zoomSalesImage(1)" aria-label="放大">+</button>
+            </div>
         </div>
     </div>
 
@@ -167,7 +172,6 @@
                                 <span id="salesDetailGeneralWrap">含普票 <b id="salesDetailGeneralPrice"></b></span>
                             </div>
                         </div>
-                        <div class="sales-detail-services" id="salesDetailServices" hidden></div>
                         <div class="sales-detail-variant-picker" id="salesDetailPartsPrices" hidden>
                             <div class="sales-detail-variant-head">
                                 <span>选择规格</span>
@@ -437,7 +441,7 @@
 
     <div class="sales-toast" id="salesToast"></div>
     <script>window.__OA_TEST_TOKEN__ = "{{ oa_test_token }}";</script>
-    <script src="/static/js/sales.js?v=20261125-1"></script>
+    <script src="/static/js/sales.js?v=20261125-4"></script>
     <script src="/static/js/sales-inquiry.js?v=20261125-2"></script>
 </body>
 </html>

@@ -428,11 +428,11 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         "price_desc": "(p.display_price_max IS NULL), p.display_price_max DESC, p.id DESC",
     }[sort]
 
+    # 只返回销售详情页真正展示的商品维度字段；质保、发货地、发货时间、报价有效期、
+    # 每日截单时间这些以 product_variant_prices 的报价行为准，商品主表不再带
     detail_columns = [
-        "sku_code", "supplier", "warranty", "applicable_elevator_brand",
-        "substitute_model", "precautions", "technical_params", "remark",
-        "daily_cutoff_time", "quote_validity", "shipping_origin", "shipping_time",
-        "remark_2", "updater", "filler",
+        "applicable_elevator_brand", "substitute_model", "precautions",
+        "technical_params", "remark", "remark_2", "updater", "filler",
     ]
     part_price_columns = [
         "purchase_special_invoice", "purchase_general_invoice",

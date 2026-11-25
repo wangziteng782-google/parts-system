@@ -174,10 +174,17 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .footer-brand { display: flex; align-items: center; gap: 8px; color: #526078; font-weight: 700; }
 .footer-brand img { width: 25px; height: 25px; border-radius: 6px; }
 
-.sales-image-overlay { position: fixed; inset: 0; z-index: 6000; display: none; align-items: center; justify-content: center; padding: 32px; background: rgba(17,28,45,.72); backdrop-filter: blur(3px); }
+.sales-image-overlay { position: fixed; inset: 0; z-index: 6000; display: none; align-items: center; justify-content: center; padding: 32px; background: rgba(17,28,45,.72); backdrop-filter: blur(3px); overflow: hidden; }
 .sales-image-overlay.show { display: flex; }
 .sales-image-modal { position: relative; display: flex; max-width: 92vw; max-height: 90vh; align-items: center; justify-content: center; padding: 18px; border-radius: 14px; background: #fff; box-shadow: 0 30px 90px rgba(7,18,35,.35); }
-.sales-image-modal img { display: block; max-width: calc(92vw - 36px); max-height: calc(90vh - 36px); object-fit: contain; }
+.sales-image-modal img { display: block; max-width: calc(92vw - 36px); max-height: calc(90vh - 36px); object-fit: contain; transform-origin: center center; transition: transform .16s ease; user-select: none; -webkit-user-drag: none; }
+/* 放大后可拖拽：放大状态去掉过渡，跟手 */
+.sales-image-modal img.is-zoomed { cursor: grab; transition: none; }
+.sales-image-modal img.is-dragging { cursor: grabbing; }
+.sales-image-zoom-bar { position: absolute; z-index: 2; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.sales-image-zoom-bar button { width: 30px; height: 30px; color: #fff; border: 0; border-radius: 50%; background: rgba(37,48,71,.85); font-size: 17px; line-height: 1; }
+.sales-image-zoom-bar button:hover { background: var(--sales-blue); }
+.sales-image-zoom-value { min-width: 46px; color: #fff; font-size: 12px; text-align: center; }
 .image-preview-close { position: absolute; z-index: 2; top: -14px; right: -14px; width: 38px; height: 38px; color: #fff; border: 2px solid rgba(255,255,255,.8); border-radius: 50%; background: #253047; font-size: 24px; line-height: 1; }
 .image-preview-close:hover { background: var(--sales-blue); }
 .gallery-nav { position: absolute; z-index: 2; top: 50%; transform: translateY(-50%); width: 46px; height: 46px; color: #fff; border: 2px solid rgba(255,255,255,.8); border-radius: 50%; background: rgba(37,48,71,.85); font-size: 28px; line-height: 1; }
@@ -584,11 +591,6 @@ body.sales-list-view .goods-list-wrap { display: block; }
 /* 价格副项：与主价重复的隐藏，空缺的淡化 */
 .sales-detail-price-extra > span[hidden] { display: none; }
 .sales-detail-price-extra > span.is-empty b { color: #c3ccd9; font-weight: 500; }
-/* 服务承诺行：质保、发货地等，浅底标签 */
-.sales-detail-services { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.sales-detail-services[hidden] { display: none; }
-.sales-detail-service { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 4px; background: #f5f7fa; color: #718096; font-size: 12px; line-height: 1.6; }
-.sales-detail-service b { color: #1a202c; font-weight: 500; }
 
 /* 标签页 */
 .sales-detail-tabs { padding: 16px 20px 12px; background: #fff; }

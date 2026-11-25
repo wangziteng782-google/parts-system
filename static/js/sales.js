@@ -361,22 +361,19 @@ function quotationTypeText(value) {
     return type;
 }
 
-function variantDetailValue(quote, field, fallback) {
-    return quote && detailValue(quote[field]) ? quote[field] : fallback;
-}
-
 function renderSalesDetailInfo(item, source, sourceLabel, quote = null) {
     const fields = source === 'parts'
         ? [
             ['商品品牌', item.product_brand],
             ['产品分类', item.product_type],
-            ['质保期限', variantDetailValue(quote, 'warranty_time', item.warranty)],
+            // 质保、发货、有效期这些一律以选中 SKU 的报价行为准，不再回落商品主表
+            ['质保期限', quote?.warranty_time],
             ['适用电梯品牌', item.applicable_elevator_brand],
             ['替代型号', item.substitute_model],
-            ['发货地', variantDetailValue(quote, 'shipping_origin', item.shipping_origin)],
-            ['发货时间', variantDetailValue(quote, 'shipping_time', item.shipping_time)],
-            ['报价有效期', variantDetailValue(quote, 'expire_date', item.quote_validity)],
-            ['每日截单时间', variantDetailValue(quote, 'daily_order_time', item.daily_cutoff_time)],
+            ['发货地', quote?.shipping_origin],
+            ['发货时间', quote?.shipping_time],
+            ['报价有效期', quote?.expire_date],
+            ['每日截单时间', quote?.daily_order_time],
             ['报价时间', quote?.quote_time],
             ['采购运费', quote ? detailAmountText(quote.purchase_shipping) : ''],
             ['更新人', item.updater || item.filler],
@@ -441,26 +438,6 @@ function setSalesDetailMeta(itemId, valueId, value) {
     const text = detailValue(value);
     if (target) target.textContent = text;
     if (wrap) wrap.hidden = !text;
-}
-
-// 服务承诺行：质保、发货地这类买前必看的短信息，做成购物平台那种浅底标签
-function renderSalesDetailServices(item, source) {
-    const wrap = document.getElementById('salesDetailServices');
-    if (!wrap) return;
-    if (source === 'inquiry') {
-        wrap.hidden = true;
-        wrap.innerHTML = '';
-        return;
-    }
-    const chips = [];
-    const warranty = detailValue(item.warranty);
-    const origin = detailValue(item.shipping_origin);
-    const elevator = detailValue(item.applicable_elevator_brand);
-    if (warranty) chips.push(`<span class="sales-detail-service">质保<b>${escapeSalesHtml(warranty)}</b></span>`);
-    if (origin) chips.push(`<span class="sales-detail-service">发货地<b>${escapeSalesHtml(origin)}</b></span>`);
-    if (elevator) chips.push(`<span class="sales-detail-service">适用电梯<b>${escapeSalesHtml(elevator)}</b></span>`);
-    wrap.innerHTML = chips.join('');
-    wrap.hidden = !chips.length;
 }
 
 function safeSalesAttachmentUrl(url) {
@@ -937,7 +914,6 @@ function openSalesProductDetail(index) {
     const noTaxForDetail = isInquiry ? item.display_price
         : (Object.prototype.hasOwnProperty.call(item, 'no_tax_price') ? item.no_tax_price : item.display_price);
     setSalesDetailPrices(noTaxForDetail, item.special_price, item.general_price, !isInquiry);
-    renderSalesDetailServices(item, source);
     setSalesDetailText('salesDetailQuotationType', isInquiry ? quotationTypeText(item.quotation_type) : '');
     setSalesDetailText('salesDetailPostFeePurchase', isInquiry ? detailAmountText(item.post_fee_purchase) : '');
     setSalesDetailText(
@@ -1121,6 +1097,44 @@ function setSalesView(view) {
 }
 
 let salesImageGallery = { images: [], index: 0 };
+// 大图预览缩放状态：scale=1 时不拖拽，位移只在放大后生效
+let salesImageZoom = { scale: 1, x: 0, y: 0 };
+let salesImageDrag = null;
+const SALES_IMAGE_MAX_SCALE = 4;
+
+function _applySalesImageZoom() {
+    const img = salesEls.previewImage;
+    if (!img) return;
+    const { scale, x, y } = salesImageZoom;
+    img.style.transform = scale === 1 ? '' : `translate(${x}px, ${y}px) scale(${scale})`;
+    img.classList.toggle('is-zoomed', scale > 1);
+    const value = document.getElementById('salesImageZoomValue');
+    if (value) value.textContent = `${Math.round(scale * 100)}%`;
+}
+
+function resetSalesImageZoom() {
+    salesImageZoom = { scale: 1, x: 0, y: 0 };
+    salesImageDrag = null;
+    _applySalesImageZoom();
+}
+
+function _setSalesImageScale(next) {
+    const scale = Math.min(SALES_IMAGE_MAX_SCALE, Math.max(1, next));
+    // 缩回原始比例时位移一并归零，避免图片停在偏移位置
+    salesImageZoom = scale === 1
+        ? { scale: 1, x: 0, y: 0 }
+        : { scale, x: salesImageZoom.x, y: salesImageZoom.y };
+    _applySalesImageZoom();
+}
+
+function zoomSalesImage(direction) {
+    _setSalesImageScale(salesImageZoom.scale * (direction > 0 ? 1.25 : 0.8));
+}
+
+function toggleSalesImageZoom() {
+    if (salesImageZoom.scale > 1) resetSalesImageZoom();
+    else _setSalesImageScale(2);
+}
 
 function openSalesImagePreview(imageUrl) {
     const images = Array.isArray(imageUrl) ? imageUrl : [imageUrl];
@@ -1133,6 +1147,8 @@ function openSalesImagePreview(imageUrl) {
 function _renderSalesImageGallery() {
     const { images, index } = salesImageGallery;
     salesEls.previewImage.src = safeSalesImage(images[index]);
+    // 切图后回到原始比例，不要带着上一张的缩放
+    resetSalesImageZoom();
     const counter = salesEls.imageCounter;
     if (counter) counter.textContent = images.length > 1 ? `${index + 1} / ${images.length}` : '';
     const prevBtn = salesEls.galleryPrev;
@@ -1159,10 +1175,46 @@ function closeSalesImagePreview() {
     salesEls.imageOverlay.classList.remove('show');
     salesEls.previewImage.src = '';
     salesImageGallery = { images: [], index: 0 };
+    resetSalesImageZoom();
     document.body.style.overflow = '';
 }
 
 function bindSalesEvents() {
+    // 大图预览：滚轮/双击缩放，放大后可按住拖拽移动
+    const previewImg = salesEls.previewImage;
+    if (previewImg) {
+        previewImg.addEventListener('dblclick', event => {
+            event.preventDefault();
+            toggleSalesImageZoom();
+        });
+        previewImg.addEventListener('wheel', event => {
+            event.preventDefault();
+            _setSalesImageScale(salesImageZoom.scale * (event.deltaY < 0 ? 1.15 : 0.87));
+        }, { passive: false });
+        previewImg.addEventListener('mousedown', event => {
+            if (salesImageZoom.scale <= 1) return;
+            event.preventDefault();
+            salesImageDrag = {
+                startX: event.clientX,
+                startY: event.clientY,
+                originX: salesImageZoom.x,
+                originY: salesImageZoom.y,
+            };
+            previewImg.classList.add('is-dragging');
+        });
+        window.addEventListener('mousemove', event => {
+            if (!salesImageDrag) return;
+            salesImageZoom.x = salesImageDrag.originX + (event.clientX - salesImageDrag.startX);
+            salesImageZoom.y = salesImageDrag.originY + (event.clientY - salesImageDrag.startY);
+            _applySalesImageZoom();
+        });
+        window.addEventListener('mouseup', () => {
+            if (!salesImageDrag) return;
+            salesImageDrag = null;
+            previewImg.classList.remove('is-dragging');
+        });
+    }
+
     salesEls.form.addEventListener('submit', event => {
         event.preventDefault();
         salesState.keyword = salesEls.input.value.trim();
