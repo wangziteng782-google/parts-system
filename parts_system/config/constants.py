@@ -255,16 +255,7 @@ FIELD_LABELS = {
     "shipping_time": "发货时间",
     "remark_2": "补充备注",
     "updater": "更新人",
-    "key_part_images": "关键部位图片",
     "actual_photos": "实物图照片",
-    "product_image_3": "商品图片3",
-    "product_image_4": "商品图片4",
-    "product_image_5": "商品图片5",
-    "product_image_6": "商品图片6",
-    "product_image_7": "商品图片7",
-    "product_image_8": "商品图片8",
-    "product_image_9": "商品图片9",
-    "product_image_10": "商品图片10",
     "product_detail_images": "商品详情图片",
     "filler": "填报人",
     "update_time": "更新时间",
@@ -276,10 +267,7 @@ FIELD_LABELS = {
 }
 
 IMAGE_FIELDS = [
-    "key_part_images", "actual_photos",
-    "product_image_3", "product_image_4", "product_image_5",
-    "product_image_6", "product_image_7", "product_image_8",
-    "product_image_9", "product_image_10", "product_detail_images",
+    "actual_photos", "product_detail_images",
 ]
 
 CREATE_PRODUCT_FIELDS = [

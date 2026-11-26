@@ -59,7 +59,7 @@ async function init() {
                 </section>
             `).join('') + `
                 <section class="product-create-section">
-                    <div class="product-create-section-title">产品图片 <span style="font-weight:400;color:#94a3b8">（仅新增关键部位图片、实物图照片和商品详情图片）</span></div>
+                    <div class="product-create-section-title">产品图片 <span style="font-weight:400;color:#94a3b8">（仅新增实物图照片和商品详情图片）</span></div>
                     <div class="create-image-grid" id="createImageGrid"></div>
                 </section>`;
             renderCreateImageSection();

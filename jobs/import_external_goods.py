@@ -382,7 +382,7 @@ def import_spu(cur, rows: list, part_id: int = None) -> str:
             """INSERT INTO parts
                    (sku_code, product_name, product_brand, model, product_type, warranty,
                     shipping_origin, remark, technical_params, status, pricing_mode, variant_groups_initialized,
-                    modification_completed, key_part_images, filler, update_time_2)
+                    modification_completed, actual_photos, filler, update_time_2)
                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,2,1,1,%s,'外部导入',NOW())""",
             (
                 sku_code,

@@ -950,7 +950,7 @@
 
             // 过滤掉id字段和图片相关字段
             const displayFields = Object.keys(imgLibFieldLabels).filter(field =>
-                field !== 'id' && !field.startsWith('product_image_') && !['key_part_images', 'actual_photos', 'product_detail_images'].includes(field)
+                field !== 'id' && !['actual_photos', 'product_detail_images'].includes(field)
             );
 
             let html = '';

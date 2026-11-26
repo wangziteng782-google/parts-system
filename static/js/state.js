@@ -35,11 +35,8 @@ let currentProductId = null;
         let createLocalImageTargetField = null;
         let imgLibCreateMode = false;
 
-        const IMAGE_FIELDS = ['key_part_images', 'actual_photos', 'product_image_3', 'product_image_4',
-            'product_image_5', 'product_image_6', 'product_image_7', 'product_image_8',
-            'product_image_9', 'product_image_10', 'product_detail_images'];
+        const IMAGE_FIELDS = ['actual_photos', 'product_detail_images'];
         const CREATE_PRODUCT_IMAGE_FIELDS = [
-            'key_part_images',
             'actual_photos',
             'product_detail_images',
         ];
