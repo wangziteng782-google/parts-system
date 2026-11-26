@@ -334,22 +334,19 @@ def _recalculate_part_display_price(product_id, cur):
     cur.execute("SELECT pricing_mode FROM parts WHERE id=%s", (product_id,))
     mode_row = cur.fetchone() or {}
     if int(mode_row.get("pricing_mode") or 1) == 2:
-        # 只统计被选为对外展示的那一类销售价
+        # 只统计被勾选为对外展示的销售价（支持多选）
         cur.execute(
-            """SELECT MIN(CASE external_price_fields
-                           WHEN 'no_tax' THEN retail_no_tax_price
-                           WHEN 'special' THEN retail_special_price
-                           WHEN 'general' THEN retail_general_price
-                         END) AS min_price,
-                      MAX(CASE external_price_fields
-                           WHEN 'no_tax' THEN retail_no_tax_price
-                           WHEN 'special' THEN retail_special_price
-                           WHEN 'general' THEN retail_general_price
-                         END) AS max_price
-                 FROM product_variant_prices
-                WHERE part_id=%s AND supplier=''
-                  AND external_price_fields IS NOT NULL AND external_price_fields<>''""",
-            (product_id,),
+            """SELECT MIN(price) AS min_price, MAX(price) AS max_price FROM (
+                   SELECT retail_no_tax_price AS price FROM product_variant_prices
+                    WHERE part_id=%s AND supplier='' AND FIND_IN_SET('no_tax', external_price_fields)
+                   UNION ALL
+                   SELECT retail_special_price FROM product_variant_prices
+                    WHERE part_id=%s AND supplier='' AND FIND_IN_SET('special', external_price_fields)
+                   UNION ALL
+                   SELECT retail_general_price FROM product_variant_prices
+                    WHERE part_id=%s AND supplier='' AND FIND_IN_SET('general', external_price_fields)
+               ) t""",
+            (product_id, product_id, product_id),
         )
         retail = cur.fetchone() or {}
         cur.execute(
@@ -947,10 +944,12 @@ async def save_sale_price(product_id: int, req: SalePriceRequest, background_tas
             raise HTTPException(status_code=404, detail="产品不存在")
         if int(product.get("pricing_mode") or 1) != 2:
             raise HTTPException(status_code=400, detail="该产品按采购成本推算销售价，请在供应商价格里维护")
-        # 销售价只能选一种对外展示类型，且与采购报价的对外展示互斥
-        ext_field = (req.external_price_fields or "").strip()
-        if ext_field and ext_field not in ("no_tax", "special", "general"):
-            raise HTTPException(status_code=400, detail="对外展示类型只能是 不含票/含专票/含普票 之一")
+        # 对外展示可多选，与采购报价的对外展示字段复用同一套枚举
+        ext_fields = [f.strip() for f in (req.external_price_fields or "").split(",") if f.strip()]
+        invalid_fields = [f for f in ext_fields if f not in ("no_tax", "special", "general")]
+        if invalid_fields:
+            raise HTTPException(status_code=400, detail="对外展示类型只能是 不含票/含专票/含普票")
+        ext_field = ",".join(dict.fromkeys(ext_fields)) or None
         cur.execute(
             "SELECT 1 FROM product_variant_group_specs WHERE part_id=%s AND variant_group_id=%s LIMIT 1",
             (product_id, req.variant_group_id),
@@ -960,12 +959,12 @@ async def save_sale_price(product_id: int, req: SalePriceRequest, background_tas
         sale_no_tax = req.no_tax_price if req.no_tax_price is not None else req.sale_price
         sale_special = req.special_price
         sale_general = req.general_price
-        # retail_price 是老的单一价格字段，写对外展示那一类，保证旧逻辑兜底可用
-        display_price = {
-            "no_tax": sale_no_tax,
-            "special": sale_special,
-            "general": sale_general,
-        }.get(ext_field)
+        # retail_price 是老的单一价格字段，写对外展示里第一个有值的，保证旧逻辑兜底可用
+        price_by_field = {"no_tax": sale_no_tax, "special": sale_special, "general": sale_general}
+        display_price = next(
+            (price_by_field[f] for f in ext_fields if price_by_field.get(f) is not None),
+            None,
+        )
         if display_price is None:
             display_price = next(
                 (price for price in (sale_no_tax, sale_special, sale_general) if price is not None),

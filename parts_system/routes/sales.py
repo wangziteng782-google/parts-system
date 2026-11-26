@@ -268,12 +268,16 @@ def _collect_single_prices(cursor, ids: list[int]) -> dict[int, dict[str, float]
         # 定价模式 2（商品库导入商品）：对外只展示人工维护的销售价，采购供应商报价一律不外露
         # 销售价行必须选了对外展示类型才露出，未选视为价格待完善
         if int(row.get('pricing_mode') or 1) == 2:
-            sale_fields = (row.get('external_price_fields') or '').strip()
-            sale_column = RETAIL_PRICE_COLUMNS.get(sale_fields)
-            if (not str(row.get('supplier') or '').strip()
-                    and sale_column
-                    and row.get(sale_column) is not None):
-                prices.setdefault(row["part_id"], {})['retail'] = float(row[sale_column])
+            sale_fields = [f for f in (row.get('external_price_fields') or '').split(',') if f]
+            if not str(row.get('supplier') or '').strip():
+                # 多选时列表主价按 不含票 > 含专票 > 含普票 取第一个有值的
+                for field in ('no_tax', 'special', 'general'):
+                    if field not in sale_fields:
+                        continue
+                    value = row.get(RETAIL_PRICE_COLUMNS[field])
+                    if value is not None:
+                        prices.setdefault(row["part_id"], {})['retail'] = float(value)
+                        break
             continue
         fields = (row.get('external_price_fields') or '').split(',')
         p = prices.setdefault(row["part_id"], {})
@@ -325,27 +329,22 @@ def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: li
                        AS quote_updated_at,
                    MAX(CASE WHEN p.pricing_mode=2 THEN (
                                  v.supplier=''
-                                 AND CASE v.external_price_fields
-                                       WHEN 'no_tax' THEN v.retail_no_tax_price
-                                       WHEN 'special' THEN v.retail_special_price
-                                       WHEN 'general' THEN v.retail_general_price
-                                     END IS NOT NULL)
+                                 AND (
+                                     (FIND_IN_SET('no_tax', v.external_price_fields) AND v.retail_no_tax_price IS NOT NULL)
+                                     OR (FIND_IN_SET('special', v.external_price_fields) AND v.retail_special_price IS NOT NULL)
+                                     OR (FIND_IN_SET('general', v.external_price_fields) AND v.retail_general_price IS NOT NULL)
+                                 ))
                              WHEN v.no_tax_price IS NOT NULL
                                OR v.purchase_special_invoice IS NOT NULL
                                OR v.purchase_general_invoice IS NOT NULL
                         THEN 1 ELSE 0 END) AS has_any_price,
                    MAX(CASE WHEN p.pricing_mode=2 THEN (
                                  v.supplier=''
-                                 AND CASE v.external_price_fields
-                                       WHEN 'no_tax' THEN v.retail_no_tax_price
-                                       WHEN 'special' THEN v.retail_special_price
-                                       WHEN 'general' THEN v.retail_general_price
-                                     END != 0
-                                 AND CASE v.external_price_fields
-                                       WHEN 'no_tax' THEN v.retail_no_tax_price
-                                       WHEN 'special' THEN v.retail_special_price
-                                       WHEN 'general' THEN v.retail_general_price
-                                     END IS NOT NULL)
+                                 AND (
+                                     (FIND_IN_SET('no_tax', v.external_price_fields) AND v.retail_no_tax_price IS NOT NULL AND v.retail_no_tax_price != 0)
+                                     OR (FIND_IN_SET('special', v.external_price_fields) AND v.retail_special_price IS NOT NULL AND v.retail_special_price != 0)
+                                     OR (FIND_IN_SET('general', v.external_price_fields) AND v.retail_general_price IS NOT NULL AND v.retail_general_price != 0)
+                                 ))
                              WHEN (v.no_tax_price IS NOT NULL AND v.no_tax_price != 0)
                                OR (v.purchase_special_invoice IS NOT NULL AND v.purchase_special_invoice != 0)
                                OR (v.purchase_general_invoice IS NOT NULL AND v.purchase_general_invoice != 0)
@@ -757,22 +756,29 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
                 [part_id],
             )
             retail_map = {r["variant_group_id"]: r for r in cursor.fetchall()}
+            price_targets = {
+                "no_tax": "no_tax_price",
+                "special": "special_invoice_price",
+                "general": "general_invoice_price",
+            }
             for item in items:
                 sale_row = retail_map.get(item["variant_group_id"]) or {}
-                sale_fields = (sale_row.get("external_price_fields") or "").strip()
-                sale_column = RETAIL_PRICE_COLUMNS.get(sale_fields)
-                sale_price = _plain_price(sale_row.get(sale_column)) if sale_column else None
+                sale_fields = [f for f in (sale_row.get("external_price_fields") or "").split(",") if f]
                 item["no_tax_price"] = None
                 item["special_invoice_price"] = None
                 item["general_invoice_price"] = None
                 item["special_invoice_available"] = False
                 item["general_invoice_available"] = False
-                if sale_fields == "no_tax":
-                    item["no_tax_price"] = sale_price
-                elif sale_fields == "special":
-                    item["special_invoice_price"] = sale_price
-                elif sale_fields == "general":
-                    item["general_invoice_price"] = sale_price
+                # 勾了几类就展示几类
+                for field in sale_fields:
+                    key = price_targets.get(field)
+                    if not key:
+                        continue
+                    item[key] = _plain_price(sale_row.get(RETAIL_PRICE_COLUMNS[field]))
+                    if field == "special":
+                        item["special_invoice_available"] = item[key] is not None
+                    elif field == "general":
+                        item["general_invoice_available"] = item[key] is not None
                 # 销售价的开票类型及单位、税率，来自该 SKU 的销售价行
                 item["invoice_company"] = sale_row.get("retail_invoice_company")
                 item["tax_rate"] = sale_row.get("retail_tax_rate")

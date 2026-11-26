@@ -95,18 +95,21 @@
                 .replace(/"/g, '&quot;');
         }
 
-        // 销售价按对外展示类型取对应价格字段，没选类型视为未配置
+        // 销售价按对外展示类型取对应价格字段，多选时按 不含票 > 含专票 > 含普票 取第一个有值的
         function _saleDisplayValue(row) {
             if (!row) return null;
-            const field = String(row.external_price_fields || '').split(',').filter(Boolean)[0];
-            const column = {
+            const fields = String(row.external_price_fields || '').split(',').filter(Boolean);
+            const columns = {
                 no_tax: 'retail_no_tax_price',
                 special: 'retail_special_price',
                 general: 'retail_general_price',
-            }[field];
-            if (!column) return null;
-            const value = row[column];
-            return value === undefined ? null : value;
+            };
+            for (const field of ['no_tax', 'special', 'general']) {
+                if (!fields.includes(field)) continue;
+                const value = row[columns[field]];
+                if (value !== undefined && value !== null) return value;
+            }
+            return null;
         }
 
         function renderSpecItem(specName, specValue, specs, prices, isDiscontinued, variantGroupId) {
@@ -764,33 +767,30 @@
 
             const detailEl = document.getElementById('spDetailArea');
             if (detailEl) {
-                // 对外展示类型：商品库商品的销售价只能选一种，空表示不对外展示
-                const extField = (saleRow?.external_price_fields || '').split(',').filter(Boolean)[0] || '';
-                const extChoice = (field, text) => `
-                            <button type="button" class="sp-ext-choice${extField === field ? ' active' : ''}"
-                                    data-field="${field}" onclick="_selectSaleExtField(this)">${text}</button>`;
-                const saleInput = (id, label, value) => `
+                // 对外展示可多选，复用采购端的开关样式
+                const extFields = String(saleRow?.external_price_fields || '').split(',').filter(Boolean);
+                const saleInput = (id, label, value, extId, field) => `
                         <div class="sp-col-item" style="margin-top:12px;">
-                            <label>${label}</label>
+                            <div class="sp-title-row">
+                                <label>${label}</label>
+                                <label class="sp-ext-mini">
+                                    <span class="sp-toggle">
+                                        <input id="${extId}" type="checkbox" data-field="${field}" ${extFields.includes(field) ? 'checked' : ''}>
+                                        <span class="sp-toggle-track"></span>
+                                    </span>
+                                    <small>展示</small>
+                                </label>
+                            </div>
                             <input id="${id}" class="sp-input-money" type="text" value="${value ?? ''}" placeholder="0.00"
                                    onkeydown="if(event.key==='Enter'){event.preventDefault();savePanelSalePrice();}">
                         </div>`;
                 detailEl.innerHTML = `<div class="sp-detail-form">
                     <div class="sp-card">
                         <h3>销售价</h3>
-                        <div class="sp-field-hint" style="color:#64748b;margin-left:0;">三类价格可分别维护，销售端只展示勾选的那一类，不乘销售系数</div>
-                        ${saleInput('spSaleNoTaxInput', '不含票价（元）', saleRow?.retail_no_tax_price)}
-                        ${saleInput('spSaleSpecialInput', '含专票价（元）', saleRow?.retail_special_price)}
-                        ${saleInput('spSaleGeneralInput', '含普票价（元）', saleRow?.retail_general_price)}
-                        <div class="sp-col-item" style="margin-top:16px;">
-                            <label>对外展示为</label>
-                            <div class="sp-ext-choice-group" id="spSaleExtGroup">
-                                ${extChoice('no_tax', '不含票')}
-                                ${extChoice('special', '含专票')}
-                                ${extChoice('general', '含普票')}
-                            </div>
-                            <div class="sp-field-hint" style="color:#64748b;margin-left:0;">只能选一种；不选则销售端不展示该价格</div>
-                        </div>
+                        <div class="sp-field-hint" style="color:#64748b;margin-left:0;">三类价格可分别维护，勾了开关的才对外展示，不乘销售系数</div>
+                        ${saleInput('spSaleNoTaxInput', '不含票价（元）', saleRow?.retail_no_tax_price, 'spSaleExtNoTax', 'no_tax')}
+                        ${saleInput('spSaleSpecialInput', '含专票价（元）', saleRow?.retail_special_price, 'spSaleExtSpecial', 'special')}
+                        ${saleInput('spSaleGeneralInput', '含普票价（元）', saleRow?.retail_general_price, 'spSaleExtGeneral', 'general')}
                     </div>
                     <div class="sp-form-actions">
                         <button class="sp-save-btn" onclick="savePanelSalePrice()">保存销售价</button>
@@ -799,18 +799,17 @@
             }
         }
 
-        // 销售价对外展示类型：单选，再次点击已选项可取消
-        function _selectSaleExtField(button) {
-            const group = document.getElementById('spSaleExtGroup');
-            if (!group) return;
-            const wasActive = button.classList.contains('active');
-            group.querySelectorAll('.sp-ext-choice').forEach(el => el.classList.remove('active'));
-            if (!wasActive) button.classList.add('active');
-        }
-
+        // 收集勾选的对外展示类型，按 SET 字段格式用逗号拼接
         function _collectSaleExtField() {
-            const active = document.querySelector('#spSaleExtGroup .sp-ext-choice.active');
-            return active ? active.dataset.field : null;
+            const ids = [
+                ['spSaleExtNoTax', 'no_tax'],
+                ['spSaleExtSpecial', 'special'],
+                ['spSaleExtGeneral', 'general'],
+            ];
+            const picked = ids
+                .filter(([id]) => document.getElementById(id)?.checked)
+                .map(([, field]) => field);
+            return picked.length ? picked.join(',') : null;
         }
 
         async function savePanelSalePrice() {

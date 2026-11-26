@@ -403,11 +403,6 @@
         .sp-ext-mini small { font-size:12px; color:#6b7280; }
         .sp-ext-mini input:disabled ~ small { color:#9ca3af; }
         .sp-ext-badge { display:inline-block; margin-left:4px; padding:1px 4px; font-size:10px; color:#3b82f6; background:#eff6ff; border:1px solid #bfdbfe; border-radius:3px; line-height:1.4; }
-        /* 销售价对外展示类型：三选一 */
-        .sp-ext-choice-group { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
-        .sp-ext-choice { min-width:78px; padding:6px 14px; border:1px solid #e6e9ef; border-radius:6px; background:#fff; color:#4c5566; font-size:13px; line-height:1.5; cursor:pointer; transition:border-color .15s, background .15s, color .15s; }
-        .sp-ext-choice:hover { border-color:#b9d3fb; background:#f7faff; color:#3478f6; }
-        .sp-ext-choice.active { border-color:#4a86f7; background:#f2f7ff; color:#3478f6; font-weight:600; }
         textarea { width:100%; height:90px; border:1px solid #d1d5db; border-radius:6px; padding:12px 14px; font-size:14px; resize:none; line-height:1.6; }
         textarea:focus { border-color:#3b82f6; outline:none; box-shadow:0 0 0 3px rgba(59,130,246,0.1); }
         .hide { display:none !important; }
