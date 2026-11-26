@@ -86,13 +86,22 @@
             return `<span class="vs-price-amount">¥${escapeHtml(String(value))}</span>`;
         }
 
+        // 规格 JSON 要塞进 onclick 属性，必须转义反斜杠/单引号/双引号，
+        // 否则规格值里的换行（OA 商品名常见）会被 JS 字符串字面量还原成控制字符，JSON.parse 直接报错
+        function specsAttr(specs) {
+            return JSON.stringify(specs)
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/"/g, '&quot;');
+        }
+
         function renderSpecItem(specName, specValue, specs, prices, isDiscontinued, variantGroupId) {
             const isManualPricing = Number(currentData?.pricing_mode) === 2;
             // 空供应商行存的是人工销售价，不能被当成供应商卡片渲染
             const saleRow = prices.find(p => !String(p.supplier || '').trim());
             const supplierPrices = prices.filter(p => String(p.supplier || '').trim());
             const groupId = variantGroupId || (saleRow && saleRow.variant_group_id) || '';
-            const specsJson = JSON.stringify(specs).replace(/"/g, '&quot;');
+            const specsJson = specsAttr(specs);
             const hasSupplier = supplierPrices.length > 0;
             let supplierPricesHtml = '';
             if (hasSupplier) {
@@ -1301,8 +1310,7 @@
 
         function openCombinationSupplier(encodedSpecs) {
             const specs = JSON.parse(decodeURIComponent(encodedSpecs));
-            const specsJson = JSON.stringify(specs).replace(/"/g, '&quot;');
-            openSupplierPanel(specsJson);
+            openSupplierPanel(specsAttr(specs));
         }
 
         async function deleteVariantCombination(encodedGroupId, priceCount) {
