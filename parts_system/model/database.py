@@ -16,6 +16,7 @@ from .migration import (
     ensure_parts_indexes,
     ensure_product_spec_required_rules,
     ensure_product_variant_tables,
+    ensure_retail_invoice_columns,
     ensure_sales_query_logs_has_result,
     ensure_technical_params_column,
 )
@@ -34,6 +35,7 @@ _ENSURE_FUNCS = (
     ensure_parts_indexes,
     ensure_product_variant_tables,
     ensure_product_spec_required_rules,
+    ensure_retail_invoice_columns,
     ensure_sales_query_logs_has_result,
     ensure_part_inquiries_table,
     ensure_inquiry_tables,

@@ -257,8 +257,12 @@ def _collect_single_prices(cursor, ids: list[int]) -> dict[int, dict[str, float]
     )
     for row in cursor.fetchall():
         # 定价模式 2（商品库导入商品）：对外只展示人工维护的销售价，采购供应商报价一律不外露
+        # 销售价行必须选了对外展示类型才露出，未选视为价格待完善
         if int(row.get('pricing_mode') or 1) == 2:
-            if row.get('retail_price') is not None:
+            sale_fields = (row.get('external_price_fields') or '').strip()
+            if (not str(row.get('supplier') or '').strip()
+                    and sale_fields
+                    and row.get('retail_price') is not None):
                 prices.setdefault(row["part_id"], {})['retail'] = float(row['retail_price'])
             continue
         fields = (row.get('external_price_fields') or '').split(',')
@@ -309,12 +313,20 @@ def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: li
                    ) AS specification,
                    COALESCE(MAX(v.update_time), p.update_time_2, p.update_time)
                        AS quote_updated_at,
-                   MAX(CASE WHEN p.pricing_mode=2 THEN (v.retail_price IS NOT NULL)
+                   MAX(CASE WHEN p.pricing_mode=2 THEN (
+                                 v.supplier=''
+                                 AND v.retail_price IS NOT NULL
+                                 AND v.external_price_fields IS NOT NULL
+                                 AND v.external_price_fields<>'')
                              WHEN v.no_tax_price IS NOT NULL
                                OR v.purchase_special_invoice IS NOT NULL
                                OR v.purchase_general_invoice IS NOT NULL
                         THEN 1 ELSE 0 END) AS has_any_price,
-                   MAX(CASE WHEN p.pricing_mode=2 THEN (v.retail_price IS NOT NULL AND v.retail_price != 0)
+                   MAX(CASE WHEN p.pricing_mode=2 THEN (
+                                 v.supplier=''
+                                 AND v.retail_price IS NOT NULL AND v.retail_price != 0
+                                 AND v.external_price_fields IS NOT NULL
+                                 AND v.external_price_fields<>'')
                              WHEN (v.no_tax_price IS NOT NULL AND v.no_tax_price != 0)
                                OR (v.purchase_special_invoice IS NOT NULL AND v.purchase_special_invoice != 0)
                                OR (v.purchase_general_invoice IS NOT NULL AND v.purchase_general_invoice != 0)
@@ -716,20 +728,33 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
         )
         result = {"multiplier": str(multiplier), "items": items}
         if pricing_mode == 2:
-            # 模式2：对外价就是人工维护的销售价，不乘系数
+            # 模式2：对外价就是人工维护的销售价，按销售价选的对外展示类型落到对应价格上
             cursor.execute(
-                """SELECT variant_group_id, retail_price FROM product_variant_prices
+                """SELECT variant_group_id, retail_price,
+                          retail_invoice_company, retail_tax_rate, external_price_fields
+                     FROM product_variant_prices
                     WHERE part_id=%s AND supplier=''""",
                 [part_id],
             )
-            retail_map = {r["variant_group_id"]: r["retail_price"] for r in cursor.fetchall()}
+            retail_map = {r["variant_group_id"]: r for r in cursor.fetchall()}
             for item in items:
-                sale = retail_map.get(item["variant_group_id"])
-                item["no_tax_price"] = _plain_price(sale)
+                sale_row = retail_map.get(item["variant_group_id"]) or {}
+                sale_fields = (sale_row.get("external_price_fields") or "").strip()
+                sale_price = _plain_price(sale_row.get("retail_price")) if sale_fields else None
+                item["no_tax_price"] = None
                 item["special_invoice_price"] = None
                 item["general_invoice_price"] = None
                 item["special_invoice_available"] = False
                 item["general_invoice_available"] = False
+                if sale_fields == "no_tax":
+                    item["no_tax_price"] = sale_price
+                elif sale_fields == "special":
+                    item["special_invoice_price"] = sale_price
+                elif sale_fields == "general":
+                    item["general_invoice_price"] = sale_price
+                # 销售价的开票类型及单位、税率，来自该 SKU 的销售价行
+                item["invoice_company"] = sale_row.get("retail_invoice_company")
+                item["tax_rate"] = sale_row.get("retail_tax_rate")
             result["multiplier"] = "1.00"
         return result
     finally:

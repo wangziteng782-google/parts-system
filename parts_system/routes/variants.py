@@ -340,7 +340,8 @@ def _recalculate_part_display_price(product_id, cur):
         cur.execute(
             """SELECT MIN(retail_price) AS min_price, MAX(retail_price) AS max_price
                  FROM product_variant_prices
-                WHERE part_id=%s AND supplier=''""",
+                WHERE part_id=%s AND supplier=''
+                  AND external_price_fields IS NOT NULL AND external_price_fields<>''""",
             (product_id,),
         )
         retail = cur.fetchone() or {}
@@ -913,6 +914,8 @@ class SalePriceRequest(BaseModel):
     """定价模式 2 的人工销售价：按规格组合维护，与供应商无关。"""
     variant_group_id: str
     sale_price: Optional[float] = None
+    # 销售价对外展示代表的价格类型：no_tax/special/general，空表示不对外展示
+    external_price_fields: Optional[str] = None
 
 
 @app.post("/api/products/{product_id}/sale-price")
@@ -932,6 +935,10 @@ async def save_sale_price(product_id: int, req: SalePriceRequest, background_tas
             raise HTTPException(status_code=404, detail="产品不存在")
         if int(product.get("pricing_mode") or 1) != 2:
             raise HTTPException(status_code=400, detail="该产品按采购成本推算销售价，请在供应商价格里维护")
+        # 销售价只能选一种对外展示类型，且与采购报价的对外展示互斥
+        ext_field = (req.external_price_fields or "").strip()
+        if ext_field and ext_field not in ("no_tax", "special", "general"):
+            raise HTTPException(status_code=400, detail="对外展示类型只能是 不含票/含专票/含普票 之一")
         cur.execute(
             "SELECT 1 FROM product_variant_group_specs WHERE part_id=%s AND variant_group_id=%s LIMIT 1",
             (product_id, req.variant_group_id),
@@ -940,10 +947,11 @@ async def save_sale_price(product_id: int, req: SalePriceRequest, background_tas
             raise HTTPException(status_code=400, detail="规格组合不存在")
         cur.execute(
             """INSERT INTO product_variant_prices
-                   (part_id, variant_group_id, supplier, retail_price)
-               VALUES (%s,%s,'',%s)
-               ON DUPLICATE KEY UPDATE retail_price=VALUES(retail_price)""",
-            (product_id, req.variant_group_id, req.sale_price),
+                   (part_id, variant_group_id, supplier, retail_price, external_price_fields)
+               VALUES (%s,%s,'',%s,%s)
+               ON DUPLICATE KEY UPDATE retail_price=VALUES(retail_price),
+                                       external_price_fields=VALUES(external_price_fields)""",
+            (product_id, req.variant_group_id, req.sale_price, ext_field or None),
         )
         cur.execute("UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s", (product_id,))
         conn.commit()
@@ -977,10 +985,13 @@ async def save_variant_price(product_id: int, req: VariantPriceRequest, backgrou
     try:
         cur = conn.cursor()
         # 1. 产品存在性 + 顺便取 product_name/model 给 write_operation_log 用
-        cur.execute("SELECT id, product_name, model FROM parts WHERE id=%s", (product_id,))
+        cur.execute("SELECT id, product_name, model, pricing_mode FROM parts WHERE id=%s", (product_id,))
         product = cur.fetchone()
         if not product:
             raise HTTPException(status_code=404, detail="产品不存在")
+        # 商品库商品（定价模式2）的对外展示只由销售价决定，采购报价一律不对外
+        if int(product.get("pricing_mode") or 1) == 2:
+            values[fields.index('external_price_fields')] = None
         # 2. 规格组合存在性检查（SELECT 1 LIMIT 1 比 COUNT 轻）
         cur.execute(
             "SELECT 1 FROM product_variant_group_specs WHERE part_id=%s AND variant_group_id=%s LIMIT 1",
@@ -1307,8 +1318,11 @@ async def update_variant_price(product_id: int, price_id: int, req: VariantPrice
             raise HTTPException(status_code=404, detail="价格记录不存在")
         # 停产组合禁止修改供应商
         _assert_variant_group_not_discontinued(cur, product_id, existing['variant_group_id'])
-        cur.execute("SELECT product_name, model FROM parts WHERE id=%s", (product_id,))
+        cur.execute("SELECT product_name, model, pricing_mode FROM parts WHERE id=%s", (product_id,))
         product = cur.fetchone() or {}
+        # 商品库商品（定价模式2）的对外展示只由销售价决定，采购报价一律不对外
+        if int(product.get("pricing_mode") or 1) == 2:
+            values[fields.index('external_price_fields')] = None
         set_clause = ','.join(f"{f}=%s" for f in fields)
         cur.execute(f"UPDATE product_variant_prices SET {set_clause} WHERE id=%s AND part_id=%s", [*values, price_id, product_id])
         # is_external_visible 由 PATCH 接口单独管理，这里不重置其他记录的展示标记

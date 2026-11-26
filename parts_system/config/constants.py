@@ -244,7 +244,7 @@ FIELD_LABELS = {
     "purchase_special_invoice": "进项专票",
     "purchase_general_invoice": "进项普票",
     "purchase_shipping": "采购运费",
-    "retail_price": "零售价格",
+    "retail_price": "销售价格",
     "retail_ladder_price": "零售阶梯价",
     "retail_tax": "零售税费",
     "retail_shipping": "零售运费",

@@ -131,7 +131,7 @@
                     <div class="vs-supplier-price-name">销售价</div>
                     <div class="vs-supplier-price-list">
                         <div class="vs-supplier-price-row">
-                            <span class="vs-price-label">零售价</span>
+                            <span class="vs-price-label">销售价</span>
                             ${formatSpecSupplierPrice(saleValue)}
                         </div>
                     </div>
@@ -734,21 +734,35 @@
                 listEl.innerHTML = `<div class="sp-supplier-card active">
                     <div class="sp-card-header"><span class="sp-card-name">销售价</span></div>
                     <div class="sp-card-info">
-                        <div class="sp-info-row"><span class="sp-label">零售价</span><span class="sp-val">${saleText}</span></div>
+                        <div class="sp-info-row"><span class="sp-label">销售价</span><span class="sp-val">${saleText}</span></div>
                     </div>
                 </div>`;
             }
 
             const detailEl = document.getElementById('spDetailArea');
             if (detailEl) {
+                // 对外展示类型：商品库商品的销售价只能选一种，空表示不对外展示
+                const extField = (saleRow?.external_price_fields || '').split(',').filter(Boolean)[0] || '';
+                const extChoice = (field, text) => `
+                            <button type="button" class="sp-ext-choice${extField === field ? ' active' : ''}"
+                                    data-field="${field}" onclick="_selectSaleExtField(this)">${text}</button>`;
                 detailEl.innerHTML = `<div class="sp-detail-form">
                     <div class="sp-card">
                         <h3>销售价</h3>
                         <div class="sp-col-item" style="margin-top:12px;">
-                            <label>零售价（元）</label>
+                            <label>销售价（元）</label>
                             <input id="spSalePriceInput" class="sp-input-money" type="text" value="${saleValue ?? ''}" placeholder="0.00"
                                    onkeydown="if(event.key==='Enter'){event.preventDefault();savePanelSalePrice();}">
                             <div class="sp-field-hint" style="color:#64748b;margin-left:0;">销售端直接展示该价格，不乘销售系数</div>
+                        </div>
+                        <div class="sp-col-item" style="margin-top:16px;">
+                            <label>对外展示为</label>
+                            <div class="sp-ext-choice-group" id="spSaleExtGroup">
+                                ${extChoice('no_tax', '不含票')}
+                                ${extChoice('special', '含专票')}
+                                ${extChoice('general', '含普票')}
+                            </div>
+                            <div class="sp-field-hint" style="color:#64748b;margin-left:0;">只能选一种；不选则销售端不展示该价格</div>
                         </div>
                     </div>
                     <div class="sp-form-actions">
@@ -756,6 +770,20 @@
                     </div>
                 </div>`;
             }
+        }
+
+        // 销售价对外展示类型：单选，再次点击已选项可取消
+        function _selectSaleExtField(button) {
+            const group = document.getElementById('spSaleExtGroup');
+            if (!group) return;
+            const wasActive = button.classList.contains('active');
+            group.querySelectorAll('.sp-ext-choice').forEach(el => el.classList.remove('active'));
+            if (!wasActive) button.classList.add('active');
+        }
+
+        function _collectSaleExtField() {
+            const active = document.querySelector('#spSaleExtGroup .sp-ext-choice.active');
+            return active ? active.dataset.field : null;
         }
 
         async function savePanelSalePrice() {
@@ -776,6 +804,7 @@
                     body: JSON.stringify({
                         variant_group_id: currentPanelSaleGroupId,
                         sale_price: raw ? Number(raw) : null,
+                        external_price_fields: _collectSaleExtField(),
                     }),
                 });
                 const result = await res.json().catch(() => ({}));

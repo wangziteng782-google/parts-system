@@ -240,27 +240,12 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-table-wrap a:hover { text-decoration: underline; }
 .sales-detail-table-wrap .sales-detail-empty { height: 76px; color: #9aa5b5; }
 
-/* 两种来源的详情信息统一沿用原有紧凑表单样式。 */
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-subtitle { min-height: 49px; padding: 0 24px; background: #fff; font-size: 15px; }
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-subtitle strong::before { display: none; }
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid { grid-template-columns: repeat(8, minmax(0,1fr)); gap: 0; padding: 0 24px 14px; font-size: 13px; }
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > div { min-height: 43px; display: grid; grid-template-columns: 115px minmax(0,1fr); grid-column: span 2; align-items: center; gap: 0; padding: 0; border: 0; border-bottom: 1px solid #edf1f6; border-radius: 0; background: #fff; }
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid label { color: #536177; text-align: right; font-size: 13px; }
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid span { padding-left: 10px; color: #43516a; line-height: 1.5; }
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid .sales-detail-wide { grid-column: span 4; }
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid .sales-detail-full { grid-column: 1 / -1; }
+/* 详情信息区与标题样式统一在文件末尾定义，这里只保留两者差异项。 */
 .sales-detail-modal.inquiry-detail .sales-detail-chat { border-radius: 10px; box-shadow: 0 5px 18px rgba(37,67,112,.05); }
 .sales-detail-modal.inquiry-detail .sales-detail-section-title strong { font-size: 15px; }
 .sales-detail-modal.inquiry-detail .sales-detail-section-title span { padding: 3px 8px; font-size: 11px; }
 .sales-detail-modal.inquiry-detail .sales-detail-table-wrap table { font-size: 13px; }
 .sales-detail-modal.parts-detail .sales-detail-quote-strip { display: none; }
-.sales-detail-modal.parts-detail .sales-detail-info-grid { font-size: 14px; }
-.sales-detail-modal.parts-detail .sales-detail-info-grid > div {
-    min-height: 34px;
-    grid-template-columns: 92px minmax(0,1fr);
-}
-.sales-detail-modal.parts-detail .sales-detail-info-grid label { font-size: 14px; }
-.sales-detail-modal.parts-detail .sales-detail-info-grid span { font-size: 14px; }
 .sales-detail-parts-prices[hidden] { display: none; }
 .sales-detail-parts-prices .sales-detail-subtitle { justify-content: space-between; }
 .sales-detail-parts-prices .sales-detail-subtitle span { color: var(--sales-blue); font-size: 13px; font-weight: 700; }
@@ -606,21 +591,19 @@ body.sales-list-view .goods-list-wrap { display: block; }
 
 /* 配件库信息：三列分行 */
 .sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 0 24px; padding: 0; font-size: 14px; }
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > div { min-height: 34px; display: grid; grid-template-columns: 92px minmax(0,1fr); grid-column: auto; align-items: center; gap: 0 10px; padding: 0; border: 0; border-bottom: 1px solid #f0f3f7; border-radius: 0; background: transparent; }
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid label { color: #718096; text-align: left; font-size: 14px; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > div { min-height: 34px; display: grid; grid-template-columns: 104px minmax(0,1fr); grid-column: auto; align-items: center; gap: 0 10px; padding: 0; border: 0; border-bottom: 1px solid #f0f3f7; border-radius: 0; background: transparent; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid label { color: #718096; text-align: left; white-space: nowrap; font-size: 14px; }
 .sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid span { padding-left: 0; color: #4a5568; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid .sales-detail-wide { grid-column: span 2; }
 .sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid .sales-detail-full { grid-column: 1 / -1; }
 .sales-detail-info-empty { color: #b6c0cd; }
 /* 长文本字段整行展示，阅读时不用来回跳列 */
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > .sales-detail-full { grid-template-columns: 92px minmax(0, 1fr); align-items: start; padding: 9px 0; }
+.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > .sales-detail-full { grid-template-columns: 104px minmax(0, 1fr); align-items: start; padding: 9px 0; }
 .sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > .sales-detail-full > label { padding-top: 2px; }
 
 .sales-detail-subtitle { min-height: 0; margin-bottom: 9px; padding: 0; border: 0; background: transparent; color: #718096; font-size: 12.5px; }
 .sales-detail-subtitle strong { font-weight: 500; }
 .sales-detail-subtitle strong::before { display: none; }
-/* 上面那条特异性不够，会被旧的 :is() 规则压住，这里再声明一遍 */
-.sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-subtitle { min-height: 0; margin-bottom: 9px; padding: 0; border: 0; background: transparent; color: #718096; font-size: 12.5px; }
 .sales-detail-parts-prices { margin-top: 16px; }
 .sales-detail-parts-prices .sales-detail-subtitle { display: flex; align-items: center; justify-content: space-between; }
 .sales-detail-chat { border: 1px solid #e8ecf0; border-radius: 8px; background: #fff; box-shadow: none; }

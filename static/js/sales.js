@@ -376,6 +376,8 @@ function renderSalesDetailInfo(item, source, sourceLabel, quote = null) {
             ['每日截单时间', quote?.daily_order_time],
             ['报价时间', quote?.quote_time],
             ['采购运费', quote ? detailAmountText(quote.purchase_shipping) : ''],
+            ['开票类型及单位', quote?.invoice_company],
+            ['税率', quote?.tax_rate],
             ['更新人', item.updater || item.filler],
             ['更新时间', quote?.update_time ? formatSalesDate(quote.update_time) : (item.quote_updated_at ? formatSalesDate(item.quote_updated_at) : '')],
             ['运费备注', quote?.freight_remark],

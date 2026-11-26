@@ -144,6 +144,19 @@ def ensure_technical_params_column(conn):
             pass  # 列已存在
 
 
+def ensure_retail_invoice_columns(conn):
+    """销售价的开票类型及单位、税率：OA 原文透传，销售端展示用。"""
+    cursor = conn.cursor()
+    for col_name, col_def in [
+        ("retail_invoice_company", "VARCHAR(100) NULL COMMENT '开票类型及单位，OA原文，如 昭道开专、吾爱开普'"),
+        ("retail_tax_rate", "VARCHAR(20) NULL COMMENT '税率，OA原文，如 13、4'"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE product_variant_prices ADD COLUMN {col_name} {col_def}")
+        except Exception:
+            pass  # 列已存在
+
+
 def ensure_parts_indexes(conn):
     """给 parts 补两个二级索引，这张表此前只有主键。
 
@@ -359,7 +372,7 @@ def ensure_product_variant_tables(conn):
             purchase_general_invoice DECIMAL(14,2) NULL COMMENT '采购普票价/含普票价',
             purchase_shipping DECIMAL(14,2) NULL COMMENT '采购运费/含运费',
             freight_remark VARCHAR(255) NULL COMMENT '运费备注',
-            retail_price DECIMAL(14,2) NULL COMMENT '零售价格',
+            retail_price DECIMAL(14,2) NULL COMMENT '销售价格',
             retail_ladder_price DECIMAL(14,2) NULL COMMENT '零售阶梯价',
             retail_tax DECIMAL(14,2) NULL COMMENT '零售税费',
             retail_shipping DECIMAL(14,2) NULL COMMENT '零售运费',
@@ -395,6 +408,15 @@ def ensure_product_variant_tables(conn):
             cursor.execute(f"ALTER TABLE product_variant_prices ADD COLUMN {col_name} {col_def}")
         except Exception:
             pass  # 列已存在
+    # 已有库：retail_price 语义已变为销售价，统一列注释
+    cursor.execute("SHOW FULL COLUMNS FROM product_variant_prices LIKE 'retail_price'")
+    column = cursor.fetchone()
+    if column and str(column.get("Comment", "")) != '销售价格':
+        logger.info("[数据库迁移] product_variant_prices.retail_price 注释 -> 销售价格")
+        cursor.execute(
+            "ALTER TABLE product_variant_prices MODIFY COLUMN retail_price "
+            "DECIMAL(14,2) NULL COMMENT '销售价格'"
+        )
     # 删除统一价字段 purchase_cost（已废弃）
     cursor.execute("SHOW COLUMNS FROM product_variant_prices LIKE 'purchase_cost'")
     if cursor.fetchone():
