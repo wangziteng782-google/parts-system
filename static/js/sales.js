@@ -62,6 +62,8 @@ let activeSalesVariantGroupId = '';
 let activeSalesVariantLoaded = false;
 // 规格选择状态：incomplete 未选满 / matched 命中且有报价 / missing 选满但拿不到报价
 let activeSalesSpecState = 'incomplete';
+// 规格组合多、默认选中容易误导销售的商品，只在这些商品上关闭默认选中
+const SALES_NO_DEFAULT_VARIANT_IDS = [7492];
 
 function escapeSalesHtml(value) {
     return String(value ?? '')
@@ -860,6 +862,17 @@ async function loadSalesPartVariantQuotes(partId, item) {
             syncSalesDetailInquiryButton();
             salesEls.detailPartsPriceContent.innerHTML =
                 '<div class="sales-detail-price-empty">该产品暂无规格</div>';
+            return;
+        }
+        // 规格太多时默认选中容易让销售误以为只有一个组合价，指定商品不预选
+        if (SALES_NO_DEFAULT_VARIANT_IDS.includes(Number(partId))) {
+            activeSalesSpecMap = {};
+            activeSalesVariantGroupId = '';
+            activeSalesSpecState = 'incomplete';
+            salesEls.detailPartsPriceContent.innerHTML = renderSalesVariantPrices(activeSalesVariantPool);
+            setSalesDetailPrices('', '', '', true);
+            renderSalesDetailInfo(activeSalesDetailItem, 'parts', '来自配件库');
+            syncSalesDetailInquiryButton();
             return;
         }
         // 打开详情默认选中一条组合：优先有报价的那条，保证一进来就能看到价格
