@@ -373,9 +373,6 @@ def ensure_product_variant_tables(conn):
             purchase_shipping DECIMAL(14,2) NULL COMMENT '采购运费/含运费',
             freight_remark VARCHAR(255) NULL COMMENT '运费备注',
             retail_price DECIMAL(14,2) NULL COMMENT '销售价格',
-            retail_ladder_price DECIMAL(14,2) NULL COMMENT '零售阶梯价',
-            retail_tax DECIMAL(14,2) NULL COMMENT '零售税费',
-            retail_shipping DECIMAL(14,2) NULL COMMENT '零售运费',
             shipping_origin VARCHAR(100) NULL COMMENT '发货地',
             shipping_time VARCHAR(100) NULL COMMENT '发货时间',
             warranty_time VARCHAR(100) NULL COMMENT '质保时间',
@@ -425,6 +422,12 @@ def ensure_product_variant_tables(conn):
     if cursor.fetchone():
         logger.info("[数据库迁移] product_variant_prices 删除 purchase_cost 字段")
         cursor.execute("ALTER TABLE product_variant_prices DROP COLUMN purchase_cost")
+    # 早期零售字段已废弃：无录入入口、无数据、销售端不读
+    for col_name in ("retail_ladder_price", "retail_tax", "retail_shipping"):
+        cursor.execute("SHOW COLUMNS FROM product_variant_prices LIKE %s", (col_name,))
+        if cursor.fetchone():
+            logger.info(f"[数据库迁移] product_variant_prices 删除 {col_name} 字段")
+            cursor.execute(f"ALTER TABLE product_variant_prices DROP COLUMN {col_name}")
     # 销售价拆成三类价格：把原来的单一销售价按已选的对外展示类型搬到对应列（只搬一次）
     cursor.execute(
         """UPDATE product_variant_prices

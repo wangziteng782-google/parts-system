@@ -1157,17 +1157,13 @@
                 (!cap || cap.is_normal) ? supplierInvoicePriceText(row.purchase_general_invoice) : '不支持'
             );
             setVariantText('fv-purchase_shipping', row.purchase_shipping);
-            setVariantText('fv-retail_ladder_price', row.retail_ladder_price);
-            setVariantText('fv-retail_tax', row.retail_tax);
-            setVariantText('fv-retail_shipping', row.retail_shipping);
             setVariantText('fv-shipping_origin', row.shipping_origin);
             setVariantText('fv-shipping_time', row.shipping_time);
             hint.textContent = `当前：${row.specs.map(spec => spec.name + '=' + spec.value).join('，')}；供应商：${row.supplier}`;
         }
 
         const VARIANT_NUMBER_FIELDS = new Set([
-            'purchase_special_invoice','purchase_general_invoice','purchase_shipping',
-            'retail_price','retail_ladder_price','retail_tax','retail_shipping'
+            'purchase_special_invoice','purchase_general_invoice','purchase_shipping','retail_price'
         ]);
 
 
@@ -1388,8 +1384,7 @@
         const MANAGER_PRICE_INPUTS = {
             retail_price:'variantRetailPrice',
             purchase_special_invoice:'variantPurchaseSpecialInvoice', purchase_general_invoice:'variantPurchaseGeneralInvoice',
-            purchase_shipping:'variantPurchaseShipping', retail_ladder_price:'variantRetailLadderPrice',
-            retail_tax:'variantRetailTax', retail_shipping:'variantRetailShipping',
+            purchase_shipping:'variantPurchaseShipping',
             shipping_origin:'variantShippingOrigin', shipping_time:'variantShippingTime'
         };
 
@@ -1680,8 +1675,7 @@
                 oa_supplier_id: oaSupplierId,
                 retail_price:numberOrNull('variantRetailPrice'),
                 purchase_special_invoice:numberOrNull('variantPurchaseSpecialInvoice'),purchase_general_invoice:numberOrNull('variantPurchaseGeneralInvoice'),
-                purchase_shipping:numberOrNull('variantPurchaseShipping'),retail_ladder_price:numberOrNull('variantRetailLadderPrice'),
-                retail_tax:numberOrNull('variantRetailTax'),retail_shipping:numberOrNull('variantRetailShipping'),
+                purchase_shipping:numberOrNull('variantPurchaseShipping'),
                 shipping_origin:document.getElementById('variantShippingOrigin').value.trim(),shipping_time:document.getElementById('variantShippingTime').value.trim()};
             const res=await fetch(`/api/products/${currentProductId}/variant-prices`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
             if(!res.ok){showToast('供应商价格保存失败','error');return;} await loadVariantManager(); showToast('供应商价格已保存','success');
