@@ -3,7 +3,8 @@
 聚合规则（同型号 = 1 个 SPU）：
     - 名称不同 → 名称作为规格维度，每个名称一个 SKU
     - 品牌不同 → 品牌作为规格维度，每个品牌一个 SKU
-    - 名称、品牌都相同 → 同一个 SKU，价格按供应商合并（同供应商取最新一条）
+    - 名称、品牌都相同 → 同一个 SKU，价格按供应商合并（同供应商一条报价行）
+      OA 同供应商常同时报含税价、不含税价：不含税→不含票价，含税→含专票价，两条都保留
     - 型号为空 → 每条单独成一个 SPU，规格值用商品名
 
 上下架：组内有任一在售即上架，全部下架才下架。
@@ -147,12 +148,12 @@ def resolve_product_type(names):
     return None
 
 
-def invoice_field(item) -> str:
-    """invoice_company 决定含税价进专票还是普票。"""
-    company = str(item.get("invoice_company") or "")
-    if "普" in company:
-        return "purchase_general_invoice"
-    return "purchase_special_invoice"
+def invoice_columns(item) -> list:
+    """含税价一律落含专票列：业务上 OA 的含税报价就是含专票价。
+
+    invoice_company 写「开普」也按专票处理，含普票列不再由导入填充。
+    """
+    return ["purchase_special_invoice"]
 
 
 NAME_SPEC = "名称"
@@ -215,10 +216,92 @@ def _build_technical_params(item) -> str:
     return fitting_size if "尺寸" in fitting_size else f"安装尺寸：{fitting_size}"
 
 
+def _has_tax(row) -> bool:
+    """OA quotation_type：1=售价含税（含专票），0/空=不含税（不含票）。
+
+    同一品牌、同一供应商会给出两条报价（含税一条、不含税一条），是两个价格，不能只留一条。
+    """
+    return str(row.get("quotation_type", "")) == "1"
+
+
+def _newest_row(rows):
+    return max(rows, key=lambda row: int(row.get("id") or 0)) if rows else None
+
+
+def _newest_value(rows, field, skip_zero=False):
+    """按外部 id 倒序取第一条有值的金额（OA 按 id 倒序，id 大的最新）。"""
+    for row in sorted(rows, key=lambda item: int(item.get("id") or 0), reverse=True):
+        value = dec(row.get(field))
+        if value is None or (skip_zero and value == 0):
+            continue
+        return value
+    return None
+
+
+def build_purchase_prices(rows) -> dict:
+    """同一 SKU 同供应商的采购价：不含税价取不含税报价行，含税价按开票单位进专票/普票。"""
+    untaxed = [row for row in rows if not _has_tax(row)]
+    taxed = [row for row in rows if _has_tax(row)]
+    newest = _newest_row(rows) or {}
+    no_tax_price = _newest_value(untaxed, "purchase_price")
+    if no_tax_price is None:
+        no_tax_price = _newest_value(rows, "purchase_price")
+    prices = {
+        "no_tax_price": no_tax_price,
+        "purchase_special_invoice": None,
+        "purchase_general_invoice": None,
+        "purchase_shipping": dec(newest.get("post_fee_purchase")),
+    }
+    # 含税价按开票单位落列，能开专票、普票的两种都写同一个价
+    for row in sorted(taxed, key=lambda item: int(item.get("id") or 0), reverse=True):
+        value = dec(row.get("purchase_price_has_tax"))
+        for column in invoice_columns(row):
+            if prices[column] is None:
+                prices[column] = value
+    if not any(prices[column] for column in ("purchase_special_invoice", "purchase_general_invoice")):
+        # 含税报价行没填含税价时，退回组内任意一条有值的，按最新报价行的开票单位落列
+        fallback = _newest_value(rows, "purchase_price_has_tax", skip_zero=True)
+        if fallback is None:
+            # 全组都是 0 时保留 OA 原值，别把已有的 0.00 清成空
+            fallback = _newest_value(rows, "purchase_price_has_tax")
+        if fallback is not None:
+            for column in invoice_columns(taxed[0] if taxed else newest):
+                prices[column] = fallback
+    return prices
+
+
+def build_sale_prices(rows) -> dict:
+    """同一 SKU 的销售价：不含税报价行进不含票价，含税报价行进含专票价。
+
+    两条价格的金额不同（含税含专票、不含税不含票），都要保留。
+    """
+    untaxed = [row for row in rows if not _has_tax(row)]
+    taxed = [row for row in rows if _has_tax(row)]
+    no_tax = _newest_value(untaxed, "goods_price", skip_zero=True)
+    special = _newest_value(taxed, "goods_price", skip_zero=True)
+    if no_tax is not None:
+        external = "no_tax"
+        display = no_tax
+    elif special is not None:
+        external = "special"
+        display = special
+    else:
+        external = None
+        display = None
+    return {
+        "retail_no_tax_price": no_tax,
+        "retail_special_price": special,
+        "retail_general_price": None,
+        "retail_price": display,
+        "external_price_fields": external,
+    }
+
+
 def import_spu(cur, rows: list, part_id: int = None) -> str:
     """同一型号聚合成一个 SPU，组内按名称/品牌/阶梯价/发货仓拆成多个 SKU。
 
-    - 型号相同、名称相同、品牌相同、仓库相同：一个 SKU，多条价格按供应商合并（同供应商取最新一条）
+    - 型号相同、名称相同、品牌相同、仓库相同：一个 SKU，多条价格按供应商合并（同供应商一条报价行）
+      同供应商同时报含税价、不含税价时，两条都保留：不含税→不含票价，含税→含专票价
     - 型号相同、名称不同：名称作为规格，每个名称一个 SKU
     - 型号相同、品牌不同：品牌作为规格，每个品牌一个 SKU
     - 组内阶梯价（OA tiered_pricing）有多个不同值：阶梯价作为规格，每个阶梯一个 SKU
@@ -358,47 +441,49 @@ def import_spu(cur, rows: list, part_id: int = None) -> str:
                 (part_id, variant_group_id, spec_id_for(spec_name, spec_value), sort_order),
             )
 
-        # 同一 SKU 下同供应商只保留最新一条报价（唯一键 part+variant_group+supplier）
-        latest_by_supplier = {}
+        # 同一 SKU 下同供应商一条报价行；含税/不含税两条报价合并进同一行的不同价格列
+        by_supplier = {}
         for row in sku_rows:
             supplier = _clean(row.get("supplier")) or DEFAULT_SUPPLIER
-            current = latest_by_supplier.get(supplier)
-            if current is None or int(row.get("id") or 0) > int(current.get("id") or 0):
-                latest_by_supplier[supplier] = row
+            by_supplier.setdefault(supplier, []).append(row)
 
-        for supplier, row in latest_by_supplier.items():
-            invoice_col = invoice_field(row)
+        for supplier, supplier_rows in by_supplier.items():
+            prices = build_purchase_prices(supplier_rows)
+            newest = _newest_row(supplier_rows) or {}
             # 商品库商品的采购供应商报价默认不对外展示：external_price_fields 留空
             cur.execute(
-                f"""INSERT INTO product_variant_prices
+                """INSERT INTO product_variant_prices
                        (part_id, variant_group_id, supplier, no_tax_price,
-                        {invoice_col}, purchase_shipping, external_price_fields, is_default, warranty_time,
-                        shipping_origin)
-                   VALUES (%s,%s,%s,%s,%s,%s,NULL,1,%s,%s)""",
+                        purchase_special_invoice, purchase_general_invoice, purchase_shipping,
+                        external_price_fields, is_default, warranty_time, shipping_origin)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,NULL,1,%s,%s)""",
                 (
                     part_id,
                     variant_group_id,
                     supplier,
-                    dec(row.get("purchase_price")),
-                    dec(row.get("purchase_price_has_tax")),
-                    dec(row.get("post_fee_purchase")),
+                    prices["no_tax_price"],
+                    prices["purchase_special_invoice"],
+                    prices["purchase_general_invoice"],
+                    prices["purchase_shipping"],
                     _warranty_text(first.get("warranty_month")) or None,
-                    _clean(row.get("warehouse")) or None,
+                    _clean(newest.get("warehouse")) or None,
                 ),
             )
 
-        # 销售价行：空供应商专用行，取该 SKU 最新一条外部售价
-        newest = max(sku_rows, key=lambda row: int(row.get("id") or 0))
-        sale_price = dec(newest.get("goods_price"))
+        # 销售价行：空供应商专用行，含税/不含税两条售价分别进含专票价/不含票价
+        sale = build_sale_prices(sku_rows)
         cur.execute(
             """INSERT INTO product_variant_prices
-                   (part_id, variant_group_id, supplier, retail_price, is_default, warranty_time)
-               VALUES (%s,%s,'',%s,0,%s)""",
-            (part_id, variant_group_id, sale_price,
+                   (part_id, variant_group_id, supplier, retail_price, external_price_fields,
+                    retail_no_tax_price, retail_special_price, retail_general_price,
+                    is_default, warranty_time)
+               VALUES (%s,%s,'',%s,%s,%s,%s,%s,0,%s)""",
+            (part_id, variant_group_id, sale["retail_price"], sale["external_price_fields"],
+             sale["retail_no_tax_price"], sale["retail_special_price"], sale["retail_general_price"],
              _warranty_text(first.get("warranty_month")) or None),
         )
-        if sale_price is not None:
-            sale_prices.append(sale_price)
+        if sale["retail_price"] is not None:
+            sale_prices.append(sale["retail_price"])
 
     cur.execute(
         "UPDATE parts SET display_price_min=%s, display_price_max=%s WHERE id=%s",

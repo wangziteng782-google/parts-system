@@ -440,15 +440,13 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
     params = []
     if keyword:
         like_keyword = f"%{keyword}%"
+        # 只搜商品本身的名称/型号/品牌/性质；规格值不参与，
+        # 否则搜「曳引机」会把规格里带「曳引机型号」的曳引轮、制动器全带出来，结果太杂
         where.append(
             "(p.product_name LIKE %s OR p.model LIKE %s "
-            "OR p.product_brand LIKE %s OR p.nature LIKE %s OR EXISTS ("
-            "SELECT 1 FROM product_variant_specs search_spec "
-            "WHERE search_spec.part_id=p.id AND search_spec.is_active=1 "
-            "AND (search_spec.spec_name LIKE %s OR search_spec.spec_value LIKE %s)"
-            "))"
+            "OR p.product_brand LIKE %s OR p.nature LIKE %s)"
         )
-        params.extend([like_keyword] * 6)
+        params.extend([like_keyword] * 4)
     where_sql = " WHERE " + " AND ".join(where)
 
     order_sql = {
@@ -481,12 +479,14 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         single_prices = _collect_single_prices(cursor, [r["id"] for r in rows if r["variant_count"] == 1])
         items = [_build_parts_item(row, single_prices.get(row["id"], {}), detail_columns) for row in rows]
 
-        # 型号与搜索关键词精确匹配的主产品不打标签，其余标记为"替代品"
+        # 名称或型号直接命中的不打标签，只有靠品牌/性质等旁证字段命中的才标"替代品"
         if keyword and keyword.strip() and len(items) > 1:
             kw = keyword.strip().lower()
             for item in items:
+                name = (item.get("product_name") or "").strip().lower()
                 model = (item.get("model") or "").strip().lower()
-                if model != kw and item.get("record_source_label") == "来自配件库":
+                if (kw not in name and kw not in model
+                        and item.get("record_source_label") == "来自配件库"):
                     item["record_source_label"] = "替代品"
 
         # 查询关联产品并作为独立 item 追加（双向关系）
