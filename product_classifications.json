@@ -319,15 +319,21 @@
       },
       {
         "name": "空调",
-        "children": []
+        "children": [
+          "空调"
+        ]
       },
       {
         "name": "补偿链",
-        "children": []
+        "children": [
+          "补偿链"
+        ]
       },
       {
         "name": "梯控",
-        "children": []
+        "children": [
+          "梯控"
+        ]
       }
     ]
   }
