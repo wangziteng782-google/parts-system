@@ -367,9 +367,9 @@ def ensure_product_variant_tables(conn):
             part_id INT NOT NULL COMMENT '产品主表ID，对应parts.id',
             variant_group_id VARCHAR(64) NOT NULL COMMENT '完整规格组合ID',
             supplier VARCHAR(255) NOT NULL COMMENT '供应商名称',
-            no_tax_price DECIMAL(14,2) NULL COMMENT '不含票单价',
-            purchase_special_invoice DECIMAL(14,2) NULL COMMENT '采购专票价/含专票价',
-            purchase_general_invoice DECIMAL(14,2) NULL COMMENT '采购普票价/含普票价',
+            no_tax_price DECIMAL(14,2) NULL COMMENT '采购价-不含票',
+            purchase_special_invoice DECIMAL(14,2) NULL COMMENT '采购价-含专票',
+            purchase_general_invoice DECIMAL(14,2) NULL COMMENT '采购价-含普票',
             purchase_shipping DECIMAL(14,2) NULL COMMENT '采购运费/含运费',
             freight_remark VARCHAR(255) NULL COMMENT '运费备注',
             retail_price DECIMAL(14,2) NULL COMMENT '销售价格',
@@ -390,7 +390,7 @@ def ensure_product_variant_tables(conn):
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='产品规格组合价格表：保存供应商和对应的全部价格'"""
     )
     new_columns = [
-        ("no_tax_price", "DECIMAL(14,2) NULL COMMENT '不含票单价'"),
+        ("no_tax_price", "DECIMAL(14,2) NULL COMMENT '采购价-不含票'"),
         ("freight_remark", "VARCHAR(255) NULL COMMENT '运费备注'"),
         ("warranty_time", "VARCHAR(100) NULL COMMENT '质保时间'"),
         ("daily_order_time", "VARCHAR(100) NULL COMMENT '每日结单时间'"),
@@ -416,6 +416,25 @@ def ensure_product_variant_tables(conn):
         cursor.execute(
             "ALTER TABLE product_variant_prices MODIFY COLUMN retail_price "
             "DECIMAL(14,2) NULL COMMENT '销售价格'"
+        )
+    # 价格字段备注统一区分维度：采购价-xxx / 销售价-xxx
+    price_columns = [
+        ("no_tax_price", "采购价-不含票"),
+        ("purchase_special_invoice", "采购价-含专票"),
+        ("purchase_general_invoice", "采购价-含普票"),
+        ("retail_no_tax_price", "销售价-不含票"),
+        ("retail_special_price", "销售价-含专票"),
+        ("retail_general_price", "销售价-含普票"),
+    ]
+    for col_name, comment in price_columns:
+        cursor.execute("SHOW FULL COLUMNS FROM product_variant_prices LIKE %s", (col_name,))
+        column = cursor.fetchone()
+        if not column or str(column.get("Comment") or "") == comment:
+            continue
+        logger.info(f"[数据库迁移] product_variant_prices.{col_name} 注释 -> {comment}")
+        cursor.execute(
+            f"ALTER TABLE product_variant_prices MODIFY COLUMN {col_name} "
+            f"DECIMAL(14,2) NULL COMMENT '{comment}'"
         )
     # 删除统一价字段 purchase_cost（已废弃）
     cursor.execute("SHOW COLUMNS FROM product_variant_prices LIKE 'purchase_cost'")
