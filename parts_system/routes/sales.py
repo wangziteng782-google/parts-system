@@ -33,6 +33,13 @@ SALES_PRODUCT_TYPE_MULTIPLIERS = {}
 # 默认系数
 DEFAULT_SALES_PRICE_MULTIPLIER = Decimal("1.15")
 
+# 定价模式 2：对外展示类型 → 销售价字段
+RETAIL_PRICE_COLUMNS = {
+    "no_tax": "retail_no_tax_price",
+    "special": "retail_special_price",
+    "general": "retail_general_price",
+}
+
 
 
 class SalesFeedbackRequest(BaseModel):
@@ -248,7 +255,9 @@ def _collect_single_prices(cursor, ids: list[int]) -> dict[int, dict[str, float]
     cursor.execute(
         f"""SELECT pvp.part_id, pvp.no_tax_price, pvp.purchase_special_invoice,
                    pvp.purchase_general_invoice, pvp.external_price_fields,
-                   pvp.supplier, pvp.retail_price, p.pricing_mode
+                   pvp.supplier, pvp.retail_price,
+                   pvp.retail_no_tax_price, pvp.retail_special_price, pvp.retail_general_price,
+                   p.pricing_mode
             FROM product_variant_prices pvp
             JOIN parts p ON p.id=pvp.part_id
             WHERE pvp.part_id IN ({placeholders})
@@ -260,10 +269,11 @@ def _collect_single_prices(cursor, ids: list[int]) -> dict[int, dict[str, float]
         # 销售价行必须选了对外展示类型才露出，未选视为价格待完善
         if int(row.get('pricing_mode') or 1) == 2:
             sale_fields = (row.get('external_price_fields') or '').strip()
+            sale_column = RETAIL_PRICE_COLUMNS.get(sale_fields)
             if (not str(row.get('supplier') or '').strip()
-                    and sale_fields
-                    and row.get('retail_price') is not None):
-                prices.setdefault(row["part_id"], {})['retail'] = float(row['retail_price'])
+                    and sale_column
+                    and row.get(sale_column) is not None):
+                prices.setdefault(row["part_id"], {})['retail'] = float(row[sale_column])
             continue
         fields = (row.get('external_price_fields') or '').split(',')
         p = prices.setdefault(row["part_id"], {})
@@ -315,18 +325,27 @@ def _fetch_parts_rows(cursor, select_columns: str, where_clause: str, params: li
                        AS quote_updated_at,
                    MAX(CASE WHEN p.pricing_mode=2 THEN (
                                  v.supplier=''
-                                 AND v.retail_price IS NOT NULL
-                                 AND v.external_price_fields IS NOT NULL
-                                 AND v.external_price_fields<>'')
+                                 AND CASE v.external_price_fields
+                                       WHEN 'no_tax' THEN v.retail_no_tax_price
+                                       WHEN 'special' THEN v.retail_special_price
+                                       WHEN 'general' THEN v.retail_general_price
+                                     END IS NOT NULL)
                              WHEN v.no_tax_price IS NOT NULL
                                OR v.purchase_special_invoice IS NOT NULL
                                OR v.purchase_general_invoice IS NOT NULL
                         THEN 1 ELSE 0 END) AS has_any_price,
                    MAX(CASE WHEN p.pricing_mode=2 THEN (
                                  v.supplier=''
-                                 AND v.retail_price IS NOT NULL AND v.retail_price != 0
-                                 AND v.external_price_fields IS NOT NULL
-                                 AND v.external_price_fields<>'')
+                                 AND CASE v.external_price_fields
+                                       WHEN 'no_tax' THEN v.retail_no_tax_price
+                                       WHEN 'special' THEN v.retail_special_price
+                                       WHEN 'general' THEN v.retail_general_price
+                                     END != 0
+                                 AND CASE v.external_price_fields
+                                       WHEN 'no_tax' THEN v.retail_no_tax_price
+                                       WHEN 'special' THEN v.retail_special_price
+                                       WHEN 'general' THEN v.retail_general_price
+                                     END IS NOT NULL)
                              WHEN (v.no_tax_price IS NOT NULL AND v.no_tax_price != 0)
                                OR (v.purchase_special_invoice IS NOT NULL AND v.purchase_special_invoice != 0)
                                OR (v.purchase_general_invoice IS NOT NULL AND v.purchase_general_invoice != 0)
@@ -731,6 +750,7 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
             # 模式2：对外价就是人工维护的销售价，按销售价选的对外展示类型落到对应价格上
             cursor.execute(
                 """SELECT variant_group_id, retail_price,
+                          retail_no_tax_price, retail_special_price, retail_general_price,
                           retail_invoice_company, retail_tax_rate, external_price_fields
                      FROM product_variant_prices
                     WHERE part_id=%s AND supplier=''""",
@@ -740,7 +760,8 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
             for item in items:
                 sale_row = retail_map.get(item["variant_group_id"]) or {}
                 sale_fields = (sale_row.get("external_price_fields") or "").strip()
-                sale_price = _plain_price(sale_row.get("retail_price")) if sale_fields else None
+                sale_column = RETAIL_PRICE_COLUMNS.get(sale_fields)
+                sale_price = _plain_price(sale_row.get(sale_column)) if sale_column else None
                 item["no_tax_price"] = None
                 item["special_invoice_price"] = None
                 item["general_invoice_price"] = None

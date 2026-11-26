@@ -402,6 +402,9 @@ def ensure_product_variant_tables(conn):
         ("is_external_visible", "TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否对外展示：0否，1是（旧逻辑，后续删除）'"),
         ("oa_supplier_id", "BIGINT(20) NULL COMMENT 'OA供应商ID，对应oa_yixiuti.yh_supplier.id'"),
         ("external_price_fields", "SET('no_tax','special','general') NULL COMMENT '员工选择的对外展示价格字段'"),
+        ("retail_no_tax_price", "DECIMAL(14,2) NULL COMMENT '销售价-不含票'"),
+        ("retail_special_price", "DECIMAL(14,2) NULL COMMENT '销售价-含专票'"),
+        ("retail_general_price", "DECIMAL(14,2) NULL COMMENT '销售价-含普票'"),
     ]
     for col_name, col_def in new_columns:
         try:
@@ -422,6 +425,24 @@ def ensure_product_variant_tables(conn):
     if cursor.fetchone():
         logger.info("[数据库迁移] product_variant_prices 删除 purchase_cost 字段")
         cursor.execute("ALTER TABLE product_variant_prices DROP COLUMN purchase_cost")
+    # 销售价拆成三类价格：把原来的单一销售价按已选的对外展示类型搬到对应列（只搬一次）
+    cursor.execute(
+        """UPDATE product_variant_prices
+              SET retail_no_tax_price = CASE
+                      WHEN external_price_fields IS NULL OR external_price_fields=''
+                           OR external_price_fields='no_tax' THEN retail_price
+                      ELSE retail_no_tax_price END,
+                  retail_special_price = CASE
+                      WHEN external_price_fields='special' THEN retail_price
+                      ELSE retail_special_price END,
+                  retail_general_price = CASE
+                      WHEN external_price_fields='general' THEN retail_price
+                      ELSE retail_general_price END
+            WHERE supplier='' AND retail_price IS NOT NULL
+              AND retail_no_tax_price IS NULL
+              AND retail_special_price IS NULL
+              AND retail_general_price IS NULL"""
+    )
     text_business_columns = [
         ("shipping_time", "VARCHAR(100) NULL COMMENT '发货时间（手动输入）'"),
         ("expire_date", "VARCHAR(100) NULL COMMENT '报价有效期（日期或文字说明）'"),

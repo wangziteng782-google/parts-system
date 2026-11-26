@@ -95,6 +95,20 @@
                 .replace(/"/g, '&quot;');
         }
 
+        // 销售价按对外展示类型取对应价格字段，没选类型视为未配置
+        function _saleDisplayValue(row) {
+            if (!row) return null;
+            const field = String(row.external_price_fields || '').split(',').filter(Boolean)[0];
+            const column = {
+                no_tax: 'retail_no_tax_price',
+                special: 'retail_special_price',
+                general: 'retail_general_price',
+            }[field];
+            if (!column) return null;
+            const value = row[column];
+            return value === undefined ? null : value;
+        }
+
         function renderSpecItem(specName, specValue, specs, prices, isDiscontinued, variantGroupId) {
             const isManualPricing = Number(currentData?.pricing_mode) === 2;
             // 空供应商行存的是人工销售价，不能被当成供应商卡片渲染
@@ -135,7 +149,7 @@
             // 定价模式 2：销售价人工维护，单独一张卡片，不跟供应商成本混在一起
             let salePriceHtml = '';
             if (isManualPricing) {
-                const saleValue = saleRow ? saleRow.retail_price : null;
+                const saleValue = _saleDisplayValue(saleRow);
                 salePriceHtml = `<div class="vs-supplier-price-card vs-sale-price-card" onclick="event.stopPropagation(); selectSpecPriceCard(this, '${specsJson}', true)">
                     <div class="vs-supplier-price-name">销售价</div>
                     <div class="vs-supplier-price-list">
@@ -733,7 +747,7 @@
             const saleRow = currentVariantPrices.find(p =>
                 matchSpecs(p.specs, currentPanelSpecs) && !String(p.supplier || '').trim()
             );
-            const saleValue = saleRow ? saleRow.retail_price : null;
+            const saleValue = _saleDisplayValue(saleRow);
             const saleText = saleValue !== null && saleValue !== undefined && saleValue !== ''
                 ? `¥${escapeHtml(String(saleValue))}`
                 : '未配置';
@@ -755,15 +769,19 @@
                 const extChoice = (field, text) => `
                             <button type="button" class="sp-ext-choice${extField === field ? ' active' : ''}"
                                     data-field="${field}" onclick="_selectSaleExtField(this)">${text}</button>`;
+                const saleInput = (id, label, value) => `
+                        <div class="sp-col-item" style="margin-top:12px;">
+                            <label>${label}</label>
+                            <input id="${id}" class="sp-input-money" type="text" value="${value ?? ''}" placeholder="0.00"
+                                   onkeydown="if(event.key==='Enter'){event.preventDefault();savePanelSalePrice();}">
+                        </div>`;
                 detailEl.innerHTML = `<div class="sp-detail-form">
                     <div class="sp-card">
                         <h3>销售价</h3>
-                        <div class="sp-col-item" style="margin-top:12px;">
-                            <label>销售价（元）</label>
-                            <input id="spSalePriceInput" class="sp-input-money" type="text" value="${saleValue ?? ''}" placeholder="0.00"
-                                   onkeydown="if(event.key==='Enter'){event.preventDefault();savePanelSalePrice();}">
-                            <div class="sp-field-hint" style="color:#64748b;margin-left:0;">销售端直接展示该价格，不乘销售系数</div>
-                        </div>
+                        <div class="sp-field-hint" style="color:#64748b;margin-left:0;">三类价格可分别维护，销售端只展示勾选的那一类，不乘销售系数</div>
+                        ${saleInput('spSaleNoTaxInput', '不含票价（元）', saleRow?.retail_no_tax_price)}
+                        ${saleInput('spSaleSpecialInput', '含专票价（元）', saleRow?.retail_special_price)}
+                        ${saleInput('spSaleGeneralInput', '含普票价（元）', saleRow?.retail_general_price)}
                         <div class="sp-col-item" style="margin-top:16px;">
                             <label>对外展示为</label>
                             <div class="sp-ext-choice-group" id="spSaleExtGroup">
@@ -796,11 +814,19 @@
         }
 
         async function savePanelSalePrice() {
-            const input = document.getElementById('spSalePriceInput');
-            const raw = (input?.value || '').trim();
-            if (raw && !/^\d+(\.\d{1,2})?$/.test(raw)) {
-                showToast('请输入有效金额，最多两位小数', 'error');
-                return;
+            const amountFields = [
+                ['spSaleNoTaxInput', '不含票价'],
+                ['spSaleSpecialInput', '含专票价'],
+                ['spSaleGeneralInput', '含普票价'],
+            ];
+            const amounts = {};
+            for (const [id, label] of amountFields) {
+                const raw = (document.getElementById(id)?.value || '').trim();
+                if (raw && !/^\d+(\.\d{1,2})?$/.test(raw)) {
+                    showToast(`${label}请输入有效金额，最多两位小数`, 'error');
+                    return;
+                }
+                amounts[id] = raw ? Number(raw) : null;
             }
             if (!currentPanelSaleGroupId) {
                 showToast('规格组合尚未初始化，请先保存规格', 'error');
@@ -812,7 +838,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         variant_group_id: currentPanelSaleGroupId,
-                        sale_price: raw ? Number(raw) : null,
+                        no_tax_price: amounts.spSaleNoTaxInput,
+                        special_price: amounts.spSaleSpecialInput,
+                        general_price: amounts.spSaleGeneralInput,
                         external_price_fields: _collectSaleExtField(),
                     }),
                 });

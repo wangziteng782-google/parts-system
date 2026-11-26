@@ -337,8 +337,18 @@ def _recalculate_part_display_price(product_id, cur):
     cur.execute("SELECT pricing_mode FROM parts WHERE id=%s", (product_id,))
     mode_row = cur.fetchone() or {}
     if int(mode_row.get("pricing_mode") or 1) == 2:
+        # 只统计被选为对外展示的那一类销售价
         cur.execute(
-            """SELECT MIN(retail_price) AS min_price, MAX(retail_price) AS max_price
+            """SELECT MIN(CASE external_price_fields
+                           WHEN 'no_tax' THEN retail_no_tax_price
+                           WHEN 'special' THEN retail_special_price
+                           WHEN 'general' THEN retail_general_price
+                         END) AS min_price,
+                      MAX(CASE external_price_fields
+                           WHEN 'no_tax' THEN retail_no_tax_price
+                           WHEN 'special' THEN retail_special_price
+                           WHEN 'general' THEN retail_general_price
+                         END) AS max_price
                  FROM product_variant_prices
                 WHERE part_id=%s AND supplier=''
                   AND external_price_fields IS NOT NULL AND external_price_fields<>''""",
@@ -913,7 +923,12 @@ async def delete_variant_group(product_id: int, group_id: str):
 class SalePriceRequest(BaseModel):
     """定价模式 2 的人工销售价：按规格组合维护，与供应商无关。"""
     variant_group_id: str
+    # 旧字段，兼容只传单一销售价的调用方，等同 no_tax_price
     sale_price: Optional[float] = None
+    # 三类销售价，与采购端报价一一对应
+    no_tax_price: Optional[float] = None
+    special_price: Optional[float] = None
+    general_price: Optional[float] = None
     # 销售价对外展示代表的价格类型：no_tax/special/general，空表示不对外展示
     external_price_fields: Optional[str] = None
 
@@ -945,20 +960,39 @@ async def save_sale_price(product_id: int, req: SalePriceRequest, background_tas
         )
         if not cur.fetchone():
             raise HTTPException(status_code=400, detail="规格组合不存在")
+        sale_no_tax = req.no_tax_price if req.no_tax_price is not None else req.sale_price
+        sale_special = req.special_price
+        sale_general = req.general_price
+        # retail_price 是老的单一价格字段，写对外展示那一类，保证旧逻辑兜底可用
+        display_price = {
+            "no_tax": sale_no_tax,
+            "special": sale_special,
+            "general": sale_general,
+        }.get(ext_field)
+        if display_price is None:
+            display_price = next(
+                (price for price in (sale_no_tax, sale_special, sale_general) if price is not None),
+                None,
+            )
         cur.execute(
             """INSERT INTO product_variant_prices
-                   (part_id, variant_group_id, supplier, retail_price, external_price_fields)
-               VALUES (%s,%s,'',%s,%s)
+                   (part_id, variant_group_id, supplier, retail_price, external_price_fields,
+                    retail_no_tax_price, retail_special_price, retail_general_price)
+               VALUES (%s,%s,'',%s,%s,%s,%s,%s)
                ON DUPLICATE KEY UPDATE retail_price=VALUES(retail_price),
-                                       external_price_fields=VALUES(external_price_fields)""",
-            (product_id, req.variant_group_id, req.sale_price, ext_field or None),
+                                       external_price_fields=VALUES(external_price_fields),
+                                       retail_no_tax_price=VALUES(retail_no_tax_price),
+                                       retail_special_price=VALUES(retail_special_price),
+                                       retail_general_price=VALUES(retail_general_price)""",
+            (product_id, req.variant_group_id, display_price, ext_field or None,
+             sale_no_tax, sale_special, sale_general),
         )
         cur.execute("UPDATE parts SET update_time_2=CURRENT_TIMESTAMP WHERE id=%s", (product_id,))
         conn.commit()
         background_tasks.add_task(_bg_recalculate_display_price, product_id)
         return {
             "message": "销售价已保存",
-            "sale_price": None if req.sale_price is None else f"{req.sale_price:.2f}",
+            "sale_price": None if display_price is None else f"{display_price:.2f}",
         }
     finally:
         conn.close()
