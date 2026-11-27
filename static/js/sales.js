@@ -416,10 +416,10 @@ function renderSalesDetailInfo(item, source, sourceLabel, quote = null) {
         ? fields
         : fields.filter(([, value]) => detailValue(value));
     if (salesEls.detailInfoTitle) {
-        salesEls.detailInfoTitle.textContent = source === 'parts' ? '配件库信息' : '询价信息';
+        salesEls.detailInfoTitle.textContent = source === 'parts' ? '配件信息' : '询价信息';
     }
     const infoTabButton = document.querySelector('[data-sales-tab="info"]');
-    if (infoTabButton) infoTabButton.textContent = source === 'parts' ? '配件库信息' : '询价信息';
+    if (infoTabButton) infoTabButton.textContent = source === 'parts' ? '配件信息' : '询价信息';
     salesEls.detailInfoGrid.innerHTML = visibleFields.map(([label, value, width = '']) => {
         const text = detailValue(value);
         return `

@@ -180,7 +180,10 @@
                             <div class="sales-detail-spec-groups" id="salesDetailPartsPriceContent"></div>
                             <div class="sales-detail-spec-notice" id="salesDetailSpecNotice" hidden>
                                 <span class="sales-detail-spec-notice-icon">?</span>
-                                <span class="sales-detail-spec-notice-text">没有想要的规格？</span>
+                                <div class="sales-detail-spec-notice-copy">
+                                    <span class="sales-detail-spec-notice-text">没有想要的规格？</span>
+                                    <span class="sales-detail-spec-notice-sub">可提交询价单，由采购为您推荐</span>
+                                </div>
                                 <button type="button" class="sales-detail-spec-create" id="salesDetailSpecCreate">创建询价单</button>
                             </div>
                         </div>
@@ -195,7 +198,7 @@
 
                 <section class="sales-detail-tabs">
                     <nav class="sales-detail-tab-nav">
-                        <button type="button" class="sales-detail-tab active" data-sales-tab="info" onclick="switchSalesDetailTab('info')">配件库信息</button>
+                        <button type="button" class="sales-detail-tab active" data-sales-tab="info" onclick="switchSalesDetailTab('info')">配件信息</button>
                         <button type="button" class="sales-detail-tab" data-sales-tab="chat" onclick="switchSalesDetailTab('chat')">询价记录 <em id="salesDetailChatCount">0</em></button>
                     </nav>
                     <div class="sales-detail-panel" data-sales-panel="info">

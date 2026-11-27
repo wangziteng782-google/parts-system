@@ -589,7 +589,7 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-panel { padding-top: 14px; }
 .sales-detail-panel[hidden] { display: none; }
 
-/* 配件库信息：三列分行 */
+/* 配件信息：三列分行 */
 .sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 0 24px; padding: 0; font-size: 14px; }
 .sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > div { min-height: 34px; display: grid; grid-template-columns: 104px minmax(0,1fr); grid-column: auto; align-items: center; gap: 0 10px; padding: 0; border: 0; border-bottom: 1px solid #f0f3f7; border-radius: 0; background: transparent; }
 .sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid label { color: #718096; text-align: left; white-space: nowrap; font-size: 14px; }
@@ -600,6 +600,15 @@ body.sales-list-view .goods-list-wrap { display: block; }
 /* 长文本字段整行展示，阅读时不用来回跳列 */
 .sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > .sales-detail-full { grid-template-columns: 104px minmax(0, 1fr); align-items: start; padding: 9px 0; }
 .sales-detail-modal:is(.inquiry-detail, .parts-detail) .sales-detail-info-grid > .sales-detail-full > label { padding-top: 2px; }
+
+/* 配件详情：标签退后、值加重，空值淡出；备注类并入三列，不再各占整行 */
+.sales-detail-modal.parts-detail .sales-detail-info-grid > div { min-height: 38px; grid-template-columns: 100px minmax(0, 1fr); border-bottom: 1px solid #f2f5f9; }
+.sales-detail-modal.parts-detail .sales-detail-info-grid label { color: #8b97a8; font-size: 13px; }
+.sales-detail-modal.parts-detail .sales-detail-info-grid span { color: #22314a; font-size: 13.5px; font-weight: 500; }
+.sales-detail-modal.parts-detail .sales-detail-info-grid .sales-detail-info-empty { color: #ccd5e0; font-weight: 400; }
+/* 备注字段不再独占整行，并入三列网格，排版与普通字段保持一致 */
+.sales-detail-modal.parts-detail .sales-detail-info-grid > .sales-detail-full { grid-column: auto; grid-template-columns: 100px minmax(0, 1fr); align-items: center; min-height: 38px; padding: 0; background: transparent; }
+.sales-detail-modal.parts-detail .sales-detail-info-grid > .sales-detail-full > label { padding-top: 0; }
 
 .sales-detail-subtitle { min-height: 0; margin-bottom: 9px; padding: 0; border: 0; background: transparent; color: #718096; font-size: 12.5px; }
 .sales-detail-subtitle strong { font-weight: 500; }
@@ -632,11 +641,13 @@ body.sales-list-view .goods-list-wrap { display: block; }
 .sales-detail-spec-option.is-disabled:hover { border-color: #e6e9ef; background: #fafafa; color: #c0c4cc; }
 
 /* 规格按钮下方的一行式询价引导：规格选不到就直接转询价单 */
-.sales-detail-spec-notice { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; padding: 6px 10px; border: 1px solid #ffe1a8; border-radius: 6px; background: #fffbf0; }
+.sales-detail-spec-notice { display: flex; align-items: center; gap: 10px; margin: 10px 0 0; padding: 8px 12px; border: 1px solid #ffe1a8; border-radius: 6px; background: #fffbf0; }
 .sales-detail-spec-notice[hidden] { display: none; }
-.sales-detail-spec-notice-icon { flex: 0 0 18px; height: 18px; border-radius: 50%; background: #fff1d6; color: #d48806; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-.sales-detail-spec-notice-text { flex: 1; min-width: 0; color: #8a6d3b; font-size: 12px; }
-.sales-detail-spec-create { flex: 0 0 auto; display: inline-flex; align-items: center; height: 26px; padding: 0 12px; border: 1px solid #a9caf8; border-radius: 5px; background: #fff; color: var(--sales-blue); font-size: 12px; font-weight: 600; cursor: pointer; transition: background .15s, color .15s; }
+.sales-detail-spec-notice-icon { flex: 0 0 20px; height: 20px; border-radius: 50%; background: #ffd666; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.sales-detail-spec-notice-copy { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.sales-detail-spec-notice-text { color: #8a6d3b; font-size: 13px; font-weight: 600; }
+.sales-detail-spec-notice-sub { color: #b0a48c; font-size: 12px; }
+.sales-detail-spec-create { flex: 0 0 auto; display: inline-flex; align-items: center; height: 28px; padding: 0 14px; border: 1px solid #a9caf8; border-radius: 5px; background: #fff; color: var(--sales-blue); font-size: 12px; font-weight: 600; cursor: pointer; transition: background .15s, color .15s; }
 .sales-detail-spec-create:hover { border-color: var(--sales-blue); background: var(--sales-blue); color: #fff; }
 
 /* flex 会盖掉 hidden 属性，这里补回来 */
