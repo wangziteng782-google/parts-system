@@ -277,7 +277,6 @@ CREATE_PRODUCT_FIELDS = [
     "technical_params", "remark", "remark_2",
     "purchase_cost", "purchase_special_invoice",
     "purchase_general_invoice", "purchase_shipping",
-    "pricing_mode",
 ] + IMAGE_FIELDS
 
 MAIN_FIELDS = [

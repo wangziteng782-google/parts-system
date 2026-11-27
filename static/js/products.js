@@ -136,11 +136,6 @@ async function init() {
                     <input id="create-${field}" data-create-field="${field}" type="hidden" value="${escapeHtml(selectedProductType || '')}">
                     <div class="create-product-type-dropdown" id="createProductTypeDropdown"></div>
                 </div>`;
-            } else if (type === 'pricing_mode') {
-                control = `<select id="create-${field}" data-create-field="${field}">
-                    <option value="1" selected>采购成本推算销售价</option>
-                    <option value="2">独立维护销售价</option>
-                </select>`;
             } else if (type === 'textarea') {
                 const placeholder = field === 'technical_params' ? '每行填写一项技术参数' : `请输入${label}`;
                 control = `<textarea id="create-${field}" data-create-field="${field}" placeholder="${escapeHtml(placeholder)}"></textarea>`;
@@ -826,29 +821,6 @@ async function init() {
             }
         }
 
-        async function togglePricingMode() {
-            if (!currentData) return;
-            const next = Number(currentData.pricing_mode) === 2 ? 1 : 2;
-            const label = next === 2 ? '独立维护销售价' : '采购成本推算销售价';
-            const tip = next === 2
-                ? '模式2：销售价由人工维护，采购成本不再参与售价计算。'
-                : '模式1：销售价 = 采购成本 × 系数，自动计算。';
-            if (!confirm(`切换为「${label}」？\n\n${tip}`)) return;
-            try {
-                const res = await fetch(`/api/products/${currentData.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ field: 'pricing_mode', value: String(next) }),
-                });
-                const result = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(result.detail || '切换失败');
-                showToast(`已切换为「${label}」`, 'success');
-                await selectProduct(currentData.id);
-            } catch (error) {
-                showToast(error.message || '切换失败', 'error');
-            }
-        }
-
         function formatUpdateTime(value) {
             if (!value) return '暂无记录';
             const text = String(value).replace('T', ' ');
@@ -1125,7 +1097,6 @@ async function init() {
                 <div class="product-tags">
                     <span class="tag tag-primary"><span style="opacity:0.7">产品分类：</span><span class="field-value" id="fv-product_type" onclick="editField('product_type')">${escapeHtml(data.product_type || '点击设置三级分类')}</span></span>
                     <span class="tag tag-primary" style="display:none"><span style="opacity:0.7">品类归属：</span><span class="field-value" id="fv-category" onclick="editField('category')">${escapeHtml(data.category || '未分类')}</span></span>
-                    <span class="tag tag-primary" style="cursor:pointer" title="点击切换定价模式" onclick="togglePricingMode()"><span style="opacity:0.7">定价模式：</span>${Number(data.pricing_mode) === 2 ? '独立维护销售价' : '采购成本推算'}</span>
                 </div>
                 <div class="main-price-meta">
                     <div class="main-price-item purchase-cost-highlight">

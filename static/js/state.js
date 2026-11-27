@@ -65,7 +65,6 @@ let currentProductId = null;
             {
                 title: '定价与价格',
                 fields: [
-                    ['pricing_mode', '定价模式', 'pricing_mode'],
                     ['purchase_cost', '采购成本价', 'text'],
                     ['purchase_special_invoice', '进项专票', 'text'],
                     ['purchase_general_invoice', '进项普票', 'text'],

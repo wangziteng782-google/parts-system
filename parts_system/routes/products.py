@@ -413,6 +413,8 @@ async def create_product(req: ProductCreateRequest):
         for field, value in req.fields.items()
         if field in CREATE_PRODUCT_FIELDS
     }
+    # 定价模式由后台运维直接入库，新增时不接受前端传值
+    values.pop('pricing_mode', None)
     values = {field: (value if value else None) for field, value in values.items()}
     for image_field in IMAGE_FIELDS:
         if values.get(image_field):
@@ -507,6 +509,10 @@ async def update_product(product_id: int, req: UpdateFieldRequest):
 
     if req.field == 'update_time_2':
         raise HTTPException(status_code=400, detail="更新时间由系统自动维护")
+
+    # 定价模式只允许后台运维直接改库，前端不提供入口，接口也不放行
+    if req.field == 'pricing_mode':
+        raise HTTPException(status_code=400, detail="定价模式不支持前端修改")
 
     if req.field == 'product_type' and req.value and req.value not in PRODUCT_TYPE_VALUES:
         raise HTTPException(status_code=400, detail="产品分类必须选择 Excel 方案中的三级分类")
