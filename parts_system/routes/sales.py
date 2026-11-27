@@ -435,18 +435,33 @@ def _build_parts_item(row: dict, prices: dict, detail_columns: list[str]) -> dic
     }
 
 
+def _strip_space(text: str) -> str:
+    """去掉半角/全角空格，用于型号等字段的模糊比对。"""
+    return text.replace(" ", "").replace("　", "")
+
+
 def _fetch_parts_products(keyword: str, sort: str, limit: int):
     where = ["COALESCE(TRIM(p.product_name), '') <> ''", "p.status=1"]
     params = []
     if keyword:
-        like_keyword = f"%{keyword}%"
-        # 只搜商品本身的名称/型号/品牌/性质；规格值不参与，
-        # 否则搜「曳引机」会把规格里带「曳引机型号」的曳引轮、制动器全带出来，结果太杂
-        where.append(
-            "(p.product_name LIKE %s OR p.model LIKE %s "
-            "OR p.product_brand LIKE %s OR p.nature LIKE %s)"
-        )
-        params.extend([like_keyword] * 4)
+        # 空格分词，词之间 AND：每个词都要在名称/型号/品牌/性质/规格值之一命中。
+        # 这样「高盛 10mm」定位到高盛的 10mm 钢丝绳，而不是两个条件互不相干。
+        # 规格名不参与（只搜规格值），否则搜「曳引机」会把规格名带「曳引机型号」的
+        # 曳引轮、制动器全带出来，结果从 19 条膨胀到 259 条。
+        # 两侧都去掉空格再比：库里有 542 个型号带空格（ECN 113 2048 16S15-58），
+        # 用户不带空格输入（ECN113204816S15-58）也要能搜到。
+        for token in keyword.split():
+            like_token = f"%{token}%"
+            where.append(
+                f"(REPLACE(REPLACE(p.product_name,' ',''),'　','') LIKE %s "
+                f"OR REPLACE(REPLACE(p.model,' ',''),'　','') LIKE %s "
+                f"OR REPLACE(REPLACE(p.product_brand,' ',''),'　','') LIKE %s "
+                f"OR p.nature LIKE %s "
+                f"OR EXISTS (SELECT 1 FROM product_variant_specs sv "
+                f"WHERE sv.part_id = p.id AND sv.is_active = 1 "
+                f"AND REPLACE(REPLACE(sv.spec_value,' ',''),'　','') LIKE %s))"
+            )
+            params.extend([like_token] * 5)
     where_sql = " WHERE " + " AND ".join(where)
 
     order_sql = {
@@ -479,13 +494,15 @@ def _fetch_parts_products(keyword: str, sort: str, limit: int):
         single_prices = _collect_single_prices(cursor, [r["id"] for r in rows if r["variant_count"] == 1])
         items = [_build_parts_item(row, single_prices.get(row["id"], {}), detail_columns) for row in rows]
 
-        # 名称或型号直接命中的不打标签，只有靠品牌/性质等旁证字段命中的才标"替代品"
+        # 名称或型号直接命中的不打标签，只有靠品牌/性质/规格等旁证字段命中的才标"替代品"
         if keyword and keyword.strip() and len(items) > 1:
-            kw = keyword.strip().lower()
+            # 与 SQL 一致地去空格比较，否则型号带空格的商品会被误标成替代品
+            tokens = [_strip_space(t) for t in keyword.lower().split()]
             for item in items:
-                name = (item.get("product_name") or "").strip().lower()
-                model = (item.get("model") or "").strip().lower()
-                if (kw not in name and kw not in model
+                name = _strip_space((item.get("product_name") or "").lower())
+                model = _strip_space((item.get("model") or "").lower())
+                direct = any(tok in name or tok in model for tok in tokens)
+                if (not direct
                         and item.get("record_source_label") == "来自配件库"):
                     item["record_source_label"] = "替代品"
 
