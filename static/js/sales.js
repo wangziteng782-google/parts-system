@@ -382,7 +382,7 @@ function renderSalesDetailInfo(item, source, sourceLabel, quote = null) {
             ['税率', quote?.tax_rate],
             ['更新人', item.updater || item.filler],
             ['更新时间', quote?.update_time ? formatSalesDate(quote.update_time) : (item.quote_updated_at ? formatSalesDate(item.quote_updated_at) : '')],
-            ['运费备注', quote?.freight_remark],
+            ['运费备注', [quote?.freight_remark, quote?.freight_note].filter(Boolean).join('；'), 'full'],
             ['商品备注', item.remark, 'full'],
             ['补充备注', item.remark_2, 'full'],
             ['注意事项', item.precautions, 'full'],

@@ -371,7 +371,8 @@ def ensure_product_variant_tables(conn):
             purchase_special_invoice DECIMAL(14,2) NULL COMMENT '采购价-含专票',
             purchase_general_invoice DECIMAL(14,2) NULL COMMENT '采购价-含普票',
             purchase_shipping DECIMAL(14,2) NULL COMMENT '采购运费/含运费',
-            freight_remark VARCHAR(255) NULL COMMENT '运费备注',
+            freight_remark VARCHAR(255) NULL COMMENT '运费口径：含运费/不含运费',
+            freight_note VARCHAR(500) NULL COMMENT '运费备注说明（与运费口径分开存，含/不含运费都可填）',
             retail_price DECIMAL(14,2) NULL COMMENT '销售价格',
             shipping_origin VARCHAR(100) NULL COMMENT '发货地',
             shipping_time VARCHAR(100) NULL COMMENT '发货时间',
@@ -391,7 +392,8 @@ def ensure_product_variant_tables(conn):
     )
     new_columns = [
         ("no_tax_price", "DECIMAL(14,2) NULL COMMENT '采购价-不含票'"),
-        ("freight_remark", "VARCHAR(255) NULL COMMENT '运费备注'"),
+        ("freight_remark", "VARCHAR(255) NULL COMMENT '运费口径：含运费/不含运费'"),
+        ("freight_note", "VARCHAR(500) NULL COMMENT '运费备注说明（与运费口径分开存，含/不含运费都可填）'"),
         ("warranty_time", "VARCHAR(100) NULL COMMENT '质保时间'"),
         ("daily_order_time", "VARCHAR(100) NULL COMMENT '每日结单时间'"),
         ("quote_time", "VARCHAR(100) NULL COMMENT '报价时间'"),
@@ -441,6 +443,19 @@ def ensure_product_variant_tables(conn):
     if cursor.fetchone():
         logger.info("[数据库迁移] product_variant_prices 删除 purchase_cost 字段")
         cursor.execute("ALTER TABLE product_variant_prices DROP COLUMN purchase_cost")
+    # 运费备注拆字段：freight_remark 历史上混存了口径和备注原文，
+    # 非「含运费/不含运费」的值本质是备注，搬到 freight_note，口径归一回两值（只搬一次）
+    cursor.execute(
+        """UPDATE product_variant_prices
+              SET freight_note = COALESCE(freight_note, freight_remark),
+                  freight_remark = CASE
+                      WHEN freight_remark LIKE '不含运%' THEN '不含运费'
+                      ELSE '含运费' END
+            WHERE freight_remark IS NOT NULL AND TRIM(freight_remark) <> ''
+              AND freight_remark NOT IN ('含运费','不含运费')"""
+    )
+    if cursor.rowcount:
+        logger.info(f"[数据库迁移] product_variant_prices 运费备注拆字段：{cursor.rowcount} 行")
     # 早期零售字段已废弃：无录入入口、无数据、销售端不读
     for col_name in ("retail_ladder_price", "retail_tax", "retail_shipping"):
         cursor.execute("SHOW COLUMNS FROM product_variant_prices LIKE %s", (col_name,))

@@ -715,7 +715,7 @@ def _fetch_parts_variant_quotes(part_id: int) -> dict:
                       price.no_tax_price,
                       price.purchase_special_invoice,
                       price.purchase_general_invoice,
-                      price.purchase_shipping, price.freight_remark,
+                      price.purchase_shipping, price.freight_remark, price.freight_note,
                       price.shipping_origin, price.shipping_time,
                       price.warranty_time, price.daily_order_time,
                       price.quote_time, price.expire_date,
@@ -823,6 +823,7 @@ def _merge_variant_prices(main: dict, records: list, part: dict) -> dict:
         "is_discontinued": bool(main.get("is_discontinued")),
         "purchase_shipping": _plain_business_value(main.get("purchase_shipping")),
         "freight_remark": main.get("freight_remark"),
+        "freight_note": main.get("freight_note"),
         "shipping_origin": main.get("shipping_origin"),
         "shipping_time": main.get("shipping_time"),
         "warranty_time": main.get("warranty_time"),
@@ -852,6 +853,14 @@ def _merge_variant_prices(main: dict, records: list, part: dict) -> dict:
                 result[price_key] = _scaled_positive_price(rec.get(db_col), pn, pt)
                 if avail_key is not None:
                     result[avail_key] = _is_explicit_zero(rec.get(db_col))
+                break
+    # 运费口径/备注只挂在供应商报价行上，销售价行没有；任一行有值就取，不依赖主记录
+    for key in ("freight_remark", "freight_note"):
+        if result.get(key):
+            continue
+        for rec in records:
+            if rec.get(key):
+                result[key] = rec.get(key)
                 break
     return result
 

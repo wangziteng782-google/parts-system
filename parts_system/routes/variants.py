@@ -40,6 +40,7 @@ class VariantPriceRequest(BaseModel):
     purchase_general_invoice: Optional[float] = None
     purchase_shipping: Optional[float] = None
     freight_remark: Optional[str] = None
+    freight_note: Optional[str] = None  # 运费备注说明，与含/不含运费口径分开存
     retail_price: Optional[float] = None
     shipping_origin: Optional[str] = None
     shipping_time: Optional[str] = None
@@ -1009,7 +1010,7 @@ async def save_variant_price(product_id: int, req: VariantPriceRequest, backgrou
     elif not req.supplier or not req.supplier.strip():
         raise HTTPException(status_code=400, detail="请填写供应商名称或选择OA供应商")
     # is_external_visible 不在此管理——由 PATCH /variant-prices/{id}/external-visible 单独切换
-    fields = ['supplier','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','oa_supplier_id','external_price_fields','remark']
+    fields = ['supplier','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','freight_note','retail_price','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','oa_supplier_id','external_price_fields','remark']
     values = [getattr(req, f) for f in fields]
     conn = get_db()
     try:
@@ -1178,6 +1179,7 @@ class VariantPriceUpdateRequest(BaseModel):
     purchase_general_invoice: Optional[float] = None
     purchase_shipping: Optional[float] = None
     freight_remark: Optional[str] = None
+    freight_note: Optional[str] = None  # 运费备注说明，与含/不含运费口径分开存
     retail_price: Optional[float] = None
     shipping_origin: Optional[str] = None
     shipping_time: Optional[str] = None
@@ -1334,7 +1336,7 @@ async def update_variant_price(product_id: int, price_id: int, req: VariantPrice
     elif not req.supplier or not req.supplier.strip():
         raise HTTPException(status_code=400, detail="请填写供应商名称或选择OA供应商")
     # is_external_visible 不在此管理——由 PATCH /variant-prices/{id}/external-visible 单独切换
-    fields = ['supplier','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','retail_price','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','oa_supplier_id','external_price_fields','remark']
+    fields = ['supplier','no_tax_price','purchase_special_invoice','purchase_general_invoice','purchase_shipping','freight_remark','freight_note','retail_price','shipping_origin','shipping_time','warranty_time','daily_order_time','quote_time','expire_date','oa_supplier_id','external_price_fields','remark']
     values = [getattr(req, f) for f in fields]
     conn = get_db()
     try:

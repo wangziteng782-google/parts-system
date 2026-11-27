@@ -367,8 +367,16 @@
 
         function toggleSupplierFreight() {
             const shipType = document.querySelector('input[name="spShipType"]:checked')?.value || '';
-            document.getElementById('spShipIncludeBox')?.classList.toggle('hide', shipType !== 'include');
-            document.getElementById('spShipExcludeBox')?.classList.toggle('hide', shipType !== 'exclude');
+            const includeBox = document.getElementById('spShipIncludeBox');
+            const excludeBox = document.getElementById('spShipExcludeBox');
+            const from = shipType === 'include' ? excludeBox : includeBox;
+            const to = shipType === 'include' ? includeBox : excludeBox;
+            // 两个输入框共用 freight_note，切换口径时把已填内容带过去，避免白丢
+            const fromArea = from?.querySelector('textarea');
+            const toArea = to?.querySelector('textarea');
+            if (fromArea && toArea && fromArea.value.trim()) toArea.value = fromArea.value;
+            includeBox?.classList.toggle('hide', shipType !== 'include');
+            excludeBox?.classList.toggle('hide', shipType !== 'exclude');
         }
 
         function showSupplierRequiredError(element, message) {
@@ -566,7 +574,9 @@
             const hasNoTax = !isNew && p.no_tax_price !== null && p.no_tax_price !== undefined && p.no_tax_price !== '';
             const hasSpecial = !isNew && p.purchase_special_invoice !== null && p.purchase_special_invoice !== undefined && p.purchase_special_invoice !== '';
             const hasNormal = !isNew && p.purchase_general_invoice !== null && p.purchase_general_invoice !== undefined && p.purchase_general_invoice !== '';
-            const freightChoice = p.freight_remark === '不含运费' ? 'exclude' : (p.freight_remark ? 'include' : '');
+            // 口径字段只认「含运费/不含运费」；历史行里塞过备注原文，按前缀兼容
+            const freightChoice = !p.freight_remark ? ''
+                : (String(p.freight_remark).startsWith('不含运') ? 'exclude' : 'include');
             // external_price_fields → 三个 SET 开关
             // 商品库商品（定价模式2）对外只展示销售价，采购报价的展示开关一律关闭且不可开启
             const isManualPricing = Number(currentData?.pricing_mode) === 2
@@ -678,7 +688,7 @@
                                     <label>运费备注说明</label>
                                     <span class="sp-tag" onclick="document.getElementById('spShipRemarkInclude').value='偏远地区不包邮(偏远地区包括:青海、新疆、云南、内蒙、海南、西藏)'">偏远地区不包邮</span>
                                 </div>
-                                <textarea id="spShipRemarkInclude" placeholder="可填写包邮物流公司、不包邮地区等">${escapeHtml(p.freight_remark && p.freight_remark !== '不含运费' ? p.freight_remark : '')}</textarea>
+                                <textarea id="spShipRemarkInclude" placeholder="可填写包邮物流公司、不包邮地区等">${escapeHtml(p.freight_note || '')}</textarea>
                             </div>
                         </div>
                         <!-- 不含运费区域 -->
@@ -688,7 +698,7 @@
                                     <label>运费备注说明</label>
                                     <span class="sp-tag" onclick="document.getElementById('spShipRemarkExclude').value='偏远地区不包邮(偏远地区包括:青海、新疆、云南、内蒙、海南、西藏)'">偏远地区不包邮</span>
                                 </div>
-                                <textarea id="spShipRemarkExclude" placeholder="运费相关约定备注"></textarea>
+                                <textarea id="spShipRemarkExclude" placeholder="运费相关约定备注">${escapeHtml(p.freight_note || '')}</textarea>
                             </div>
                         </div>
                     </div>
@@ -974,12 +984,13 @@
                 showToast('请选择供应商运费设置', 'error');
                 return;
             }
-            let freightRemark = '';
-            if (shipType === 'include') {
-                freightRemark = document.getElementById('spShipRemarkInclude')?.value.trim() || '含运费';
-            } else {
-                freightRemark = '不含运费';
-            }
+            // 运费口径与备注分两个字段存：口径只放含运费/不含运费，备注文字一律进 freight_note
+            const freightRemark = shipType === 'include' ? '含运费' : '不含运费';
+            const freightNote = (
+                shipType === 'include'
+                    ? document.getElementById('spShipRemarkInclude')?.value.trim()
+                    : document.getElementById('spShipRemarkExclude')?.value.trim()
+            ) || null;
 
             // 质保设置为必填，“无质保”也需要明确填写
             const warrantyInput = document.getElementById('spWarrantyTime');
@@ -996,6 +1007,7 @@
                 purchase_general_invoice: normalPrice,
                 purchase_shipping: null,
                 freight_remark: freightRemark || null,
+                freight_note: freightNote,
                 warranty_time: warrantyTime,
                 shipping_time: document.getElementById('spDeliveryTime')?.value.trim() || null,
                 shipping_origin: document.getElementById('spDeliveryPlace')?.value.trim() || null,
