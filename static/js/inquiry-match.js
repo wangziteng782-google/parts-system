@@ -133,7 +133,7 @@ function renderRecords() {
         const matched = !!item.part_id;
         const skipped = !matched && !!item.skip_sku_link;
         const pillClass = matched ? 'ok' : (skipped ? 'skip' : '');
-        const pillText = matched ? '已匹配' : (skipped ? '无需关联' : '待匹配');
+        const pillText = matched ? '已关联' : (skipped ? '无需关联' : '待关联');
         const rawPrice = Number(item.purchase_price);
         const priceLabel = item.price_label || '';
         const price = rawPrice > 0
@@ -263,7 +263,7 @@ function applyRecordSkipState(item) {
     const pill = el.querySelector('.im-pill');
     if (pill) {
         pill.classList.toggle('skip', skipped);
-        pill.textContent = skipped ? '无需关联' : '待匹配';
+        pill.textContent = skipped ? '无需关联' : '待关联';
     }
     const btn = el.querySelector('.im-record-skip');
     if (btn) {
