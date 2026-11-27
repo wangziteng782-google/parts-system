@@ -232,7 +232,6 @@ FIELD_LABELS = {
     "product_type": "产品分类",
     "product_brand": "产品品牌",
     "model": "型号",
-    "supplier": "供应商",
     "warranty": "质保",
     "applicable_elevator_brand": "适用电梯品牌",
     "nature": "性质",
@@ -244,10 +243,6 @@ FIELD_LABELS = {
     "purchase_special_invoice": "进项专票",
     "purchase_general_invoice": "进项普票",
     "purchase_shipping": "采购运费",
-    "retail_price": "销售价格",
-    "retail_ladder_price": "零售阶梯价",
-    "retail_tax": "零售税费",
-    "retail_shipping": "零售运费",
     "remark": "商品备注",
     "daily_cutoff_time": "每日截单时间",
     "quote_validity": "报价有效期",
@@ -272,7 +267,7 @@ IMAGE_FIELDS = [
 
 CREATE_PRODUCT_FIELDS = [
     "product_name", "product_brand", "model",
-    "supplier", "warranty", "applicable_elevator_brand", "nature",
+    "warranty", "applicable_elevator_brand", "nature",
     "substitute_model", "precautions", "product_type",
     "technical_params", "remark", "remark_2",
     "purchase_cost", "purchase_special_invoice",
@@ -281,11 +276,10 @@ CREATE_PRODUCT_FIELDS = [
 
 MAIN_FIELDS = [
     "sku_code", "product_name", "product_brand", "model",
-    "supplier", "warranty", "applicable_elevator_brand", "nature",
+    "warranty", "applicable_elevator_brand", "nature",
     "substitute_model", "precautions", "category", "technical_params",
     "purchase_cost", "purchase_special_invoice", "purchase_general_invoice",
-    "purchase_shipping", "retail_price", "retail_ladder_price",
-    "retail_tax", "retail_shipping", "remark", "daily_cutoff_time",
+    "purchase_shipping", "remark", "daily_cutoff_time",
     "quote_validity", "shipping_origin", "shipping_time", "remark_2",
     "updater", "filler", "update_time", "filler_2", "update_time_2", "filler_ip",
     "pricing_mode",
